@@ -764,8 +764,103 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 
 	@Override
 	public boolean voidIt() {
-		m_processMsg = "@MaterialTransferVoidNotAllowed@";
-		return false;
+		//m_processMsg = "@MaterialTransferVoidNotAllowed@";
+        log.info( toString());
+        
+        // Imposible anular si el status es: Cerrado, Revertido, Anulado
+		if (DOCSTATUS_Closed.equals(getDocStatus())
+				|| DOCSTATUS_Reversed.equals(getDocStatus())
+				|| DOCSTATUS_Voided.equals(getDocStatus())) {
+			m_processMsg = Msg.getMsg(getCtx(), "InvalidAction") + ", Document status: " + getDocStatus();
+			setDocAction(DOCACTION_None);
+			return false;
+		}
+		
+		/*Si es una transferencia entrante, solo se puede anular si es borrador. Se debe hacer el proceso inverso utilizando la funcionalidad "Copiar desde" e 
+		invirtiendo los almacenes de origen y destino*/ 
+		if (getMovementType().equals(MOVEMENTTYPE_Incoming)) {
+			if (!DOCSTATUS_Drafted.equals(getDocStatus())) {
+				m_processMsg = Msg.getMsg(getCtx(), "NotVoidInMaterialTransfer");
+				setDocAction(DOCACTION_None);
+				return false;
+			}
+		} else {
+		
+			/******* TRANSFERENCIA SALIENTE *******/
+			
+			//Busco la Transferencia Entrante asociada al documento
+			MTransfer incomingTransfer = null;
+			int resultCount = 0;
+			String sql = "SELECT * "
+					+ "FROM M_Transfer "
+					+ "WHERE DocumentNo = ? AND "
+						  + "Ad_Client_Id = ? AND "
+						  + "C_Bpartner_Id = ?";
+			PreparedStatement ps = null;
+			ResultSet rs = null;
+			try {
+				ps = DB.prepareStatement(sql, get_TrxName());
+				ps.setString(1, getDocumentNo() + "-I");
+				ps.setInt(2, getAD_Client_ID());
+				ps.setInt(3, getC_BPartner_ID());
+				rs = ps.executeQuery();
+				while (rs.next()) {
+					resultCount++;
+					incomingTransfer = new MTransfer(getCtx(), rs, get_TrxName());
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			} finally {
+				try {
+					if (ps != null)
+						ps.close();
+					if (rs != null)
+						rs.close();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+			//Controlo que no se hayan recuperado múltiples transferencias entrantes asociadas
+			if (resultCount > 1) {
+				m_processMsg = Msg.getMsg(getCtx(), "MultipleInTransfersAssociated");
+				setDocAction(DOCACTION_None);
+				return false;
+			}
+			
+			if (incomingTransfer != null) {
+				//Si la transferencia entrante está anulada no hago nada
+				if (!incomingTransfer.getDocStatus().equals(DOCSTATUS_Voided)) {
+					//Controlo que la transferencia entrante esté en estado borrador
+					if (!incomingTransfer.getDocStatus().equals(DOCSTATUS_Drafted)) {
+						m_processMsg = Msg.getMsg(getCtx(), "AsociatedInMaterialTransferCompleted");
+						setDocAction(DOCACTION_None);
+						return false;
+					}
+					
+					//Anulo la transferencia entrante
+					try {
+						incomingTransfer.processIt(DOCACTION_Void);
+						incomingTransfer.save();
+					} catch (Exception e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+		
+		//Para revertir los movimientos de la transferencia, recupero el inventario generado y lo anulo.
+		if (getM_Inventory_ID() != 0) {
+			MInventory inventory = new MInventory(getCtx(), getM_Inventory_ID(), get_TrxName());
+			if (!inventory.processIt(DOCACTION_Void)) {
+				m_processMsg = inventory.getProcessMsg();
+				setDocAction(DOCACTION_None);
+				return false;
+			}
+			inventory.save();
+		}
+		return true;
+		
 	}
 
 	public void setAD_Org_ID(int AD_Org_ID) {
