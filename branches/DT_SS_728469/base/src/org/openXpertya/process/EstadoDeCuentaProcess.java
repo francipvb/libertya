@@ -55,9 +55,7 @@ public class EstadoDeCuentaProcess extends SvrProcess {
 
 			String name = para[ i ].getParameterName();
 
-			if( para[ i ].getParameter() == null ) {
-				;
-			} else if( name.equalsIgnoreCase( "daysdue" )) {
+			if( name.equalsIgnoreCase( "daysdue" )) {
 				BigDecimal tmpDaysFrom = (BigDecimal)para[i].getParameter();
 				BigDecimal tmpDaysTo = (BigDecimal)para[i].getParameter_To();
                 // Si los días de vencimiento (inicio y fin) son null entonces
@@ -517,6 +515,7 @@ public class EstadoDeCuentaProcess extends SvrProcess {
 			} else if (dateTrxFrom != null) {
 				ec.setDateDoc(dateTrxFrom);
 			} 
+			ec.setCondition(condition);
 			ec.save();
 		}
 
@@ -581,6 +580,7 @@ public class EstadoDeCuentaProcess extends SvrProcess {
 		} else if (dateTrxFrom != null) {
 			ec.setDateDoc(dateTrxFrom);
 		} 
+		ec.setCondition(condition);
 		ec.save();
 	}
 	
@@ -614,6 +614,7 @@ public class EstadoDeCuentaProcess extends SvrProcess {
 			} else if (dateTrxFrom != null) {
 				ec.setDateDoc(dateTrxFrom);
 			} 
+			ec.setCondition(condition);
 			ec.save();
 		}
 		

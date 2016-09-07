@@ -63,6 +63,11 @@ import org.openXpertya.util.Msg;
 
 public final class Attachment extends JDialog implements ActionListener {
 
+	/** Compatibilidad con constructor sin definicion de client/org */
+	public Attachment( Frame frame,int WindowNo,int AD_Attachment_ID,int AD_Table_ID,int Record_ID,String trxName ) {
+		this(frame, WindowNo, AD_Attachment_ID, AD_Table_ID, Record_ID, trxName, null, null);
+	}
+	
     /**
      * Constructor de la clase ...
      *
@@ -75,7 +80,7 @@ public final class Attachment extends JDialog implements ActionListener {
      * @param trxName
      */
 
-    public Attachment( Frame frame,int WindowNo,int AD_Attachment_ID,int AD_Table_ID,int Record_ID,String trxName ) {
+    public Attachment( Frame frame,int WindowNo,int AD_Attachment_ID,int AD_Table_ID,int Record_ID,String trxName, Integer recordClientID, Integer recordOrgID ) {
         super( frame,Msg.getMsg( Env.getCtx(),"Attachment" ),true );
 
         // needs to be modal otherwise APanel does not recongize change.
@@ -101,6 +106,10 @@ public final class Attachment extends JDialog implements ActionListener {
         } else {
             m_attachment = new MAttachment( Env.getCtx(),AD_Attachment_ID,trxName );
         }
+        
+        // Utilizar client/org del registro asociado, si es que estan definidos
+        if (recordClientID != null && recordOrgID != null)
+        	m_attachment.setClientOrg(recordClientID, recordOrgID);
 
         loadAttachments();
 
@@ -210,6 +219,8 @@ public final class Attachment extends JDialog implements ActionListener {
 
     private CTextArea info = new CTextArea();
 
+    private org.openXpertya.pdf.viewer.PDFViewerBean pdfViewer = org.openXpertya.pdf.Document.getViewer();
+    
     /** Guardar adjunto en externo */
     private CButton externalUpload = new CButton();
     
@@ -334,6 +345,7 @@ public final class Attachment extends JDialog implements ActionListener {
      */
 
     public void dispose() {
+    	pdfViewer = null;    	
         super.dispose();
     }    // dispose
 
@@ -422,8 +434,17 @@ public final class Attachment extends JDialog implements ActionListener {
                     PdfPanel pdfpanel = PdfPanel.loadPdf( f,graphPanel,false,false,true,true,true,true );
 
                     size = pdfpanel.getSize();
-                    f.delete();
-                    //
+                    f.deleteOnExit();
+
+// Temporalmente comentado por incompatibilidad en librerías. TODO: check manera de incorporarlo para evitar error al ejecutar desde Terminal                	
+//					pdfViewer.loadPDF(entry.getInputStream());
+//					pdfViewer.setScale(50);
+//					size = pdfViewer.getPreferredSize();
+//				//	size.width = Math.min(size.width, 400);
+//				//	size.height = Math.min(size.height, 400);
+//					//
+//					graphPanel.add(pdfViewer, BorderLayout.CENTER);
+//                    //
 
                 } catch( Exception e ) {
                     log.log( Level.SEVERE,"(is pdf):"+e.getMessage(),e );

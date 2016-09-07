@@ -215,6 +215,7 @@ public class InfoInvoice extends Info {
         new Info_Column( Msg.translate( Env.getCtx(),"GrandTotal" ),"i.GrandTotal",BigDecimal.class ),
         new Info_Column( Msg.translate( Env.getCtx(),"ConvertedAmount" ),"currencyBase(i.GrandTotal, i.C_Currency_ID, i.DateAcct, i.AD_Client_ID, i.AD_Org_ID)",BigDecimal.class ),
         new Info_Column( Msg.translate( Env.getCtx(),"OpenAmt" ),"invoiceOpen(C_Invoice_ID,C_InvoicePaySchedule_ID)",BigDecimal.class),
+        new Info_Column( Msg.translate( Env.getCtx(),"DueDateShort" ),"(SELECT duedate FROM c_invoicepayschedule d WHERE d.c_invoicepayschedule_id = i.C_InvoicePaySchedule_ID)",Timestamp.class),
         new Info_Column( Msg.translate( Env.getCtx(),"IsPaid" ),"i.IsPaid",Boolean.class ),
         new Info_Column( Msg.translate( Env.getCtx(),"IsSOTrx" ),"i.IsSOTrx",Boolean.class ),
 			new Info_Column(

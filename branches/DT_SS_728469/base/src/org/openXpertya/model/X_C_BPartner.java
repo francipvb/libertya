@@ -1768,4 +1768,57 @@ public String getValue()
 {
 return (String)get_Value("Value");
 }
+public static final int BATCH_PAYMENT_RULE_AD_Reference_ID = MReference.getReferenceID("Batch Payment Rules");
+/** Electronic Payment = E */
+public static final String BATCH_PAYMENT_RULE_ElectronicPayment = "E";
+/** Check = C */
+public static final String BATCH_PAYMENT_RULE_Check = "C";
+/** Set Batch Payment Rule */
+public void setBatch_Payment_Rule (String Batch_Payment_Rule)
+{
+if (Batch_Payment_Rule == null || Batch_Payment_Rule.equals("E") || Batch_Payment_Rule.equals("C"));
+ else throw new IllegalArgumentException ("Batch_Payment_Rule Invalid value - Reference = BATCH_PAYMENT_RULE_AD_Reference_ID - E - C");
+if (Batch_Payment_Rule != null && Batch_Payment_Rule.length() > 1)
+{
+log.warning("Length > 1 - truncated");
+Batch_Payment_Rule = Batch_Payment_Rule.substring(0,1);
+}
+set_Value ("Batch_Payment_Rule", Batch_Payment_Rule);
+}
+/** Get Batch Payment Rule */
+public String getBatch_Payment_Rule() 
+{
+return (String)get_Value("Batch_Payment_Rule");
+}
+/** Set Bank Account.
+Account at the Bank */
+public void setC_BankAccount_ID (int C_BankAccount_ID)
+{
+if (C_BankAccount_ID <= 0) set_Value ("C_BankAccount_ID", null);
+ else 
+set_Value ("C_BankAccount_ID", new Integer(C_BankAccount_ID));
+}
+/** Get Bank Account.
+Account at the Bank */
+public int getC_BankAccount_ID() 
+{
+Integer ii = (Integer)get_Value("C_BankAccount_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
+/** Set Copy Vendor Products */
+public void setCopyVendorProducts (String CopyVendorProducts)
+{
+if (CopyVendorProducts != null && CopyVendorProducts.length() > 1)
+{
+log.warning("Length > 1 - truncated");
+CopyVendorProducts = CopyVendorProducts.substring(0,1);
+}
+set_Value ("CopyVendorProducts", CopyVendorProducts);
+}
+/** Get Copy Vendor Products */
+public String getCopyVendorProducts() 
+{
+return (String)get_Value("CopyVendorProducts");
+}
 }

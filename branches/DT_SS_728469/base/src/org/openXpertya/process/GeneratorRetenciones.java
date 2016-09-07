@@ -193,7 +193,7 @@ public class GeneratorRetenciones {
 			lista_retenciones.get(i).setTrxName(getTrxName());
 			lista_retenciones.get(i).setProjectID(getProjectID());
 			lista_retenciones.get(i).setCampaignID(getCampaignID());
-			lista_retenciones.get(i).save(alloc);
+			m_retenciones.add(lista_retenciones.get(i).save(alloc, true));
 		}
 	}
 	
