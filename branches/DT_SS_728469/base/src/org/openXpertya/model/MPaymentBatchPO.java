@@ -44,11 +44,11 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 				MBPartner bPartner = new MBPartner(getCtx(), detail.getC_BPartner_ID(), get_TrxName());
 				
 				//Por el momento, solo acepta forma de pago "Cheque o Talón"
-				if (!bPartner.getBatch_Payment_Rule().equals("C")) {
-					//FIXME: Provisorio, por ahora es un solo medio de pago. Corregir y traduccción 
-					m_processMsg = "El proveedor " + bPartner.getName() + " tiene configurada una Forma de Pago distinta a 'Cheque o Talón'. Por el momento no está implementada la generación OP con otra forma de pago";
-					return DocAction.STATUS_Invalid;
-				}
+//				if (!bPartner.getBatch_Payment_Rule().equals("C")) {
+//					//FIXME: Provisorio, por ahora es un solo medio de pago. Corregir y traduccción 
+//					m_processMsg = "El proveedor " + bPartner.getName() + " tiene configurada una Forma de Pago distinta a 'Cheque o Talón'. Por el momento no está implementada la generación OP con otra forma de pago";
+//					return DocAction.STATUS_Invalid;
+//				}
 				
 				//Genero OP y completo datos de cabecera
 				poGenerator.createAllocationHdr(X_C_AllocationHdr.ALLOCATIONTYPE_PaymentOrder);
@@ -84,7 +84,8 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 						manualAmounts, 
 						detail.getPaymentAmount(), 
 						false, 
-						getBatchDate());
+						getBatchDate(),
+						"P");
 				m_retGen.setTrxName(get_TrxName());
 				m_retGen.evaluarRetencion();
 				m_retGen.save(poGenerator.getAllocationHdr());

@@ -72,7 +72,7 @@ public class ExportListaPatagonia extends ExportBankList {
 					+ "left join c_doctype as cdt on cdt.c_doctype_id = c.c_doctypetarget_id "
 					+ "where ah.c_allocationhdr_id = ahb.c_allocationhdr_id "
 					+ "limit 4) invoices ");
-		query.append("from c_lista_patagonia_payments lpp ");
+		query.append("from c_electronic_payments lpp ");
 		query.append("inner join c_allocationhdr as ahb on ahb.c_allocationhdr_id = lpp.c_allocationhdr_id ");
 		query.append("inner join c_bpartner as bp on bp.c_bpartner_id = lpp.c_bpartner_id ");
 		query.append("inner join c_payment as p on p.c_payment_id = lpp.c_payment_id ");

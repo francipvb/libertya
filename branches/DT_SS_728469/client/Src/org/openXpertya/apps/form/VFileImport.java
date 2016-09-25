@@ -12,8 +12,6 @@
  *     Más información en http://www.openxpertya.org/ayuda/Licencia.html
  */
 
-
-
 package org.openXpertya.apps.form;
 
 import java.awt.BorderLayout;
@@ -31,6 +29,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 
 import javax.swing.BorderFactory;
@@ -39,6 +38,7 @@ import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 
@@ -49,526 +49,502 @@ import org.openXpertya.apps.ConfirmPanel;
 import org.openXpertya.apps.SwingWorker;
 import org.openXpertya.impexp.ImpFormat;
 import org.openXpertya.impexp.ImpFormatRow;
+import org.openXpertya.impexp.MImpFormat;
 import org.openXpertya.model.MRole;
 import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.Trx;
 
 /**
  * Descripción de Clase
- *
- *
- * @version    2.2, 12.10.07
- * @author     Equipo de Desarrollo de openXpertya    
+ * @version 2.2, 12.10.07
+ * @author Equipo de Desarrollo de openXpertya
  */
+public class VFileImport extends CPanel implements FormPanel, ActionListener {
+	private static final long serialVersionUID = 1L;
 
-public class VFileImport extends CPanel implements FormPanel,ActionListener {
+	/**
+	 * Descripción de Método
+	 * @param WindowNo
+	 * @param frame
+	 */
+	public void init(int WindowNo, FormFrame frame) {
+		log.info("");
+		m_WindowNo = WindowNo;
+		m_frame = frame;
 
-    /**
-     * Descripción de Método
-     *
-     *
-     * @param WindowNo
-     * @param frame
-     */
+		try {
+			jbInit();
+			dynInit();
+			frame.getContentPane().add(northPanel, BorderLayout.NORTH);
+			frame.getContentPane().add(centerPanel, BorderLayout.CENTER);
+			frame.getContentPane().add(confirmPanel, BorderLayout.SOUTH);
+		} catch (Exception e) {
+			log.log(Level.SEVERE, "init", e);
+		}
+	} // init
 
-    public void init( int WindowNo,FormFrame frame ) {
-        log.info( "" );
-        m_WindowNo = WindowNo;
-        m_frame    = frame;
+	/** Descripción de Campos */
 
-        try {
-            jbInit();
-            dynInit();
-            frame.getContentPane().add( northPanel,BorderLayout.NORTH );
-            frame.getContentPane().add( centerPanel,BorderLayout.CENTER );
-            frame.getContentPane().add( confirmPanel,BorderLayout.SOUTH );
-        } catch( Exception e ) {
-            log.log( Level.SEVERE,"init",e );
-        }
-    }    // init
+	private int m_WindowNo = 0;
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private int m_WindowNo = 0;
+	private FormFrame m_frame;
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private FormFrame m_frame;
+	private ArrayList<String> m_data = new ArrayList<String>();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private ArrayList m_data = new ArrayList();
+	private ImpFormat m_format;
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private ImpFormat m_format;
+	private JLabel[] m_labels;
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private JLabel[] m_labels;
+	private JTextField[] m_fields;
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private JTextField[] m_fields;
+	private int m_record = -1;
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private int m_record = -1;
+	private static CLogger log = CLogger.getCLogger(VFileImport.class);
 
-    /** Descripción de Campos */
+	/** No format indicator */
 
-    private static CLogger log = CLogger.getCLogger( VFileImport.class );
+	private static final String s_none = "----";
 
-    //
+	/** Descripción de Campos */
 
-    /** Descripción de Campos */
+	private CPanel northPanel = new CPanel();
 
-    private static final String s_none = "----";    // no format indicator
+	/** Descripción de Campos */
 
-    //
+	private JButton bFile = new JButton();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private CPanel northPanel = new CPanel();
+	private JComboBox pickFormat = new JComboBox();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private JButton bFile = new JButton();
+	private CPanel centerPanel = new CPanel();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private JComboBox pickFormat = new JComboBox();
+	private BorderLayout centerLayout = new BorderLayout();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private CPanel centerPanel = new CPanel();
+	private JScrollPane rawDataPane = new JScrollPane();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private BorderLayout centerLayout = new BorderLayout();
+	private JTextArea rawData = new JTextArea();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private JScrollPane rawDataPane = new JScrollPane();
+	private JScrollPane previewPane = new JScrollPane();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private JTextArea rawData = new JTextArea();
+	private CPanel previewPanel = new CPanel();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private JScrollPane previewPane = new JScrollPane();
+	private ConfirmPanel confirmPanel = new ConfirmPanel(true);
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private CPanel previewPanel = new CPanel();
+	private JLabel info = new JLabel();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private ConfirmPanel confirmPanel = new ConfirmPanel( true );
+	private JLabel labelFormat = new JLabel();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private JLabel info = new JLabel();
+	private GridBagLayout previewLayout = new GridBagLayout();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private JLabel labelFormat = new JLabel();
+	private JButton bNext = new JButton();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private GridBagLayout previewLayout = new GridBagLayout();
+	private JButton bPrevious = new JButton();
 
-    /** Descripción de Campos */
+	/** Descripción de Campos */
 
-    private JButton bNext = new JButton();
+	private JLabel record = new JLabel();
 
-    /** Descripción de Campos */
+	/**
+	 * Descripción de Método
+	 * @throws Exception
+	 */
+	private void jbInit() throws Exception {
+		CompiereColor.setBackground(this);
+		bFile.setText(Msg.getMsg(Env.getCtx(), "FileImportFile"));
+		bFile.setToolTipText(Msg.getMsg(Env.getCtx(), "FileImportFileInfo"));
+		bFile.addActionListener(this);
+		info.setText("   ");
+		labelFormat.setText(Msg.translate(Env.getCtx(), "AD_ImpFormat_ID"));
 
-    private JButton bPrevious = new JButton();
+		//
 
-    /** Descripción de Campos */
+		bNext.setToolTipText(Msg.getMsg(Env.getCtx(), "Next"));
+		bNext.setMargin(new Insets(2, 2, 2, 2));
+		bNext.setText(">");
+		bNext.addActionListener(this);
+		record.setText("----");
+		bPrevious.setToolTipText(Msg.getMsg(Env.getCtx(), "Previous"));
+		bPrevious.setMargin(new Insets(2, 2, 2, 2));
+		bPrevious.setText("<");
+		bPrevious.addActionListener(this);
 
-    private JLabel record = new JLabel();
+		//
 
-    /**
-     * Descripción de Método
-     *
-     *
-     * @throws Exception
-     */
+		northPanel.setBorder(BorderFactory.createEtchedBorder());
+		northPanel.add(bFile, null);
+		northPanel.add(info, null);
+		northPanel.add(labelFormat, null);
+		northPanel.add(pickFormat, null);
+		northPanel.add(bPrevious, null);
+		northPanel.add(record, null);
+		northPanel.add(bNext, null);
 
-    private void jbInit() throws Exception {
-        CompiereColor.setBackground( this );
-        bFile.setText( Msg.getMsg( Env.getCtx(),"FileImportFile" ));
-        bFile.setToolTipText( Msg.getMsg( Env.getCtx(),"FileImportFileInfo" ));
-        bFile.addActionListener( this );
-        info.setText( "   " );
-        labelFormat.setText( Msg.translate( Env.getCtx(),"AD_ImpFormat_ID" ));
+		//
 
-        //
+		centerPanel.setLayout(centerLayout);
+		rawData.setFont(new java.awt.Font("Monospaced", 0, 10));
+		rawData.setColumns(80);
+		rawData.setRows(5);
+		rawDataPane.getViewport().add(rawData, null);
 
-        bNext.setToolTipText( Msg.getMsg( Env.getCtx(),"Next" ));
-        bNext.setMargin( new Insets( 2,2,2,2 ));
-        bNext.setText( ">" );
-        bNext.addActionListener( this );
-        record.setText( "----" );
-        bPrevious.setToolTipText( Msg.getMsg( Env.getCtx(),"Previous" ));
-        bPrevious.setMargin( new Insets( 2,2,2,2 ));
-        bPrevious.setText( "<" );
-        bPrevious.addActionListener( this );
+		JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, rawDataPane, previewPane);
+		centerPanel.add(splitPane, BorderLayout.CENTER);
+
+		//
 
-        //
+		previewPanel.setLayout(previewLayout);
+		previewPane.getViewport().add(previewPanel, null);
+		previewPane.setPreferredSize(new Dimension(700, 80));
+
+		//
+
+		confirmPanel.addActionListener(this);
+	} // jbInit
 
-        northPanel.setBorder( BorderFactory.createEtchedBorder());
-        northPanel.add( bFile,null );
-        northPanel.add( info,null );
-        northPanel.add( labelFormat,null );
-        northPanel.add( pickFormat,null );
-        northPanel.add( bPrevious,null );
-        northPanel.add( record,null );
-        northPanel.add( bNext,null );
+	/**
+	 * Descripción de Método
+	 */
+	public void dispose() {
+		if (m_frame != null) {
+			m_frame.dispose();
+		}
 
-        //
+		m_frame = null;
+	} // dispose
 
-        centerPanel.setLayout( centerLayout );
-        rawData.setFont( new java.awt.Font( "Monospaced",0,10 ));
-        rawData.setColumns( 80 );
-        rawData.setRows( 5 );
-        rawDataPane.getViewport().add( rawData,null );
-        centerPanel.add( rawDataPane,BorderLayout.NORTH );
-        centerPanel.add( previewPane,BorderLayout.CENTER );
+	/**
+	 * Descripción de Método
+	 */
+	private void dynInit() {
 
-        //
+		// Load Formats
 
-        previewPanel.setLayout( previewLayout );
-        previewPane.getViewport().add( previewPanel,null );
-        previewPane.setPreferredSize( new Dimension( 700,80 ));
+		pickFormat.addItem(s_none);
 
-        //
+		String sql = MRole.getDefault().addAccessSQL("SELECT Name FROM AD_ImpFormat", "AD_ImpFormat", MRole.SQL_FULLYQUALIFIED, MRole.SQL_RO) + " AND AD_ImpFormat_Parent_ID IS NULL AND isActive = 'Y' ";
 
-        confirmPanel.addActionListener( this );
-    }    // jbInit
+		try {
+			PreparedStatement pstmt = DB.prepareStatement(sql);
+			ResultSet rs = pstmt.executeQuery();
 
-    /**
-     * Descripción de Método
-     *
-     */
+			while (rs.next()) {
+				pickFormat.addItem(rs.getString(1));
+			}
 
-    public void dispose() {
-        if( m_frame != null ) {
-            m_frame.dispose();
-        }
+			rs.close();
+			pstmt.close();
+		} catch (SQLException e) {
+			log.log(Level.SEVERE, sql, e);
+		}
 
-        m_frame = null;
-    }    // dispose
+		pickFormat.setSelectedIndex(0);
+		pickFormat.addActionListener(this);
 
-    /**
-     * Descripción de Método
-     *
-     */
+		//
 
-    private void dynInit() {
+		confirmPanel.getOKButton().setEnabled(false);
+	} // dynInit
 
-        // Load Formats
+	/**
+	 * Descripción de Método
+	 * @param e
+	 */
+	public void actionPerformed(ActionEvent e) {
+		if (e.getSource() == bFile) {
+			cmd_loadFile();
+			invalidate();
+			m_frame.pack();
+		} else if (e.getSource() == pickFormat) {
+			cmd_loadFormat();
+			invalidate();
+			m_frame.pack();
+		} else if (e.getSource() == bNext) {
+			cmd_applyFormat(true);
+		} else if (e.getSource() == bPrevious) {
+			cmd_applyFormat(false);
+		} else if (e.getActionCommand().equals(ConfirmPanel.A_OK)) {
+			m_frame.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+			confirmPanel.setEnabled(false);
+			m_frame.setBusy(true);
 
-        pickFormat.addItem( s_none );
+			//
 
-        String sql = MRole.getDefault().addAccessSQL("SELECT Name FROM AD_ImpFormat", "AD_ImpFormat",
-				MRole.SQL_FULLYQUALIFIED, MRole.SQL_RO) + " AND isActive = 'Y' ";
+			SwingWorker worker = new SwingWorker() {
+				public Object construct() {
+					cmd_process();
 
-        try {
-            PreparedStatement pstmt = DB.prepareStatement( sql );
-            ResultSet         rs    = pstmt.executeQuery();
+					return Boolean.TRUE;
+				}
+			};
 
-            while( rs.next()) {
-                pickFormat.addItem( rs.getString( 1 ));
-            }
+			worker.start();
 
-            rs.close();
-            pstmt.close();
-        } catch( SQLException e ) {
-            log.log( Level.SEVERE,sql,e );
-        }
+		} else if (e.getActionCommand().equals(ConfirmPanel.A_CANCEL)) {
+			dispose();
+		}
 
-        pickFormat.setSelectedIndex( 0 );
-        pickFormat.addActionListener( this );
+		if ((m_data != null) && (m_data.size() > 0 // file loaded
+		) && (m_format != null) && (m_format.getRowCount() > 0)) { // format loaded
+			confirmPanel.getOKButton().setEnabled(true);
+		} else {
+			confirmPanel.getOKButton().setEnabled(false);
+		}
+	} // actionPerformed
 
-        //
+	/**
+	 * Descripción de Método
+	 */
+	private void cmd_loadFile() {
+		String directory = org.openXpertya.OpenXpertya.getOXPHome() + File.separator + "data" + File.separator + "import";
 
-        confirmPanel.getOKButton().setEnabled( false );
-    }    // dynInit
+		log.config(directory);
 
-    /**
-     * Descripción de Método
-     *
-     *
-     * @param e
-     */
+		//
 
-    public void actionPerformed( ActionEvent e ) {
-        if( e.getSource() == bFile ) {
-            cmd_loadFile();
-            invalidate();
-            m_frame.pack();
-        } else if( e.getSource() == pickFormat ) {
-            cmd_loadFormat();
-            invalidate();
-            m_frame.pack();
-        } else if( e.getSource() == bNext ) {
-            cmd_applyFormat( true );
-        } else if( e.getSource() == bPrevious ) {
-            cmd_applyFormat( false );
-        } else if( e.getActionCommand().equals( ConfirmPanel.A_OK )) {
-            m_frame.setCursor( Cursor.getPredefinedCursor( Cursor.WAIT_CURSOR ));
-            confirmPanel.setEnabled( false );
-            m_frame.setBusy( true );
+		JFileChooser chooser = new JFileChooser(directory);
 
-            //
+		chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+		chooser.setMultiSelectionEnabled(false);
+		chooser.setDialogTitle(Msg.getMsg(Env.getCtx(), "FileImportFileInfo"));
 
-            SwingWorker worker = new SwingWorker() {
-                public Object construct() {
-                    cmd_process();
+		if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+			return;
+		}
 
-                    return Boolean.TRUE;
-                }
-            };
+		String fileName = chooser.getSelectedFile().getName();
 
-            worker.start();
+		log.config(fileName);
+		bFile.setText(fileName);
+		setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+		m_data.clear();
+		rawData.setText("");
 
-            // when you need the result:
-            // x = worker.get();   //  this blocks the UI !!
+		try {
 
-        } else if( e.getActionCommand().equals( ConfirmPanel.A_CANCEL )) {
-            dispose();
-        }
+			// see NaturalAccountMap
 
-        if( (m_data != null) && (m_data.size() > 0                             // file loaded
-                ) && (m_format != null) && (m_format.getRowCount() > 0) ) {    // format loaded
-            confirmPanel.getOKButton().setEnabled( true );
-        } else {
-            confirmPanel.getOKButton().setEnabled( false );
-        }
-    }    // actionPerformed
+			BufferedReader in = new BufferedReader(new FileReader(chooser.getSelectedFile()), 10240);
 
-    /**
-     * Descripción de Método
-     *
-     */
+			// not safe see p108 Network pgm
 
-    private void cmd_loadFile() {
-        String directory = org.openXpertya.OpenXpertya.getOXPHome() + File.separator + "data" + File.separator + "import";
+			String s = null;
 
-        log.config( directory );
+			while ((s = in.readLine()) != null) {
+				m_data.add(s);
 
-        //
+				if (m_data.size() < 100) {
+					rawData.append(s);
+					rawData.append("\n");
+				}
+			}
 
-        JFileChooser chooser = new JFileChooser( directory );
+			in.close();
+			rawData.setCaretPosition(0);
+		} catch (Exception e) {
+			log.log(Level.SEVERE, "", e);
+			bFile.setText(Msg.getMsg(Env.getCtx(), "FileImportFile"));
+		}
 
-        chooser.setFileSelectionMode( JFileChooser.FILES_ONLY );
-        chooser.setMultiSelectionEnabled( false );
-        chooser.setDialogTitle( Msg.getMsg( Env.getCtx(),"FileImportFileInfo" ));
+		int index = 1; // second line as first may be heading
 
-        if( chooser.showOpenDialog( this ) != JFileChooser.APPROVE_OPTION ) {
-            return;
-        }
+		if (m_data.size() == 1) {
+			index = 0;
+		}
 
-        String fileName = chooser.getSelectedFile().getName();
+		int length = 0;
 
-        log.config( fileName );
-        bFile.setText( fileName );
-        setCursor( Cursor.getPredefinedCursor( Cursor.WAIT_CURSOR ));
-        m_data.clear();
-        rawData.setText( "" );
+		if (m_data.size() > 0) {
+			length = m_data.get(index).length();
+		}
 
-        try {
+		info.setText(Msg.getMsg(Env.getCtx(), "Records") + "=" + m_data.size() + ", " + Msg.getMsg(Env.getCtx(), "Length") + "=" + length + "   ");
+		setCursor(Cursor.getDefaultCursor());
+		log.config("Records=" + m_data.size() + ", Length=" + length);
+	} // cmd_loadFile
 
-            // see NaturalAccountMap
+	/**
+	 * Descripción de Método
+	 */
+	private void cmd_loadFormat() {
 
-            BufferedReader in = new BufferedReader( new FileReader( chooser.getSelectedFile()),10240 );
+		// clear panel
 
-            // not safe see p108 Network pgm
+		previewPanel.removeAll();
 
-            String s = null;
+		//
 
-            while(( s = in.readLine()) != null ) {
-                m_data.add( s );
+		String formatName = pickFormat.getSelectedItem().toString();
 
-                if( m_data.size() < 100 ) {
-                    rawData.append( s );
-                    rawData.append( "\n" );
-                }
-            }
+		if (formatName.equals(s_none)) {
+			return;
+		}
 
-            in.close();
-            rawData.setCaretPosition( 0 );
-        } catch( Exception e ) {
-            log.log( Level.SEVERE,"",e );
-            bFile.setText( Msg.getMsg( Env.getCtx(),"FileImportFile" ));
-        }
+		m_format = ImpFormat.load(formatName);
 
-        int index = 1;    // second line as first may be heading
+		if (m_format == null) {
+			ADialog.error(m_WindowNo, this, "FileImportNoFormat", formatName);
 
-        if( m_data.size() == 1 ) {
-            index = 0;
-        }
+			return;
+		}
 
-        int length = 0;
+		// pointers
 
-        if( m_data.size() > 0 ) {
-            length = m_data.get( index ).toString().length();
-        }
+		fieldsFromFormat(m_format);
 
-        info.setText( Msg.getMsg( Env.getCtx(),"Records" ) + "=" + m_data.size() + ", " + Msg.getMsg( Env.getCtx(),"Length" ) + "=" + length + "   " );
-        setCursor( Cursor.getDefaultCursor());
-        log.config( "Records=" + m_data.size() + ", Length=" + length );
-    }    // cmd_loadFile
+		m_record = -1;
+		record.setText("----");
+		previewPanel.invalidate();
+		previewPanel.repaint();
+	} // cmd_format
 
-    /**
-     * Descripción de Método
-     *
-     */
+	private void fieldsFromFormat(ImpFormat m_format) {
+		int size = m_format.getRowCount();
 
-    private void cmd_loadFormat() {
+		// TODO mejorar para formatos con hijos.
 
-        // clear panel
+		m_labels = new JLabel[size];
+		m_fields = new JTextField[size];
 
-        previewPanel.removeAll();
+		for (int i = 0; i < size; i++) {
+			ImpFormatRow row = m_format.getRow(i);
 
-        //
+			m_labels[i] = new JLabel(row.getDisplayName());
+			previewPanel.add(m_labels[i], new GridBagConstraints(i, 0, 1, 1, 0.0, 0.0, GridBagConstraints.CENTER, GridBagConstraints.NONE, new Insets(2, 2, 2, 2), 0, 0));
 
-        String formatName = pickFormat.getSelectedItem().toString();
+			int length = row.getEndNo() - row.getStartNo();
 
-        if( formatName.equals( s_none )) {
-            return;
-        }
+			if (length <= 5) {
+				length = 5;
+			} else if (length > 20) {
+				length = 20;
+			}
 
-        m_format = ImpFormat.load( formatName );
+			m_fields[i] = new JTextField(length);
+			previewPanel.add(m_fields[i], new GridBagConstraints(i, 1, 1, 1, 0.0, 0.0, GridBagConstraints.CENTER, GridBagConstraints.NONE, new Insets(2, 2, 2, 2), 0, 0));
+		}
+		MImpFormat mImpFormat = new MImpFormat(Env.getCtx(), m_format.getAD_ImpFormat_ID(), Trx.createTrxName("fileImportLoadFormat"));
+		List<MImpFormat> chidFormats = mImpFormat.getChilds();
+		for (MImpFormat f : chidFormats) {
+			fieldsFromFormat(ImpFormat.load(f.getName()));
+		}
+	}
 
-        if( m_format == null ) {
-            ADialog.error( m_WindowNo,this,"FileImportNoFormat",formatName );
+	/**
+	 * Descripción de Método
+	 * @param next
+	 */
+	private void cmd_applyFormat(boolean next) {
+		if (m_format == null) {
+			return;
+		}
 
-            return;
-        }
+		// set position
 
-        // pointers
+		if (next) {
+			m_record++;
+		} else {
+			m_record--;
+		}
 
-        int size = m_format.getRowCount();
+		if (m_record < 0) {
+			m_record = 0;
+		} else if (m_record >= m_data.size()) {
+			m_record = m_data.size() - 1;
+		}
 
-        m_labels = new JLabel[ size ];
-        m_fields = new JTextField[ size ];
+		record.setText(" " + String.valueOf(m_record + 1) + " ");
 
-        for( int i = 0;i < size;i++ ) {
-            ImpFormatRow row = m_format.getRow( i );
+		// Line Info
 
-//            m_labels[ i ] = new JLabel( row.getColumnName());
-            m_labels[ i ] = new JLabel( row.getDisplayName());
-            previewPanel.add( m_labels[ i ],new GridBagConstraints( i,0,1,1,0.0,0.0,GridBagConstraints.CENTER,GridBagConstraints.NONE,new Insets( 2,2,2,2 ),0,0 ));
+		// no label, trace, no ignore
+		String[] lInfo = m_format.parseLine(m_data.get(m_record), false, true, false);
+		int size = m_format.getRowCount();
 
-            //
+		if (lInfo.length != size) {
+			log.log(Level.SEVERE, "FormatElements=" + size + " != Fields=" + lInfo.length);
+		}
 
-            int length = row.getEndNo() - row.getStartNo();
+		for (int i = 0; i < size; i++) {
+			m_fields[i].setText(lInfo[i]);
+			m_fields[i].setCaretPosition(0);
+		}
+	} // cmd_applyFormat
 
-            if( length <= 5 ) {
-                length = 5;
-            } else if( length > 20 ) {
-                length = 20;
-            }
+	/**
+	 * Descripción de Método
+	 */
+	private void cmd_process() {
+		log.config("");
 
-            m_fields[ i ] = new JTextField( length );
-            previewPanel.add( m_fields[ i ],new GridBagConstraints( i,1,1,1,0.0,0.0,GridBagConstraints.CENTER,GridBagConstraints.NONE,new Insets( 2,2,2,2 ),0,0 ));
-        }
+		if (m_format == null) {
+			ADialog.error(m_WindowNo, this, "FileImportNoFormat");
 
-        m_record = -1;
-        record.setText( "----" );
-        previewPanel.invalidate();
-        previewPanel.repaint();
-    }    // cmd_format
+			return;
+		}
 
-    /**
-     * Descripción de Método
-     *
-     *
-     * @param next
-     */
+		// For all rows - update/insert DB table
 
-    private void cmd_applyFormat( boolean next ) {
-        if( m_format == null ) {
-            return;
-        }
+		int row = 0;
+		int imported = 0;
 
-        // set position
+		for (row = 0; row < m_data.size(); row++) {
+			if (m_format.updateDB(Env.getCtx(), m_data.get(row))) {
+				imported++;
+			}
+		}
 
-        if( next ) {
-            m_record++;
-        } else {
-            m_record--;
-        }
+		//
 
-        if( m_record < 0 ) {
-            m_record = 0;
-        } else if( m_record >= m_data.size()) {
-            m_record = m_data.size() - 1;
-        }
+		ADialog.info(m_WindowNo, this, "FileImportR/I", row + " / " + imported + "#");
+		dispose();
+	} // cmd_process
 
-        record.setText( " " + String.valueOf( m_record + 1 ) + " " );
+} // FileImport
 
-        // Line Info
-
-        String[] lInfo = m_format.parseLine( m_data.get( m_record ).toString(),false,true,false );    // no label, trace, no ignore
-        int size = m_format.getRowCount();
-
-        if( lInfo.length != size ) {
-            log.log( Level.SEVERE,"FormatElements=" + size + " != Fields=" + lInfo.length );
-        }
-
-        for( int i = 0;i < size;i++ ) {
-            m_fields[ i ].setText( lInfo[ i ] );
-            m_fields[ i ].setCaretPosition( 0 );
-        }
-    }    // cmd_applyFormat
-
-    /**
-     * Descripción de Método
-     *
-     */
-
-    private void cmd_process() {
-        log.config( "" );
-
-        if( m_format == null ) {
-            ADialog.error( m_WindowNo,this,"FileImportNoFormat" );
-
-            return;
-        }
-
-        // For all rows - update/insert DB table
-
-        int row      = 0;
-        int imported = 0;
-
-        for( row = 0;row < m_data.size();row++ ) {
-            if( m_format.updateDB( Env.getCtx(),m_data.get( row ).toString())) {
-                imported++;
-            }
-        }
-
-        //
-
-        ADialog.info( m_WindowNo,this,"FileImportR/I",row + " / " + imported + "#" );
-        dispose();
-    }    // cmd_process
-}    // FileImport
-
-
-
-/*
- *  @(#)VFileImport.java   02.07.07
+/* @(#)VFileImport.java 02.07.07
  * 
- *  Fin del fichero VFileImport.java
- *  
- *  Versión 2.2
- *
- */
+ * Fin del fichero VFileImport.java
+ * 
+ * Versión 2.2 */

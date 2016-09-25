@@ -44,6 +44,7 @@ import org.openXpertya.model.MPInstancePara;
 import org.openXpertya.model.MPOSPaymentMedium;
 import org.openXpertya.model.MPayment;
 import org.openXpertya.model.MPreference;
+import org.openXpertya.model.MRefList;
 import org.openXpertya.model.MRole;
 import org.openXpertya.model.PO;
 import org.openXpertya.model.POCRGenerator;
@@ -63,6 +64,7 @@ import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
 import org.openXpertya.util.Trx;
 import org.openXpertya.util.Util;
+import org.openXpertya.util.ValueNamePair;
 
 public class VOrdenPagoModel {
 
@@ -387,12 +389,15 @@ public class VOrdenPagoModel {
 
 		@Override
 		public Timestamp getDateTrx() {
-			//return fechaTransf;
-			return m_fechaTrx;
+			return fechaTransf;
 		}
 
 		@Override
 		public Timestamp getDateAcct() {
+			return m_fechaTrx;
+		}
+		
+		public Timestamp getFechaTransf() {
 			return fechaTransf;
 		}
 
@@ -434,7 +439,6 @@ public class VOrdenPagoModel {
 		public BigDecimal importe;
 		public Timestamp fechaEm;
 		public Timestamp fechaPago;
-		public Timestamp dateTrx;
 		public String aLaOrden;
 		public String banco;
 		public Integer bancoID;
@@ -451,8 +455,6 @@ public class VOrdenPagoModel {
 		 */
 		public MedioPagoCheque(boolean isSOTrx) {
 			super(isSOTrx);
-			// Para el MP Cheque debe usarse la fecha del Allocation
-			dateTrx = Env.getDate();
 		}
 
 		public MedioPagoCheque(int chequera_ID, String nroCheque,
@@ -464,8 +466,6 @@ public class VOrdenPagoModel {
 			this.importe = importe;
 			this.fechaEm = fechaEm;
 			this.fechaPago = fechaPago;
-			// Para el MP Cheque debe usarse la fecha del Allocation
-			dateTrx = Env.getDate();
 			aLaOrden = laOrden;
 		}
 
@@ -476,12 +476,12 @@ public class VOrdenPagoModel {
 
 		@Override
 		public Timestamp getDateTrx() {
-			return dateTrx;
+			return m_fechaTrx;
 		}
 
 		@Override
 		public Timestamp getDateAcct() {
-			return dateTrx;
+			return m_fechaTrx;
 		}
 
 		@Override
@@ -680,6 +680,15 @@ public class VOrdenPagoModel {
 				throw new Exception(Msg.getMsg(getCtx(),
 						"POPaymentExistsError", new Object[] {
 								getMsg("Credit"), getMsg("Payment") }));
+			// No se puede agregar un crédito cuando no concuerdan los paymentrule de los débitos
+			String invoicePaymentRule = getInvoicePaymentRule();
+			if(!getPaymentRule().equals(invoicePaymentRule))
+				throw new InterruptedException(Msg.getMsg(getCtx(), "NotAllowedAllocateCreditDiffPaymentRule",
+						new Object[] {
+								MRefList.getListName(getCtx(), MInvoice.PAYMENTRULE_AD_Reference_ID,
+										invoicePaymentRule),
+								MRefList.getListName(getCtx(), MInvoice.PAYMENTRULE_AD_Reference_ID,
+										getPaymentRule()) }));
 		}
 
 		@Override
@@ -692,6 +701,12 @@ public class VOrdenPagoModel {
 		public BigDecimal getImporteMonedaOriginal() {
 			return importe;
 		}
+		
+		public String getInvoicePaymentRule() {
+			return VModelHelper.getSQLValueString(getTrxName(),
+					" select paymentrule from c_invoice where c_invoice_id = ? ",
+					C_invoice_ID);
+		}
 
 	}
 
@@ -703,7 +718,6 @@ public class VOrdenPagoModel {
 		private String creditCardNo;
 		private int cuotasCount;
 		private BigDecimal cuotaAmt;
-		private Timestamp today = new Timestamp(System.currentTimeMillis());
 		private MPayment payment;
 		private String bank;
 		private String accountName;
@@ -715,7 +729,7 @@ public class VOrdenPagoModel {
 
 		@Override
 		public Timestamp getDateAcct() {
-			return today;
+			return m_fechaTrx;
 		}
 
 		@Override
@@ -1088,6 +1102,9 @@ public class VOrdenPagoModel {
 	/** Perfil actual */
 	private MRole role;
 	
+	/** Condición de comprobantes */
+	private String paymentRule;
+	
 	public VOrdenPagoModel() {
 		getMsgMap().put("TenderType", "TenderType");
 		// initTrx(); <-- COMENTADO: La trx debe iniciarse al confirmar el pago
@@ -1173,7 +1190,10 @@ public class VOrdenPagoModel {
 				+ " AND EXISTS (SELECT C_DocType_ID FROM C_DocType dt WHERE C_Invoice.C_DocType_ID = dt.C_DocType_ID AND dt.Signo_IsSOTrx = "
 				+ (getSignoIsSOTrx() * -1) + ") "
 				+ " AND C_Invoice.C_BPartner_ID = @C_BPartner_ID@ "
-				+ " AND C_Invoice.C_Currency_ID = @C_Currency_ID@ ";
+				+ " AND C_Invoice.C_Currency_ID = @C_Currency_ID@ "
+				+ " AND invoiceOpen(C_Invoice.C_Invoice_ID, null) > 0 "
+				+ " AND C_Invoice.PaymentRule = '@PaymentRule@' ";
+
 	}
 
 	public String getCurrencySqlValidation() {
@@ -1252,8 +1272,13 @@ public class VOrdenPagoModel {
 		if (m_actualizarFacturasAuto)
 			actualizarFacturas();
 	}
+	
 	public void setFechaOP(Timestamp fecha) {
 				m_fechaTrx = fecha;
+	}
+	
+	public Timestamp getFechaOP() {
+		return m_fechaTrx;
 	}
 
 	/**
@@ -1352,10 +1377,10 @@ public class VOrdenPagoModel {
 
 		StringBuffer sql = new StringBuffer();
 
-		sql.append(" SELECT c_invoice_id, 0, orgname, documentno,max(duedate) as duedatemax, currencyIso, grandTotal, openTotal,  sum(convertedamt) as convertedamtsum, sum(openamt) as openAmtSum, isexchange, C_Currency_ID FROM ");
+		sql.append(" SELECT c_invoice_id, 0, orgname, documentno,max(duedate) as duedatemax, currencyIso, grandTotal, openTotal,  sum(convertedamt) as convertedamtsum, sum(openamt) as openAmtSum, isexchange, C_Currency_ID, paymentrule FROM ");
 		sql.append("  (SELECT i.C_Invoice_ID, i.C_InvoicePaySchedule_ID, org.name as orgname, i.DocumentNo, coalesce(i.duedate,dateinvoiced) as DueDate, cu.iso_code as currencyIso, i.grandTotal, invoiceOpen(i.C_Invoice_ID, COALESCE(i.C_InvoicePaySchedule_ID, 0)) as openTotal, "); // ips.duedate
 		sql.append("    abs(currencyConvert( i.GrandTotal, i.C_Currency_ID, ?, '"+ m_fechaTrx +"'::date, null, i.AD_Client_ID, i.AD_Org_ID)) as ConvertedAmt, isexchange, ");
-		sql.append("    currencyConvert( invoiceOpen(i.C_Invoice_ID, COALESCE(i.C_InvoicePaySchedule_ID, 0)), i.C_Currency_ID, ?, '"+ m_fechaTrx +"'::date, null, i.AD_Client_ID, i.AD_Org_ID) AS openAmt, i.C_Currency_ID ");
+		sql.append("    currencyConvert( invoiceOpen(i.C_Invoice_ID, COALESCE(i.C_InvoicePaySchedule_ID, 0)), i.C_Currency_ID, ?, '"+ m_fechaTrx +"'::date, null, i.AD_Client_ID, i.AD_Org_ID) AS openAmt, i.C_Currency_ID, i.paymentrule ");
 		sql.append("  FROM c_invoice_v AS i ");
 		sql.append("  LEFT JOIN ad_org org ON (org.ad_org_id=i.ad_org_id) ");
 		sql.append("  LEFT JOIN c_invoicepayschedule AS ips ON (i.c_invoicepayschedule_id=ips.c_invoicepayschedule_id) ");
@@ -1368,9 +1393,11 @@ public class VOrdenPagoModel {
 
 		if (AD_Org_ID != 0)
 			sql.append("  AND i.ad_org_id = ?  ");
+		
+		sql.append(" AND i.paymentRule = '").append(getPaymentRule()).append("' ");
 
 		sql.append("  ORDER BY org.name ASC, i.c_invoice_id, i.DocumentNo ASC, DueDate ASC ) as openInvoices ");
-		sql.append(" GROUP BY c_invoice_id, orgname, documentno, currencyIso, grandTotal, openTotal, c_invoicepayschedule_id, isexchange, C_Currency_ID ");
+		sql.append(" GROUP BY c_invoice_id, orgname, documentno, currencyIso, grandTotal, openTotal, c_invoicepayschedule_id, isexchange, C_Currency_ID, paymentrule ");
 		sql.append(" HAVING sum(opentotal) > 0.0 ");
 		if (!m_allInvoices)
 			sql.append("  AND ( max(duedate) IS NULL OR max(duedate) <= ? ) ");
@@ -1400,7 +1427,6 @@ public class VOrdenPagoModel {
 				ResultItemFactura rif = new ResultItemFactura(rs);
 				int facId = ((Integer) rif.getItem(m_facturasTableModel
 						.getIdColIdx()));
-
 				// if (facId != ultimaFactura) {
 				m_facturas.add(rif);
 				// ultimaFactura = facId;
@@ -1652,7 +1678,7 @@ public class VOrdenPagoModel {
 		/*	m_retGen = new GeneratorRetenciones(C_BPartner_ID,
 					facturasProcesar, manualAmounts, total, isSOTrx());
 		*/
-			m_retGen = new GeneratorRetenciones(C_BPartner_ID, facturasProcesar, manualAmounts, total, isSOTrx(), m_fechaTrx);
+			m_retGen = new GeneratorRetenciones(C_BPartner_ID, facturasProcesar, manualAmounts, total, isSOTrx(), m_fechaTrx, getPaymentRule());
 			m_retGen.setTrxName(getTrxName());
 			calculateRetencions();
 			m_retenciones = m_retGen.getRetenciones();
@@ -1816,6 +1842,18 @@ public class VOrdenPagoModel {
 				// No se debe generar ningún pago dado que es una nota de
 				// crédito existente.
 				MedioPagoCredito mpc = (MedioPagoCredito) mp;
+				// No se puede agregar un crédito cuando no concuerdan los paymentrule de los débitos
+				String invoicePaymentRule = mpc.getInvoicePaymentRule();
+				if(!getPaymentRule().equals(invoicePaymentRule)){
+					errorNo = PROCERROR_PAYMENTS_GENERATION;
+					errorMsg = Msg.getMsg(getCtx(), "NotAllowedAllocateCreditDiffPaymentRule",
+							new Object[] {
+									MRefList.getListName(getCtx(), MInvoice.PAYMENTRULE_AD_Reference_ID,
+											invoicePaymentRule),
+									MRefList.getListName(getCtx(), MInvoice.PAYMENTRULE_AD_Reference_ID,
+											getPaymentRule()) });
+					throw new Exception(errorMsg);
+				}
 				setAllocationHDRaRetencionManual(hdr, mpc.C_invoice_ID);
 			} else if (mp.getTipoMP().equals(
 					MedioPago.TIPOMEDIOPAGO_CREDITORETENCION)) {
@@ -1990,7 +2028,7 @@ public class VOrdenPagoModel {
 					pay.setTenderType(MPayment.TENDERTYPE_DirectDeposit);
 
 					pay.setCheckNo(mpt.nroTransf); // Numero de cheque
-
+					
 					mpt.setPayment(pay);
 				} else if (mp.getTipoMP()
 						.equals(MedioPago.TIPOMEDIOPAGO_CHEQUE)) {
@@ -2208,6 +2246,13 @@ public class VOrdenPagoModel {
 
 		while (rs.next()) {
 			MInvoice invoice = new MInvoice(m_ctx, rs.getInt(1), getTrxName());
+
+			//SUR SOFTWARE - MODIFICACION PARA CONTABILIZAR EL COMPROBANTE DE RETENCION CON LA FECHA DEL RECIBO // O.PAGO 
+			invoice.setDateAcct(this.m_fechaTrx);
+			if(!invoice.save()){
+				throw new Exception(CLogger.retrieveErrorAsString());
+			}
+
 			MedioPagoCreditoRetencion rc = new MedioPagoCreditoRetencion(
 					invoice);
 			Vector<MedioPago> mpe = new Vector<VOrdenPagoModel.MedioPago>();
@@ -2928,7 +2973,7 @@ public class VOrdenPagoModel {
 
 		@Override
 		public Timestamp getDateAcct() {
-			return new Timestamp(System.currentTimeMillis()); // Now
+			return m_fechaTrx;
 		}
 
 		public MPayment getChequeCP() {
@@ -3696,5 +3741,32 @@ public class VOrdenPagoModel {
 
 	public boolean isAuthorizations() {
 		return (MOrgInfo.get(getCtx(), Env.getAD_Org_ID(getCtx()))).isAuthorizations();
+	}
+	
+	public List<ValueNamePair> getPaymentRulesList(){
+		List<ValueNamePair> list = new ArrayList<ValueNamePair>();
+		list.add(new ValueNamePair(MInvoice.PAYMENTRULE_Cash,
+				MRefList.getListName(getCtx(), MInvoice.PAYMENTRULE_AD_Reference_ID, MInvoice.PAYMENTRULE_Cash)));
+		list.add(new ValueNamePair(MInvoice.PAYMENTRULE_OnCredit,
+				MRefList.getListName(getCtx(), MInvoice.PAYMENTRULE_AD_Reference_ID, MInvoice.PAYMENTRULE_OnCredit)));
+		return list;
+	}
+	
+	public String getPaymentRuleValidation(){
+		return "Value in ('" + MInvoice.PAYMENTRULE_Cash + "','" + MInvoice.PAYMENTRULE_OnCredit + "')";
+	}
+	
+	public String getDefaultPaymentRule(){
+		return MInvoice.PAYMENTRULE_OnCredit;
+	}
+
+	
+
+	public String getPaymentRule() {
+		return paymentRule;
+	}
+
+	public void setPaymentRule(String paymentRule) {
+		this.paymentRule = paymentRule;
 	}
 }

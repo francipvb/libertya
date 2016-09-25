@@ -105,7 +105,7 @@ public class ExportListaGalicia extends ExportBankList {
 	protected String getQuery(){
 		StringBuffer query = new StringBuffer();
 		query.append("select distinct lgp.c_payment_id, lgp.c_bpartner_id, lgp.payamt, coalesce(p.a_name,bp.name) as name, translate(coalesce(p.a_cuit, bp.taxid),'-','') as cuit, (select l.address1 from c_bpartner_location bpl inner join c_location l on l.c_location_id = bpl.c_location_id where bpl.c_bpartner_id = bp.c_bpartner_id and bpl.isactive = 'Y' order by bpl.updated desc limit 1) as address, (select l.city from c_bpartner_location bpl inner join c_location l on l.c_location_id = bpl.c_location_id where bpl.c_bpartner_id = bp.c_bpartner_id and bpl.isactive = 'Y' order by bpl.updated desc limit 1) as city , (select l.postal from c_bpartner_location bpl inner join c_location l on l.c_location_id = bpl.c_location_id where bpl.c_bpartner_id = bp.c_bpartner_id and bpl.isactive = 'Y' order by bpl.updated desc limit 1) as postal, ah.c_allocationhdr_id, ah.documentno, ah.datetrx as allocationdate, p.duedate, ba.sucursal ");
-		query.append("from c_lista_galicia_payments lgp ");
+		query.append("from c_electronic_payments lgp ");
 		query.append("inner join c_payment p on p.c_payment_id = lgp.c_payment_id ");
 		query.append("inner join c_bpartner bp on bp.c_bpartner_id = p.c_bpartner_id ");
 		query.append("inner join c_allocationhdr ah on ah.c_allocationhdr_id = lgp.c_allocationhdr_id ");

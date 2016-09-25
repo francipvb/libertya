@@ -1,11 +1,8 @@
 package org.openXpertya.model;
 
 import java.math.BigDecimal;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.util.Properties;
 
-import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
 
@@ -37,13 +34,13 @@ public class CalloutPaymentBatchPOInvoices extends CalloutEngine {
 			
 		
 		//Verifico que la factura elegida no esté ya incorporada en el detalle
-		if (invoiceInDetail(invoiceId, detailId)) {
+		if (MPaymentBatchPOInvoices.invoiceInDetail(invoiceId, detailId)) {
 			mField.setError(true);
 			return Msg.getMsg(ctx, "InvoiceAlreadyInDetail");
 		}
 		
 		//Verifico que tenga importes pendientes y que esté CO o CL
-		if (!invoiceIsOk(invoiceId, C_InvoicePaySchedule_ID)) {
+		if (!MPaymentBatchPOInvoices.invoiceIsOk(invoiceId, C_InvoicePaySchedule_ID)) {
 			mField.setError(true);
 			return Msg.getMsg(ctx, "InvoiceWithoutOpenAmountOrNotAuthorized");
 		}
@@ -73,84 +70,6 @@ public class CalloutPaymentBatchPOInvoices extends CalloutEngine {
         mTab.setValue("C_InvoicePaySchedule_ID", paySchedule.getID());
         
 		return "";
-	}
-	
-	private boolean invoiceIsOk(Integer invoiceId, Integer C_InvoicePaySchedule_ID) {
-		//Construyo la query
-		String sql = "SELECT count(*) " + 
-					 "FROM C_Invoice " +
-					 "WHERE " + 
-					  "c_invoice_id = ? " +
-					  "AND invoiceopen(?, ?) > 0 " +
-					  "AND docstatus IN ('CO', 'CL')";
-		
-		PreparedStatement ps = null;
-		ResultSet rs = null;
-		try {
-			ps = DB.prepareStatement(sql, null);
-			
-			//Parámetros
-			ps.setInt(1, invoiceId);
-			ps.setInt(2, invoiceId);
-			ps.setInt(3, C_InvoicePaySchedule_ID);
-			rs = ps.executeQuery();
-			while (rs.next()) {
-				if (rs.getInt(1) > 0)
-					return true;
-				else
-					return false;
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		} finally {
-			try {
-				if (ps != null)
-					ps.close();
-				if (rs != null)
-					rs.close();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-		return false;
-	}
-	
-	private boolean invoiceInDetail(Integer invoiceId, Integer detailId) {
-		//Construyo la query
-		String sql = "SELECT count(*) " + 
-					 "FROM C_PaymentBatchPOInvoices " +
-					 "WHERE " + 
-					  "c_invoice_id = ? " +
-					  "AND c_paymentbatchpodetail_id = ?";
-		
-		PreparedStatement ps = null;
-		ResultSet rs = null;
-		try {
-			ps = DB.prepareStatement(sql, null);
-			
-			//Parámetros
-			ps.setInt(1, invoiceId);
-			ps.setInt(2, detailId);
-			rs = ps.executeQuery();
-			while (rs.next()) {
-				if (rs.getInt(1) > 0)
-					return true;
-				else
-					return false;
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		} finally {
-			try {
-				if (ps != null)
-					ps.close();
-				if (rs != null)
-					rs.close();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-		return false;
 	}
 
 }

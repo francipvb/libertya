@@ -1,13 +1,15 @@
-/** Modelo Generado - NO CAMBIAR MANUALMENTE - Copyright (C) 2006 FUNDESLE */
+/** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.util.*;
-import java.sql.*;
-import java.math.*;
-import org.openXpertya.util.*;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.util.Properties;
+
+import org.openXpertya.util.Env;
+import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por AD_ImpFormat
- *  @author Comunidad de Desarrollo openXpertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2009-10-22 14:51:26.713 */
-public class X_AD_ImpFormat extends PO
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2016-09-14 10:54:30.744 */
+public class X_AD_ImpFormat extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
 public X_AD_ImpFormat (Properties ctx, int AD_ImpFormat_ID, String trxName)
@@ -28,13 +30,13 @@ public X_AD_ImpFormat (Properties ctx, ResultSet rs, String trxName)
 {
 super (ctx, rs, trxName);
 }
-/** AD_Table_ID=381 */
-public static final int Table_ID=381;
+/** AD_Table_ID */
+public static final int Table_ID = M_Table.getTableID("AD_ImpFormat");
 
 /** TableName=AD_ImpFormat */
 public static final String Table_Name="AD_ImpFormat";
 
-protected static KeyNamePair Model = new KeyNamePair(381,"AD_ImpFormat");
+protected static KeyNamePair Model = new KeyNamePair(Table_ID,"AD_ImpFormat");
 protected static BigDecimal AccessLevel = new BigDecimal(6);
 
 /** Load Meta Data */
@@ -89,6 +91,21 @@ Integer ii = (Integer)get_Value("AD_ImpFormat_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
+public static final int AD_IMPFORMAT_PARENT_ID_AD_Reference_ID = MReference.getReferenceID("AD_ImpFormat (All)");
+/** Set AD_Impformat_Parent_ID */
+public void setAD_Impformat_Parent_ID (int AD_Impformat_Parent_ID)
+{
+if (AD_Impformat_Parent_ID <= 0) set_Value ("AD_Impformat_Parent_ID", null);
+ else 
+set_Value ("AD_Impformat_Parent_ID", new Integer(AD_Impformat_Parent_ID));
+}
+/** Get AD_Impformat_Parent_ID */
+public int getAD_Impformat_Parent_ID() 
+{
+Integer ii = (Integer)get_Value("AD_Impformat_Parent_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
 /** Set Table.
 Table for the Fields */
 public void setAD_Table_ID (int AD_Table_ID)
@@ -135,7 +152,7 @@ public String getDescription()
 {
 return (String)get_Value("Description");
 }
-public static final int FORMATTYPE_AD_Reference_ID=209;
+public static final int FORMATTYPE_AD_Reference_ID = MReference.getReferenceID("AD_ImpFormat FormatType");
 /** Fixed Position = F */
 public static final String FORMATTYPE_FixedPosition = "F";
 /** Comma Separated = C */
@@ -148,9 +165,9 @@ public static final String FORMATTYPE_XML = "X";
 Format of the data */
 public void setFormatType (String FormatType)
 {
-if (FormatType.equals("F") || FormatType.equals("C") || FormatType.equals("T") || FormatType.equals("X"));
- else throw new IllegalArgumentException ("FormatType Invalid value - Reference_ID=209 - F - C - T - X");
 if (FormatType == null) throw new IllegalArgumentException ("FormatType is mandatory");
+if (FormatType.equals("F") || FormatType.equals("C") || FormatType.equals("T") || FormatType.equals("X"));
+ else throw new IllegalArgumentException ("FormatType Invalid value - Reference = FORMATTYPE_AD_Reference_ID - F - C - T - X");
 if (FormatType.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -201,5 +218,21 @@ if (oo != null)
  return "Y".equals(oo);
 }
 return false;
+}
+/** Set Sequence.
+Method of ordering records;
+ lowest number comes first */
+public void setSeqNo (BigDecimal SeqNo)
+{
+set_Value ("SeqNo", SeqNo);
+}
+/** Get Sequence.
+Method of ordering records;
+ lowest number comes first */
+public BigDecimal getSeqNo() 
+{
+BigDecimal bd = (BigDecimal)get_Value("SeqNo");
+if (bd == null) return Env.ZERO;
+return bd;
 }
 }
