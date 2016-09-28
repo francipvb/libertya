@@ -43,7 +43,7 @@ public class RenumeracionAsientosContables extends SvrProcess {
 
 	@Override
 	protected String doIt() throws Exception {
-		// Obtengo el número de asiento de acuerdo al tipo de numeración elejido.
+		// Obtengo el número de asiento de acuerdo al tipo de numeración elejido. 
 		int number = getMaxNumber();
 		// Renumero asientos
 		if (renumberEntries(number))
