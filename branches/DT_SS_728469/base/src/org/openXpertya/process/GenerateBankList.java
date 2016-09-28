@@ -46,17 +46,13 @@ public class GenerateBankList extends AbstractSvrProcess {
 					+ "inner join c_allocationline as al on al.c_allocationhdr_id = ah.c_allocationhdr_id "
 					+ "inner join c_payment as p on p.c_payment_id = al.c_payment_id "
 					+ "inner join c_bankaccount as ba on ba.c_bankaccount_id = p.c_bankaccount_id "
-					+ "inner join c_bank as b on b.c_bank_id = ba.c_bank_id "
-					+ "inner join c_doctype as dt on dt.c_banklist_bank_id = b.c_bank_id and dt.c_doctype_id = ? "
-					+ "inner join c_bpartner_banklist as bpbl on bpbl.c_bpartner_id = p.c_bpartner_id "
 					+ "where p.ad_client_id = ? "
 					+ "			and p.tendertype = 'K' "
 					+ "			and p.isreceipt = 'N' "
 					+ "			and p.docstatus IN ('CO','CL') "
 					+ "			and ah.docstatus IN ('CO','CL') "
 					+ "			and ah.allocationtype = 'OP' "
-					+ "			and bpbl.isactive = 'Y' "
-					+ "			and bpbl.c_doctype_id = ? "
+					+ "			and p.c_bankaccount_id = ? "
 					+ "			and not exists (select bll.c_banklistline_id "
 					+ "							from c_banklistline bll "
 					+ "							inner join c_banklist bl on bl.c_banklist_id = bll.c_banklist_id "
@@ -71,10 +67,9 @@ public class GenerateBankList extends AbstractSvrProcess {
 		BigDecimal line = new BigDecimal(10);
 		try {
 			ps = DB.prepareStatement(sql, get_TrxName(), true);
-			ps.setInt(1, bankList.getC_DocType_ID());
-			ps.setInt(2, op.getAD_Client_ID());
+			ps.setInt(1, op.getAD_Client_ID());
+			ps.setInt(2, bankList.getC_BankAccount_ID());
 			ps.setInt(3, bankList.getC_DocType_ID());
-			ps.setInt(4, bankList.getC_DocType_ID());
 			rs = ps.executeQuery();
 			while(rs.next()){
 				bankListLine = new MBankListLine(getCtx(), 0, get_TrxName());

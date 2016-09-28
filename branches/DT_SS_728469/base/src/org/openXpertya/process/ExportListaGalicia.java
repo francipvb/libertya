@@ -109,10 +109,8 @@ public class ExportListaGalicia extends ExportBankList {
 		query.append("inner join c_payment p on p.c_payment_id = lgp.c_payment_id ");
 		query.append("inner join c_bpartner bp on bp.c_bpartner_id = p.c_bpartner_id ");
 		query.append("inner join c_allocationhdr ah on ah.c_allocationhdr_id = lgp.c_allocationhdr_id ");
-		query.append(
-				"inner join c_bpartner_banklist as bpbl on bpbl.c_bpartner_id = bp.c_bpartner_id and bpbl.isactive = 'Y' and bpbl.c_doctype_id = ")
-				.append(getBankList().getC_DocType_ID());
-		query.append("left join c_bankaccount as ba on ba.c_bankaccount_id = bpbl.c_bankaccount_id ");
+		query.append("inner join c_banklist bl ON bl.c_banklist_id = lgp.c_banklist_id ");
+		query.append("inner join c_bankaccount as ba on ba.c_bankaccount_id = bl.c_bankaccount_id ");
 		query.append("where lgp.c_banklist_id = ? ");
 		return query.toString();
 	}
