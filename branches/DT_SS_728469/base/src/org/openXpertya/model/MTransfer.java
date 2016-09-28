@@ -20,10 +20,10 @@ import org.openXpertya.util.Util;
 
 /**
  * Transferencia de Mercadería
- * 
  * @author Franco Bonafine - Disytel
  */
 public class MTransfer extends X_M_Transfer implements DocAction {
+	private static final long serialVersionUID = 1L;
 
 	/** Cache de líneas de la transferencia */
 	private List<MTransferLine> lines = null;
@@ -147,64 +147,38 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 		// No es posible cambiar el almacén si existen líneas debido a que las
 		// mismas referencian ubicaciones del almacén previo.
 		if (isOutgoing() && is_ValueChanged("M_Warehouse_ID") && hasLines()) {
-			log.saveError("SaveError",
-					Msg.translate(getCtx(), "CannotChangeWarehouse"));
+			log.saveError("SaveError", Msg.translate(getCtx(), "CannotChangeWarehouse"));
 			return false;
 		}
 
-		// Para Transferencias entre Almacenes el almacén origen y destino deben
-		// ser
-		// diferentes. Para realizar movimientos de mercadería dentro de un
-		// almacén
+		// Para Transferencias entre Almacenes el almacén origen y destino deben ser
+		// diferentes. Para realizar movimientos de mercadería dentro de un almacén
 		// se utiliza la ventana de Movimiento de Inventario.
-		if (isWarehouseTransfer()
-				&& (getM_Warehouse_ID() == getM_WarehouseTo_ID())) {
-			log.saveError("SaveError", Msg.translate(getCtx(),
-					"MaterialTransferUniqueWarehouseError"));
+		if (isWarehouseTransfer() && (getM_Warehouse_ID() == getM_WarehouseTo_ID())) {
+			log.saveError("SaveError", Msg.translate(getCtx(), "MaterialTransferUniqueWarehouseError"));
 			return false;
 		}
 
-		// La fecha de vencimiento debe ser mayor o igual a la fecha de la
-		// transferencia
+		// La fecha de vencimiento debe ser mayor o igual a la fecha de la transferencia
 		if (getDueDate().compareTo(getDateTrx()) < 0) {
-			log.saveError("SaveError",
-					Msg.translate(getCtx(), "InvalidDueDate"));
+			log.saveError("SaveError", Msg.translate(getCtx(), "InvalidDueDate"));
 			return false;
 		}
 
-		// En Movimientos en dos Etapas el almacén origen y destino es el mismo
-		// siempre.
+		// En Movimientos en dos Etapas el almacén origen y destino es el mismo siempre.
 		if (isTwoPhaseMovement()) {
 			setM_WarehouseTo_ID(getM_Warehouse_ID());
 		}
-
-		// Esto se comenta ya que en un principio se pedía la validación, pero
-		// luego se decidió que no se implementa
-		// ------------------------------------------------------------------------
-		// // Verificar que no exista la misma cadena de guía de transporte, lo
-		// // cual no debe permitir guardar
-		// String docNo = getDocNoTransferByStrColumnCondition(getCtx(),
-		// "Transport_Guide", getTransport_Guide(), getID(), get_TrxName());
-		// if(docNo != null){
-		// log.saveError("", Msg.getMsg(getCtx(), "TransportGuideWarning",
-		// new Object[] { docNo }));
-		// return false;
-		// }
-		// ------------------------------------------------------------------------
 
 		return true;
 	}
 
 	@Override
 	protected boolean beforeDelete() {
-		// Las transferencias entrantes no se puede borrar debido a que se
-		// perdería
-		// la mercadería habiéndose ya realizado la salida de la misma desde el
-		// almacén
-		// origen.
+		// Las transferencias entrantes no se puede borrar debido a que se perdería
+		// la mercadería habiéndose ya realizado la salida de la misma desde el almacén origen.
 		if (isIncoming()) {
-			log.saveError("DeleteError", Msg.translate(getCtx(),
-					"IncomingMaterialTransferDeleteNotAllowed"));
+			log.saveError("DeleteError", Msg.translate(getCtx(), "IncomingMaterialTransferDeleteNotAllowed"));
 			return false;
 		}
 		return true;
@@ -263,9 +237,12 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 	 * @return Indica si esta transferencia contiene al menos una línea.
 	 */
 	public boolean hasLines() {
-		int linesCount = DB.getSQLValue(get_TrxName(),
-				"SELECT COUNT(*) FROM M_TransferLine WHERE M_Transfer_ID = ?",
-				getM_Transfer_ID());
+		StringBuffer sql = new StringBuffer();
+		sql.append("SELECT COUNT(*) ");
+		sql.append("FROM M_TransferLine ");
+		sql.append("WHERE M_Transfer_ID = ?");
+
+		int linesCount = DB.getSQLValue(get_TrxName(), sql.toString(), getM_Transfer_ID());
 		return linesCount > 0;
 	}
 
@@ -698,8 +675,7 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 	}
 
 	//
-	// Métodos de DocAction que no aplican para transferencias entre
-	// organizaciones
+	// Métodos de DocAction que no aplican para transferencias entre organizaciones
 	//
 
 	@Override
@@ -764,20 +740,18 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 
 	@Override
 	public boolean voidIt() {
-		//m_processMsg = "@MaterialTransferVoidNotAllowed@";
-        log.info( toString());
-        
-        // Imposible anular si el status es: Cerrado, Revertido, Anulado
-		if (DOCSTATUS_Closed.equals(getDocStatus())
-				|| DOCSTATUS_Reversed.equals(getDocStatus())
-				|| DOCSTATUS_Voided.equals(getDocStatus())) {
+		// m_processMsg = "@MaterialTransferVoidNotAllowed@";
+		log.info(toString());
+
+		// Imposible anular si el status es: Cerrado, Revertido, Anulado
+		if (DOCSTATUS_Closed.equals(getDocStatus()) || DOCSTATUS_Reversed.equals(getDocStatus()) || DOCSTATUS_Voided.equals(getDocStatus())) {
 			m_processMsg = Msg.getMsg(getCtx(), "InvalidAction") + ", Document status: " + getDocStatus();
 			setDocAction(DOCACTION_None);
 			return false;
 		}
-		
-		/*Si es una transferencia entrante, solo se puede anular si es borrador. Se debe hacer el proceso inverso utilizando la funcionalidad "Copiar desde" e 
-		invirtiendo los almacenes de origen y destino*/ 
+
+		// Si es una transferencia entrante, solo se puede anular si es
+		// borrador. Caso contrario, se debe hacer el proceso inverso
 		if (getMovementType().equals(MOVEMENTTYPE_Incoming)) {
 			if (!DOCSTATUS_Drafted.equals(getDocStatus())) {
 				m_processMsg = Msg.getMsg(getCtx(), "NotVoidInMaterialTransfer");
@@ -785,21 +759,24 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 				return false;
 			}
 		} else {
-		
+
 			/******* TRANSFERENCIA SALIENTE *******/
-			
-			//Busco la Transferencia Entrante asociada al documento
+
+			// Busco la Transferencia Entrante asociada al documento
 			MTransfer incomingTransfer = null;
 			int resultCount = 0;
-			String sql = "SELECT * "
-					+ "FROM M_Transfer "
-					+ "WHERE DocumentNo = ? AND "
-						  + "Ad_Client_Id = ? AND "
-						  + "C_Bpartner_Id = ?";
+
+			StringBuffer sql = new StringBuffer();
+			sql.append("SELECT * ");
+			sql.append("FROM M_Transfer ");
+			sql.append("WHERE DocumentNo = ? ");
+			sql.append("AND Ad_Client_Id = ? ");
+			sql.append("AND C_Bpartner_Id = ?");
+
 			PreparedStatement ps = null;
 			ResultSet rs = null;
 			try {
-				ps = DB.prepareStatement(sql, get_TrxName());
+				ps = DB.prepareStatement(sql.toString(), get_TrxName());
 				ps.setString(1, getDocumentNo() + "-I");
 				ps.setInt(2, getAD_Client_ID());
 				ps.setInt(3, getC_BPartner_ID());
@@ -820,36 +797,39 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 					e.printStackTrace();
 				}
 			}
-			//Controlo que no se hayan recuperado múltiples transferencias entrantes asociadas
+			// Controlo que no se hayan recuperado múltiples transferencias entrantes asociadas
 			if (resultCount > 1) {
 				m_processMsg = Msg.getMsg(getCtx(), "MultipleInTransfersAssociated");
 				setDocAction(DOCACTION_None);
 				return false;
 			}
-			
+
 			if (incomingTransfer != null) {
-				//Si la transferencia entrante está anulada no hago nada
+				// Si la transferencia entrante está anulada no hago nada
 				if (!incomingTransfer.getDocStatus().equals(DOCSTATUS_Voided)) {
-					//Controlo que la transferencia entrante esté en estado borrador
+					// Controlo que la transferencia entrante esté en estado borrador
 					if (!incomingTransfer.getDocStatus().equals(DOCSTATUS_Drafted)) {
 						m_processMsg = Msg.getMsg(getCtx(), "AsociatedInMaterialTransferCompleted");
 						setDocAction(DOCACTION_None);
 						return false;
 					}
-					
-					//Anulo la transferencia entrante
+					// Anulo la transferencia entrante
 					try {
-						incomingTransfer.processIt(DOCACTION_Void);
-						incomingTransfer.save();
+						if (!incomingTransfer.processIt(DOCACTION_Void)) {
+							m_processMsg = incomingTransfer.getProcessMsg();
+							return false;
+						}
+						if (!incomingTransfer.save()) {
+							log.saveError("SaveError", Msg.translate(getCtx(), "TransferVoidSaveError"));
+							return false;
+						}
 					} catch (Exception e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 				}
 			}
 		}
-		
-		//Para revertir los movimientos de la transferencia, recupero el inventario generado y lo anulo.
+		// Para revertir los movimientos de la transferencia, recupero el inventario generado y lo anulo.
 		if (getM_Inventory_ID() != 0) {
 			MInventory inventory = new MInventory(getCtx(), getM_Inventory_ID(), get_TrxName());
 			if (!inventory.processIt(DOCACTION_Void)) {
@@ -857,28 +837,30 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 				setDocAction(DOCACTION_None);
 				return false;
 			}
-			inventory.save();
+			if (!inventory.save()) {
+				log.saveError("SaveError", Msg.translate(getCtx(), "TransferVoidSaveError"));
+				return false;
+			}
 		}
 		return true;
-		
 	}
 
+	@Override
 	public void setAD_Org_ID(int AD_Org_ID) {
 		super.setAD_Org_ID(AD_Org_ID);
-	} // setAD_Org_ID
+	}
 
 	/**
 	 * Descripción de Método
-	 * 
-	 * 
-	 * @param dt
-	 * @param movementDate
-	 * 
+	 * @param order
+	 * @param M_Warehouse_Origin_ID
+	 * @param M_Warehouse_Destination_ID
+	 * @param transferType
+	 * @param trxName
 	 * @return
+	 * @throws Exception
 	 */
-	public static MTransfer createTransfer(MOrder order,
-			int M_Warehouse_Origin_ID, int M_Warehouse_Destination_ID,
-			String transferType, String trxName) throws Exception {
+	public static MTransfer createTransfer(MOrder order, int M_Warehouse_Origin_ID, int M_Warehouse_Destination_ID, String transferType, String trxName) throws Exception {
 		MTransfer transfer = new MTransfer(order);
 
 		transfer.setDateTrx(Env.getDate());
@@ -895,8 +877,7 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 
 		if (transfer.getID() == 0) { // not saved yet
 			if (!transfer.save(trxName)) {
-				throw new Exception("Error creando cabecera de transferencia: "
-						+ CLogger.retrieveErrorAsString());
+				throw new Exception("Error creando cabecera de transferencia: " + CLogger.retrieveErrorAsString());
 			}
 		}
 
@@ -904,70 +885,63 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 		return transfer;
 	}
 
-	public static void addLines(MTransfer transfer, MOrder order,
-			String trxName) throws Exception {
+	/**
+	 * Descripción de Método
+	 * @param transfer
+	 * @param order
+	 * @param trxName
+	 * @throws Exception
+	 */
+	public static void addLines(MTransfer transfer, MOrder order, String trxName) throws Exception {
 		MOrderLine[] oLines = order.getLines(true, null);
 		for (int i = 0; i < oLines.length; i++) {
 			MOrderLine oLine = oLines[i];
 			MTransferLine tLine = new MTransferLine(transfer);
 
 			// Qty = Ordered - Delivered
-			BigDecimal MovementQty = oLine.getQtyOrdered().subtract(
-					oLine.getQtyDelivered());
+			BigDecimal MovementQty = oLine.getQtyOrdered().subtract(oLine.getQtyDelivered());
 
-			if(MovementQty.signum() > 0){
+			if (MovementQty.signum() > 0) {
 				// Location Origin
-				int M_Locator_Origin_ID = MStorage.getM_Locator_ID(
-						transfer.getM_Warehouse_ID(), oLine.getM_Product_ID(),
-						oLine.getM_AttributeSetInstance_ID(), MovementQty, trxName);
-				if (M_Locator_Origin_ID == 0) { // Get default Location
-					MWarehouse wh = MWarehouse.get(order.getCtx(),
-							transfer.getM_Warehouse_ID());
+				int M_Locator_Origin_ID = MStorage.getM_Locator_ID(transfer.getM_Warehouse_ID(), oLine.getM_Product_ID(), oLine.getM_AttributeSetInstance_ID(), MovementQty, trxName);
+				// Get default Location
+				if (M_Locator_Origin_ID == 0) {
+					MWarehouse wh = MWarehouse.get(order.getCtx(), transfer.getM_Warehouse_ID());
 					M_Locator_Origin_ID = wh.getDefaultLocator().getM_Locator_ID();
 				}
-	
 				// Location Destination
-				MWarehouse wh = MWarehouse.get(order.getCtx(),
-						transfer.getM_WarehouseTo_ID());
-				int M_Locator_Destination_ID = wh.getDefaultLocator()
-						.getM_Locator_ID();
-	
-				tLine.setOrderLine(oLine, M_Locator_Origin_ID,
-						M_Locator_Destination_ID, MovementQty);
+				MWarehouse wh = MWarehouse.get(order.getCtx(), transfer.getM_WarehouseTo_ID());
+				int M_Locator_Destination_ID = wh.getDefaultLocator().getM_Locator_ID();
+
+				tLine.setOrderLine(oLine, M_Locator_Origin_ID, M_Locator_Destination_ID, MovementQty);
 				tLine.setQty(MovementQty);
-	
-				if (!tLine.save(trxName))
-					throw new Exception("Error creando linea de transferencia: "
-							+ CLogger.retrieveErrorAsString());
+
+				if (!tLine.save(trxName)) {
+					throw new Exception("Error creando linea de transferencia: " + CLogger.retrieveErrorAsString());
+				}
 			}
 		}
 
 	}
 
 	/**
-	 * Constructor de la clase ...
-	 * 
-	 * 
+	 * Constructor de la clase
 	 * @param order
-	 * @param C_DocTypeShipment_ID
-	 * @param movementDate
 	 */
-
 	public MTransfer(MOrder order) {
 		this(order.getCtx(), 0, order.get_TrxName());
-	} // MTransfer
-	
-	@Override 
-	public void setProcessed( boolean processed ) {
-        super.setProcessed( processed );
+	}
 
-        if( getID() == 0 ) {
-            return;
-        }
+	@Override
+	public void setProcessed(boolean processed) {
+		super.setProcessed(processed);
 
-        String set = "SET Processed='" + ( processed
-                                           ?"Y"
-                                           :"N" ) + "' WHERE M_Transfer_ID=" + getID();
-        DB.executeUpdate( "UPDATE M_TransferLine " + set,get_TrxName());
-    }    // setProcessed
+		if (getID() == 0) {
+			return;
+		}
+
+		String set = "SET Processed = '" + (processed ? "Y" : "N") + "' WHERE M_Transfer_ID = " + getID();
+		DB.executeUpdate("UPDATE M_TransferLine " + set, get_TrxName());
+	}
+
 }
