@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_BankAccount
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-05-23 10:58:56.788 */
+ *  @version  - 2016-09-28 13:29:49.085 */
 public class X_C_BankAccount extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -18,13 +18,12 @@ super (ctx, C_BankAccount_ID, trxName);
 {
 setAccountNo (null);
 setBankAccountType (null);	// C
-setC_BankAccount_ID (0);
 setC_Bank_ID (0);
-setCC (null);
+setC_BankAccount_ID (0);
 setC_Currency_ID (0);
+setCC (null);
 setCreditLimit (Env.ZERO);
 setCurrentBalance (Env.ZERO);
-setDC (null);
 setDescription (null);
 setIsChequesEnCartera (false);
 setIsDefault (false);
@@ -133,6 +132,20 @@ public String getBBAN()
 {
 return (String)get_Value("BBAN");
 }
+/** Set Bank.
+Bank */
+public void setC_Bank_ID (int C_Bank_ID)
+{
+set_ValueNoCheck ("C_Bank_ID", new Integer(C_Bank_ID));
+}
+/** Get Bank.
+Bank */
+public int getC_Bank_ID() 
+{
+Integer ii = (Integer)get_Value("C_Bank_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
 /** Set Bank Account.
 Account at the Bank */
 public void setC_BankAccount_ID (int C_BankAccount_ID)
@@ -161,17 +174,17 @@ Integer ii = (Integer)get_Value("C_BankAccount_Location_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
-/** Set Bank.
-Bank */
-public void setC_Bank_ID (int C_Bank_ID)
+/** Set Currency.
+The Currency for this record */
+public void setC_Currency_ID (int C_Currency_ID)
 {
-set_ValueNoCheck ("C_Bank_ID", new Integer(C_Bank_ID));
+set_Value ("C_Currency_ID", new Integer(C_Currency_ID));
 }
-/** Get Bank.
-Bank */
-public int getC_Bank_ID() 
+/** Get Currency.
+The Currency for this record */
+public int getC_Currency_ID() 
 {
-Integer ii = (Integer)get_Value("C_Bank_ID");
+Integer ii = (Integer)get_Value("C_Currency_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
@@ -192,20 +205,6 @@ CC */
 public String getCC() 
 {
 return (String)get_Value("CC");
-}
-/** Set Currency.
-The Currency for this record */
-public void setC_Currency_ID (int C_Currency_ID)
-{
-set_Value ("C_Currency_ID", new Integer(C_Currency_ID));
-}
-/** Get Currency.
-The Currency for this record */
-public int getC_Currency_ID() 
-{
-Integer ii = (Integer)get_Value("C_Currency_ID");
-if (ii == null) return 0;
-return ii.intValue();
 }
 /** Set Credit limit.
 Amount of Credit allowed */
@@ -241,8 +240,7 @@ return bd;
 DC */
 public void setDC (String DC)
 {
-if (DC == null) throw new IllegalArgumentException ("DC is mandatory");
-if (DC.length() > 2)
+if (DC != null && DC.length() > 2)
 {
 log.warning("Length > 2 - truncated");
 DC = DC.substring(0,2);
@@ -276,6 +274,22 @@ return (String)get_Value("Description");
 public KeyNamePair getKeyNamePair() 
 {
 return new KeyNamePair(getID(), getDescription());
+}
+/** Set ElectronicPaymentsAccount */
+public void setElectronicPaymentsAccount (boolean ElectronicPaymentsAccount)
+{
+set_Value ("ElectronicPaymentsAccount", new Boolean(ElectronicPaymentsAccount));
+}
+/** Get ElectronicPaymentsAccount */
+public boolean isElectronicPaymentsAccount() 
+{
+Object oo = get_Value("ElectronicPaymentsAccount");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
 }
 /** Set IBAN.
 International Bank Account Number */

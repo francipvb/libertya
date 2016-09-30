@@ -184,7 +184,7 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 		return DocAction.STATUS_Completed;
 	}
 	
-	protected List<MPaymentBatchPODetail> getBatchDetails() {
+	public List<MPaymentBatchPODetail> getBatchDetails() {
 		List<MPaymentBatchPODetail> batchDetails = new ArrayList<MPaymentBatchPODetail>();
 		//Construyo la query
 		String sql = "SELECT * " + 
