@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_BankList
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-09-28 11:13:13.402 */
+ *  @version  - 2016-10-18 15:03:48.721 */
 public class X_C_BankList extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -54,22 +54,6 @@ public String toString()
 {
 StringBuffer sb = new StringBuffer ("X_C_BankList[").append(getID()).append("]");
 return sb.toString();
-}
-/** Set Allocation.
-Payment allocation */
-public void setC_AllocationHdr_ID (int C_AllocationHdr_ID)
-{
-if (C_AllocationHdr_ID <= 0) set_Value ("C_AllocationHdr_ID", null);
- else 
-set_Value ("C_AllocationHdr_ID", new Integer(C_AllocationHdr_ID));
-}
-/** Get Allocation.
-Payment allocation */
-public int getC_AllocationHdr_ID() 
-{
-Integer ii = (Integer)get_Value("C_AllocationHdr_ID");
-if (ii == null) return 0;
-return ii.intValue();
 }
 /** Set Bank Account.
 Account at the Bank */

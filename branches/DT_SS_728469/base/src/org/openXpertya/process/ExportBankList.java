@@ -42,45 +42,46 @@ public abstract class ExportBankList extends ExportProcess {
 	private String opPrefix = "";
 	/** Prefijo del tipo de documento */
 	private String opSuffix = "";
-	
+
 	public ExportBankList(Properties ctx, MBankList bankList, String trxName) {
 		localCtx = ctx;
 		localTrxName = trxName;
 		setBankList(bankList);
 		setExportFormat(getBankListExportFormat());
 		setDocType(new MDocType(ctx, getBankList().getC_DocType_ID(), trxName));
-		setBankListConfig((X_C_BankList_Config) PO.findFirst(ctx, X_C_BankList_Config.Table_Name,
-				"ad_client_id = ? and isactive = 'Y' and c_doctype_id = ?",
-				new Object[] { Env.getAD_Client_ID(ctx), bankList.getC_DocType_ID() }, null, trxName));
+		Object[] params = new Object[] { Env.getAD_Client_ID(ctx), bankList.getC_DocType_ID() };
+		String whereClause = "ad_client_id = ? AND isactive = 'Y' AND c_doctype_id = ?";
+		String tableName = X_C_BankList_Config.Table_Name;
+		setBankListConfig((X_C_BankList_Config) PO.findFirst(ctx, tableName, whereClause, params, null, trxName));
 		MDocType opDocType = MDocType.getDocType(getCtx(), MDocType.DOCTYPE_Orden_De_Pago, get_TrxName());
 		// Obtener prefijo y sufijo de la secuencia de la OP
 		String opPrefix = MSequence.getPrefix(opDocType.getDocNoSequence_ID(), get_TrxName());
-		opPrefix = opPrefix == null?"":opPrefix;
+		opPrefix = opPrefix == null ? "" : opPrefix;
 		String opSuffix = MSequence.getSuffix(opDocType.getDocNoSequence_ID(), get_TrxName());
-		opSuffix = opSuffix == null?"":opSuffix;
+		opSuffix = opSuffix == null ? "" : opSuffix;
 		setOpPrefix(opPrefix);
 		setOpSuffix(opSuffix);
 	}
 
 	protected abstract String getBankListExportFormatValue();
-	
+
 	protected abstract String getFileHeader();
-	
+
 	protected abstract String getFileFooter();
-	
-	protected MExpFormat getBankListExportFormat(){
-		return (MExpFormat) MExpFormat.findFirst(getCtx(), MExpFormat.Table_Name,
-				"value = '" + getBankListExportFormatValue() + "'", null, null, get_TrxName());
+
+	protected MExpFormat getBankListExportFormat() {
+		String whereClause = "value = '" + getBankListExportFormatValue() + "'";
+		return (MExpFormat) MExpFormat.findFirst(getCtx(), MExpFormat.Table_Name, whereClause, null, null, get_TrxName());
 	}
-	
+
 	protected List<Object> getWhereClauseParams() {
 		List<Object> params = new ArrayList<Object>();
 		params.add(getBankList().getID());
 		return params;
 	}
-	
+
 	@Override
-	protected void fillDocument() throws Exception{
+	protected void fillDocument() throws Exception {
 		// Exportar la cabecera del archivo
 		write(getFileHeader());
 		// Separador de líneas
@@ -90,11 +91,11 @@ public abstract class ExportBankList extends ExportProcess {
 		// Exportar líneas totalizadoras
 		write(getFileFooter());
 	}
-	
+
 	public String export() throws Exception {
 		return super.doIt();
 	}
-	
+
 	@Override
 	public Properties getCtx() {
 		if (localCtx != null) {
