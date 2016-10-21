@@ -25,6 +25,7 @@ import org.openXpertya.model.X_AD_ImpFormat_Row;
  * @author Equipo de Desarrollo de openXpertya
  */
 public class MImpFormatRow extends X_AD_ImpFormat_Row {
+	private static final long serialVersionUID = 1L;
 
 	/**
 	 * Constructor de la clase ...
@@ -72,18 +73,10 @@ public class MImpFormatRow extends X_AD_ImpFormat_Row {
 		setAD_ImpFormat_ID(parent.getAD_ImpFormat_ID());
 	} // MImpFormatRow
 
-	@Override
-	protected boolean beforeSave(boolean newRecord) {
-		if (isskip_value()) {
-			setAD_Column_ID(0);
-		}
-		return super.beforeSave(newRecord);
-	}
-
 } // MImpFormatRow
 
-/* @(#)MImpFormatRow.java 02.07.07
- * 
+/*
+ * @(#)MImpFormatRow.java 02.07.07
  * Fin del fichero MImpFormatRow.java
- * 
- * Versión 2.2 */
+ * Versión 2.2
+ */

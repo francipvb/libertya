@@ -3,27 +3,17 @@ package org.openXpertya.model;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.util.Properties;
-
-import org.openXpertya.util.Env;
 import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por AD_ImpFormat
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-09-14 10:54:30.744 */
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
+ *  @version  - 2016-10-12 10:07:45.553 */
 public class X_AD_ImpFormat extends org.openXpertya.model.PO
 {
+private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_AD_ImpFormat (Properties ctx, int AD_ImpFormat_ID, String trxName)
 {
 super (ctx, AD_ImpFormat_ID, trxName);
-/** if (AD_ImpFormat_ID == 0)
-{
-setAD_ImpFormat_ID (0);
-setAD_Table_ID (0);
-setFormatType (null);
-setName (null);
-setProcessing (false);
-}
- */
 }
 /** Load Constructor */
 public X_AD_ImpFormat (Properties ctx, ResultSet rs, String trxName)
@@ -91,18 +81,20 @@ Integer ii = (Integer)get_Value("AD_ImpFormat_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
-public static final int AD_IMPFORMAT_PARENT_ID_AD_Reference_ID = MReference.getReferenceID("AD_ImpFormat (All)");
-/** Set AD_Impformat_Parent_ID */
-public void setAD_Impformat_Parent_ID (int AD_Impformat_Parent_ID)
+public static final int AD_PROCESS_ID_AD_Reference_ID = MReference.getReferenceID("Ad_Process");
+/** Set Process.
+Process or Report */
+public void setAD_Process_ID (int AD_Process_ID)
 {
-if (AD_Impformat_Parent_ID <= 0) set_Value ("AD_Impformat_Parent_ID", null);
+if (AD_Process_ID <= 0) set_Value ("AD_Process_ID", null);
  else 
-set_Value ("AD_Impformat_Parent_ID", new Integer(AD_Impformat_Parent_ID));
+set_Value ("AD_Process_ID", new Integer(AD_Process_ID));
 }
-/** Get AD_Impformat_Parent_ID */
-public int getAD_Impformat_Parent_ID() 
+/** Get Process.
+Process or Report */
+public int getAD_Process_ID() 
 {
-Integer ii = (Integer)get_Value("AD_Impformat_Parent_ID");
+Integer ii = (Integer)get_Value("AD_Process_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
@@ -218,21 +210,5 @@ if (oo != null)
  return "Y".equals(oo);
 }
 return false;
-}
-/** Set Sequence.
-Method of ordering records;
- lowest number comes first */
-public void setSeqNo (BigDecimal SeqNo)
-{
-set_Value ("SeqNo", SeqNo);
-}
-/** Get Sequence.
-Method of ordering records;
- lowest number comes first */
-public BigDecimal getSeqNo() 
-{
-BigDecimal bd = (BigDecimal)get_Value("SeqNo");
-if (bd == null) return Env.ZERO;
-return bd;
 }
 }

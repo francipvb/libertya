@@ -29,7 +29,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.logging.Level;
 
 import javax.swing.BorderFactory;
@@ -49,8 +48,13 @@ import org.openXpertya.apps.ConfirmPanel;
 import org.openXpertya.apps.SwingWorker;
 import org.openXpertya.impexp.ImpFormat;
 import org.openXpertya.impexp.ImpFormatRow;
-import org.openXpertya.impexp.MImpFormat;
+import org.openXpertya.model.MPInstance;
+import org.openXpertya.model.MProcess;
 import org.openXpertya.model.MRole;
+import org.openXpertya.process.ProcessInfo;
+import org.openXpertya.process.ProcessInfoParameter;
+import org.openXpertya.process.ProcessInfoUtil;
+import org.openXpertya.util.ASyncProcess;
 import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
@@ -62,7 +66,7 @@ import org.openXpertya.util.Trx;
  * @version 2.2, 12.10.07
  * @author Equipo de Desarrollo de openXpertya
  */
-public class VFileImport extends CPanel implements FormPanel, ActionListener {
+public class VFileImport extends CPanel implements FormPanel, ActionListener, ASyncProcess {
 	private static final long serialVersionUID = 1L;
 
 	/**
@@ -87,103 +91,81 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 	} // init
 
 	/** Descripción de Campos */
-
 	private int m_WindowNo = 0;
 
 	/** Descripción de Campos */
-
 	private FormFrame m_frame;
 
 	/** Descripción de Campos */
-
 	private ArrayList<String> m_data = new ArrayList<String>();
 
 	/** Descripción de Campos */
-
 	private ImpFormat m_format;
 
 	/** Descripción de Campos */
-
 	private JLabel[] m_labels;
 
 	/** Descripción de Campos */
-
 	private JTextField[] m_fields;
 
 	/** Descripción de Campos */
-
 	private int m_record = -1;
 
-	/** Descripción de Campos */
+	/** Archivo cargado. */
+	private File m_file;
 
+	/** Descripción de Campos */
 	private static CLogger log = CLogger.getCLogger(VFileImport.class);
 
 	/** No format indicator */
-
 	private static final String s_none = "----";
 
 	/** Descripción de Campos */
-
 	private CPanel northPanel = new CPanel();
 
 	/** Descripción de Campos */
-
 	private JButton bFile = new JButton();
 
 	/** Descripción de Campos */
-
 	private JComboBox pickFormat = new JComboBox();
 
 	/** Descripción de Campos */
-
 	private CPanel centerPanel = new CPanel();
 
 	/** Descripción de Campos */
-
 	private BorderLayout centerLayout = new BorderLayout();
 
 	/** Descripción de Campos */
-
 	private JScrollPane rawDataPane = new JScrollPane();
 
 	/** Descripción de Campos */
-
 	private JTextArea rawData = new JTextArea();
 
 	/** Descripción de Campos */
-
 	private JScrollPane previewPane = new JScrollPane();
 
 	/** Descripción de Campos */
-
 	private CPanel previewPanel = new CPanel();
 
 	/** Descripción de Campos */
-
 	private ConfirmPanel confirmPanel = new ConfirmPanel(true);
 
 	/** Descripción de Campos */
-
 	private JLabel info = new JLabel();
 
 	/** Descripción de Campos */
-
 	private JLabel labelFormat = new JLabel();
 
 	/** Descripción de Campos */
-
 	private GridBagLayout previewLayout = new GridBagLayout();
 
 	/** Descripción de Campos */
-
 	private JButton bNext = new JButton();
 
 	/** Descripción de Campos */
-
 	private JButton bPrevious = new JButton();
 
 	/** Descripción de Campos */
-
 	private JLabel record = new JLabel();
 
 	/**
@@ -246,6 +228,7 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 	/**
 	 * Descripción de Método
 	 */
+	@Override
 	public void dispose() {
 		if (m_frame != null) {
 			m_frame.dispose();
@@ -263,7 +246,7 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 
 		pickFormat.addItem(s_none);
 
-		String sql = MRole.getDefault().addAccessSQL("SELECT Name FROM AD_ImpFormat", "AD_ImpFormat", MRole.SQL_FULLYQUALIFIED, MRole.SQL_RO) + " AND AD_ImpFormat_Parent_ID IS NULL AND isActive = 'Y' ";
+		String sql = MRole.getDefault().addAccessSQL("SELECT Name FROM AD_ImpFormat", "AD_ImpFormat", MRole.SQL_FULLYQUALIFIED, MRole.SQL_RO) + " AND isActive = 'Y' ORDER BY Name ASC";
 
 		try {
 			PreparedStatement pstmt = DB.prepareStatement(sql);
@@ -281,9 +264,6 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 
 		pickFormat.setSelectedIndex(0);
 		pickFormat.addActionListener(this);
-
-		//
-
 		confirmPanel.getOKButton().setEnabled(false);
 	} // dynInit
 
@@ -291,6 +271,7 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 	 * Descripción de Método
 	 * @param e
 	 */
+	@Override
 	public void actionPerformed(ActionEvent e) {
 		if (e.getSource() == bFile) {
 			cmd_loadFile();
@@ -312,6 +293,7 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 			//
 
 			SwingWorker worker = new SwingWorker() {
+				@Override
 				public Object construct() {
 					cmd_process();
 
@@ -325,8 +307,15 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 			dispose();
 		}
 
-		if ((m_data != null) && (m_data.size() > 0 // file loaded
-		) && (m_format != null) && (m_format.getRowCount() > 0)) { // format loaded
+		boolean hasProcess = m_format != null && m_format.getM_AD_Process_ID() > 0;
+		boolean hasFormatRows = m_format != null && m_format.getRowCount() > 0;
+
+		// Archivo correcto: No nulo y con al menos una linea.
+		boolean fileLoaded = m_data != null && m_data.size() > 0;
+		// Formato correcto: Formato con campos definidos, o formato con proceso asociado.
+		boolean validFormat = hasFormatRows || hasProcess;
+
+		if (fileLoaded && validFormat) {
 			confirmPanel.getOKButton().setEnabled(true);
 		} else {
 			confirmPanel.getOKButton().setEnabled(false);
@@ -340,8 +329,6 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 		String directory = org.openXpertya.OpenXpertya.getOXPHome() + File.separator + "data" + File.separator + "import";
 
 		log.config(directory);
-
-		//
 
 		JFileChooser chooser = new JFileChooser(directory);
 
@@ -365,7 +352,8 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 
 			// see NaturalAccountMap
 
-			BufferedReader in = new BufferedReader(new FileReader(chooser.getSelectedFile()), 10240);
+			m_file = chooser.getSelectedFile();
+			BufferedReader in = new BufferedReader(new FileReader(m_file), 10240);
 
 			// not safe see p108 Network pgm
 
@@ -396,7 +384,7 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 		int length = 0;
 
 		if (m_data.size() > 0) {
-			length = m_data.get(index).length();
+			length = m_data.get(index).toString().length();
 		}
 
 		info.setText(Msg.getMsg(Env.getCtx(), "Records") + "=" + m_data.size() + ", " + Msg.getMsg(Env.getCtx(), "Length") + "=" + length + "   ");
@@ -412,8 +400,6 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 		// clear panel
 
 		previewPanel.removeAll();
-
-		//
 
 		String formatName = pickFormat.getSelectedItem().toString();
 
@@ -431,18 +417,7 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 
 		// pointers
 
-		fieldsFromFormat(m_format);
-
-		m_record = -1;
-		record.setText("----");
-		previewPanel.invalidate();
-		previewPanel.repaint();
-	} // cmd_format
-
-	private void fieldsFromFormat(ImpFormat m_format) {
 		int size = m_format.getRowCount();
-
-		// TODO mejorar para formatos con hijos.
 
 		m_labels = new JLabel[size];
 		m_fields = new JTextField[size];
@@ -464,12 +439,12 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 			m_fields[i] = new JTextField(length);
 			previewPanel.add(m_fields[i], new GridBagConstraints(i, 1, 1, 1, 0.0, 0.0, GridBagConstraints.CENTER, GridBagConstraints.NONE, new Insets(2, 2, 2, 2), 0, 0));
 		}
-		MImpFormat mImpFormat = new MImpFormat(Env.getCtx(), m_format.getAD_ImpFormat_ID(), Trx.createTrxName("fileImportLoadFormat"));
-		List<MImpFormat> chidFormats = mImpFormat.getChilds();
-		for (MImpFormat f : chidFormats) {
-			fieldsFromFormat(ImpFormat.load(f.getName()));
-		}
-	}
+
+		m_record = -1;
+		record.setText("----");
+		previewPanel.invalidate();
+		previewPanel.repaint();
+	} // cmd_format
 
 	/**
 	 * Descripción de Método
@@ -499,7 +474,7 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 		// Line Info
 
 		// no label, trace, no ignore
-		String[] lInfo = m_format.parseLine(m_data.get(m_record), false, true, false);
+		String[] lInfo = m_format.parseLine(m_data.get(m_record).toString(), false, true, false);
 		int size = m_format.getRowCount();
 
 		if (lInfo.length != size) {
@@ -520,26 +495,79 @@ public class VFileImport extends CPanel implements FormPanel, ActionListener {
 
 		if (m_format == null) {
 			ADialog.error(m_WindowNo, this, "FileImportNoFormat");
-
 			return;
 		}
 
-		// For all rows - update/insert DB table
+		int processID = m_format.getM_AD_Process_ID();
 
-		int row = 0;
-		int imported = 0;
+		// Si hay un proceso definido para el formato, ejecuta dicho proceso.
+		// Caso contrario, continúa con el procedimiento normal, linea por linea.
+		if (processID > 0) {
 
-		for (row = 0; row < m_data.size(); row++) {
-			if (m_format.updateDB(Env.getCtx(), m_data.get(row))) {
-				imported++;
+			String m_trx = Trx.createTrxName("fileImportRunProcess");
+
+			Trx.getTrx(m_trx).start();
+
+			MPInstance instance = new MPInstance(Env.getCtx(), processID, 0, null);
+			if (!instance.save()) {
+				return;
 			}
+
+			ProcessInfo pi = new ProcessInfo("FileImport", processID);
+			pi.setAD_PInstance_ID(instance.getAD_PInstance_ID());
+
+			// Le paso al proceso, el archivo como parámetro.
+			ProcessInfoParameter aParam = new ProcessInfoParameter("File", m_file, null, null, null);
+			pi.setParameter(ProcessInfoUtil.addToArray(pi.getParameter(), aParam));
+
+			MProcess process = new MProcess(Env.getCtx(), processID, m_trx);
+			MProcess.execute(Env.getCtx(), process, pi, m_trx);
+
+			Trx.getTrx(m_trx).commit();
+			Trx.getTrx(m_trx).close();
+
+			ADialog.info(m_WindowNo, this, pi.getSummary());
+		} else {
+			// For all rows - update/insert DB table
+
+			int row = 0;
+			int imported = 0;
+
+			for (row = 0; row < m_data.size(); row++) {
+				if (m_format.updateDB(Env.getCtx(), m_data.get(row).toString())) {
+					imported++;
+				}
+			}
+
+			ADialog.info(m_WindowNo, this, "FileImportR/I", row + " / " + imported + "#");
 		}
+		dispose();
+	} // cmd_process
+
+	@Override
+	public void lockUI(ProcessInfo pi) {
+		this.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+		this.setEnabled(false);
+	}
+
+	@Override
+	public void unlockUI(ProcessInfo pi) {
+		this.setEnabled(true);
+		this.setCursor(Cursor.getDefaultCursor());
 
 		//
 
-		ADialog.info(m_WindowNo, this, "FileImportR/I", row + " / " + imported + "#");
 		dispose();
-	} // cmd_process
+	}
+
+	@Override
+	public boolean isUILocked() {
+		return this.isEnabled();
+	}
+
+	@Override
+	public void executeASync(ProcessInfo pi) {
+	}
 
 } // FileImport
 

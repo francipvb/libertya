@@ -17,7 +17,6 @@ package org.openXpertya.impexp;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
 
@@ -30,6 +29,7 @@ import org.openXpertya.util.DB;
  * @author Equipo de Desarrollo de openXpertya
  */
 public class MImpFormat extends X_AD_ImpFormat {
+	private static final long serialVersionUID = 1L;
 
 	/**
 	 * Constructor de la clase.
@@ -57,7 +57,7 @@ public class MImpFormat extends X_AD_ImpFormat {
 
 		StringBuffer sql = new StringBuffer();
 		sql.append("SELECT * FROM AD_ImpFormat_Row ");
-		sql.append("WHERE AD_ImpFormat_ID=? ");
+		sql.append("WHERE AD_ImpFormat_ID = ? ");
 		sql.append("ORDER BY SeqNo");
 
 		PreparedStatement pstmt = null;
@@ -96,64 +96,10 @@ public class MImpFormat extends X_AD_ImpFormat {
 		return retValue;
 	} // getRows
 
-	/** @return El formato padre. */
-	public MImpFormat getParent() {
-		return new MImpFormat(getCtx(), getAD_Impformat_Parent_ID(), get_TrxName());
-	}
-
-	/** @return Todas las cabeceras de formato que tengan a este como hijo. */
-	public List<MImpFormat> getChilds() {
-		List<MImpFormat> list = new ArrayList<MImpFormat>();
-
-		StringBuffer sql = new StringBuffer();
-		sql.append("SELECT * FROM AD_ImpFormat ");
-		sql.append("WHERE ad_impformat_parent_id = ? ");
-		sql.append("ORDER BY SeqNo");
-
-		PreparedStatement pstmt = null;
-
-		try {
-			pstmt = DB.prepareStatement(sql.toString());
-			pstmt.setInt(1, getAD_ImpFormat_ID());
-
-			ResultSet rs = pstmt.executeQuery();
-
-			while (rs.next()) {
-				list.add(new MImpFormat(getCtx(), rs, get_TrxName()));
-			}
-
-			rs.close();
-			pstmt.close();
-			pstmt = null;
-		} catch (Exception e) {
-			log.log(Level.SEVERE, "getChilds", e);
-		}
-		try {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-			pstmt = null;
-		} catch (Exception e) {
-			pstmt = null;
-		}
-		return list;
-	}
-
-	@Override
-	protected boolean beforeSave(boolean newRecord) {
-		if (getAD_Impformat_Parent_ID() > 0) {
-			if (getAD_Table_ID() != getParent().getAD_Table_ID()) {
-				log.saveError("", "La tabla del formato padre y del actual deben coincidir");
-				return false;
-			}
-		}
-		return super.beforeSave(newRecord);
-	}
-
 } // MImpFormat
 
-/* @(#)MImpFormat.java 02.07.07
- * 
+/*
+ * @(#)MImpFormat.java 02.07.07
  * Fin del fichero MImpFormat.java
- * 
- * Versión 2.2 */
+ * Versión 2.2
+ */

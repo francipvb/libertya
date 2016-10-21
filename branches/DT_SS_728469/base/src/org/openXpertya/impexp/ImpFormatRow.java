@@ -22,16 +22,15 @@ import java.text.SimpleDateFormat;
 import java.util.logging.Level;
 
 import org.openXpertya.model.Callout;
-import org.openXpertya.util.CLogger;
-import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.Env;
+import org.openXpertya.util.CLogger;
 
 /**
  * Descripción de Clase
  * @version 2.2, 12.10.07
  * @author Equipo de Desarrollo de openXpertya
  */
-
 public final class ImpFormatRow {
 
 	/**
@@ -67,72 +66,54 @@ public final class ImpFormatRow {
 	} // ImpFormatRow
 
 	/** Descripción de Campos */
-
 	private int m_seqNo;
 
 	/** Descripción de Campos */
-
 	private String m_columnName;
 
 	/** Descripción de Campos */
-
 	private int m_startNo = 0;
 
 	/** Descripción de Campos */
-
 	private int m_endNo = 0;
 
 	/** Descripción de Campos */
-
 	private String m_dataType;
 
 	/** Descripción de Campos */
-
 	private String m_dataFormat = "";
 
 	/** Descripción de Campos */
-
 	private String m_decimalPoint = ".";
 
 	/** Descripción de Campos */
-
 	private boolean m_divideBy100 = false;
 
 	/** Descripción de Campos */
-
 	private String m_constantValue = "";
 
 	/** Descripción de Campos */
-
 	private boolean m_constantIsString = true;
 
 	/** Descripción de Campos */
-
 	private Callout m_callout = null;
 
 	/** Descripción de Campos */
-
 	private String m_method = null;
 
 	/** Descripción de Campos */
-
 	private SimpleDateFormat m_dformat = null;
 
 	/** Descripción de Campos */
-
 	private int m_maxLength = 0;
 
 	/** Descripción de Campos */
-
-	private Integer m_ImpFormat_Row_ID;
-	
 	private CLogger log = CLogger.getCLogger(getClass());
 
 	/**
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public int getSeqNo() {
 		return m_seqNo;
 	} // getSeqNo
@@ -141,7 +122,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @param newSeqNo
 	 */
-
 	public void setSeqNo(int newSeqNo) {
 		m_seqNo = newSeqNo;
 	} // setSeqNo
@@ -150,7 +130,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @param newStartNo
 	 */
-
 	public void setStartNo(int newStartNo) {
 		m_startNo = newStartNo;
 	} // setStartNo
@@ -159,7 +138,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public int getStartNo() {
 		return m_startNo;
 	} // getStartNo
@@ -168,7 +146,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @param newEndNo
 	 */
-
 	public void setEndNo(int newEndNo) {
 		m_endNo = newEndNo;
 	} // setEndNo
@@ -177,7 +154,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public int getEndNo() {
 		return m_endNo;
 	} // getEndNo
@@ -190,7 +166,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @param columnName
 	 */
-
 	public void setColumnName(String columnName) {
 		if ((columnName == null) || (columnName.length() == 0)) {
 			throw new IllegalArgumentException("ColumnName must be at least 1 char");
@@ -203,7 +178,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public String getColumnName() {
 		return m_columnName;
 	} // getColumnName
@@ -212,7 +186,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @param dataType
 	 */
-
 	public void setDataType(String dataType) {
 		if (dataType.equals(DATATYPE_String) || dataType.equals(DATATYPE_Date) || dataType.equals(DATATYPE_Number) || dataType.equals(DATATYPE_Constant)) {
 			m_dataType = dataType;
@@ -222,26 +195,21 @@ public final class ImpFormatRow {
 	} // setDataType
 
 	/** Descripción de Campos */
-
 	public static final String DATATYPE_String = "S";
 
 	/** Descripción de Campos */
-
 	public static final String DATATYPE_Date = "D";
 
 	/** Descripción de Campos */
-
 	public static final String DATATYPE_Number = "N";
 
 	/** Descripción de Campos */
-
 	public static final String DATATYPE_Constant = "C";
 
 	/**
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public String getDataType() {
 		return m_dataType;
 	} // getDataType
@@ -250,7 +218,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public boolean isString() {
 		if (m_dataType.equals(DATATYPE_Constant)) {
 			return m_constantIsString;
@@ -263,7 +230,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public boolean isNumber() {
 		return m_dataType.equals(DATATYPE_Number);
 	}
@@ -272,7 +238,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public boolean isDate() {
 		return m_dataType.equals(DATATYPE_Date);
 	}
@@ -281,7 +246,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public boolean isConstant() {
 		return m_dataType.equals(DATATYPE_Constant);
 	}
@@ -294,10 +258,7 @@ public final class ImpFormatRow {
 	 * @param constantValue
 	 * @param callout
 	 */
-
-	public void setFormatInfo(String dataFormat, String decimalPoint, boolean divideBy100, String constantValue, String callout, Integer rowId) {
-		m_ImpFormat_Row_ID = rowId;
-		
+	public void setFormatInfo(String dataFormat, String decimalPoint, boolean divideBy100, String constantValue, String callout) {
 		if (dataFormat == null) {
 			m_dataFormat = "";
 		} else {
@@ -363,7 +324,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public String getDataFormat() {
 		return m_dataFormat;
 	}
@@ -372,7 +332,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public String getDecimalPoint() {
 		return m_decimalPoint;
 	}
@@ -381,7 +340,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public boolean isDivideBy100() {
 		return m_divideBy100;
 	}
@@ -390,7 +348,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @return
 	 */
-
 	public String getConstantValue() {
 		return m_constantValue;
 	}
@@ -399,7 +356,6 @@ public final class ImpFormatRow {
 	 * Descripción de Método
 	 * @param maxLength
 	 */
-
 	public void setMaxLength(int maxLength) {
 		m_maxLength = maxLength;
 	} // setMaxLength
@@ -409,7 +365,6 @@ public final class ImpFormatRow {
 	 * @param info
 	 * @return
 	 */
-
 	public String parse(String info) {
 		if ((info == null) || (info.length() == 0)) {
 			return "";
@@ -454,16 +409,11 @@ public final class ImpFormatRow {
 		return retValue.trim();
 	} // parse
 
-	public Integer getM_ImpFormat_Row_ID() {
-		return m_ImpFormat_Row_ID;
-	}
-
 	/**
 	 * Descripción de Método
 	 * @param info
 	 * @return
 	 */
-
 	private String parseDate(String info) {
 		if (m_dformat == null) {
 			try {
@@ -503,7 +453,6 @@ public final class ImpFormatRow {
 	 * @param info
 	 * @return
 	 */
-
 	private String parseString(String info) {
 		String retValue = info;
 
@@ -537,7 +486,6 @@ public final class ImpFormatRow {
 	 * @param info
 	 * @return
 	 */
-
 	private String parseNumber(String info) {
 		boolean hasPoint = info.indexOf(".") != -1;
 		boolean hasComma = info.indexOf(",") != -1;
@@ -590,8 +538,8 @@ public final class ImpFormatRow {
 
 } // ImpFormatFow
 
-/* @(#)ImpFormatRow.java 02.07.07
- * 
+/*
+ * @(#)ImpFormatRow.java 02.07.07
  * Fin del fichero ImpFormatRow.java
- * 
- * Versión 2.2 */
+ * Versión 2.2
+ */

@@ -17,11 +17,7 @@ package org.openXpertya.impexp;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
 
@@ -35,6 +31,7 @@ import org.openXpertya.util.Env;
  * @version 2.2, 12.10.07
  * @author Equipo de Desarrollo de openXpertya
  */
+
 public final class ImpFormat {
 
 	/**
@@ -51,60 +48,50 @@ public final class ImpFormat {
 	} // ImpFormat
 
 	/** Descripción de Campos */
-
 	private static CLogger log = CLogger.getCLogger(ImpFormat.class);
 
+	/** ID de Formato de importación. */
+	private int AD_ImpFormat_ID;
+	
 	/** Descripción de Campos */
-
 	private String m_name;
 
+	/** ID de Proceso custom. */
+	private int m_AD_Process_ID;
+	
 	/** Descripción de Campos */
-
 	private String m_formatType;
 
 	/** Descripción de Campos */
-
 	private int m_AD_Table_ID;
 
 	/** Descripción de Campos */
-
 	private String m_tableName;
 
 	/** Descripción de Campos */
-
 	private String m_tablePK;
 
 	/** Descripción de Campos */
-
 	private String m_tableUnique1;
 
 	/** Descripción de Campos */
-
 	private String m_tableUnique2;
 
 	/** Descripción de Campos */
-
 	private String m_tableUniqueParent;
 
 	/** Descripción de Campos */
-
 	private String m_tableUniqueChild;
 
 	private String uniqueChildParentOperator;
 
 	/** Descripción de Campos */
-
 	private String m_BPartner;
 
 	/** Descripción de Campos */
-
 	private ArrayList<ImpFormatRow> m_rows = new ArrayList<ImpFormatRow>();
 
 	private char m_flexDelimiter = ',';
-
-	private List<ImpFormatRow> rowIdentifiers;
-
-	private static int AD_ImpFormat_ID;
 
 	/**
 	 * Descripción de Método
@@ -135,10 +122,20 @@ public final class ImpFormat {
 		m_tableName = null;
 		m_tablePK = null;
 
-		String sql = "SELECT t.TableName,c.ColumnName " + "FROM AD_Table t INNER JOIN AD_Column c ON (t.AD_Table_ID=c.AD_Table_ID AND c.IsKey='Y') " + "WHERE t.AD_Table_ID=?";
+		StringBuffer sql = new StringBuffer();
+
+		sql.append("SELECT ");
+		sql.append("	t.TableName, ");
+		sql.append("	c.ColumnName ");
+		sql.append("FROM ");
+		sql.append("	AD_Table t ");
+		sql.append("	INNER JOIN AD_Column c ");
+		sql.append("		ON (t.AD_Table_ID = c.AD_Table_ID AND c.IsKey = 'Y') ");
+		sql.append("WHERE ");
+		sql.append("	t.AD_Table_ID = ? ");
 
 		try {
-			PreparedStatement pstmt = DB.prepareStatement(sql);
+			PreparedStatement pstmt = DB.prepareStatement(sql.toString());
 
 			pstmt.setInt(1, AD_Table_ID);
 
@@ -201,6 +198,7 @@ public final class ImpFormat {
 	 * Descripción de Método
 	 * @return
 	 */
+
 	public int getAD_Table_ID() {
 		return m_AD_Table_ID;
 	} // getAD_Table_ID
@@ -221,11 +219,12 @@ public final class ImpFormat {
 	 * Descripción de Método
 	 * @param newFormatType
 	 */
+
 	public void setFormatType(String newFormatType) {
 		if (newFormatType.equals(FORMATTYPE_FIXED) || newFormatType.equals(FORMATTYPE_COMMA) || newFormatType.equals(FORMATTYPE_TAB) || newFormatType.equals(FORMATTYPE_XML)) {
 			m_formatType = newFormatType;
 		} else {
-			throw new IllegalArgumentException("FormatType must be " + FORMATTYPE_FIXED + "/" + FORMATTYPE_COMMA + "/" + FORMATTYPE_TAB + "/" + FORMATTYPE_XML);
+			throw new IllegalArgumentException("FormatType must be F/C/T/X");
 		}
 	} // setFormatType
 
@@ -233,6 +232,7 @@ public final class ImpFormat {
 	 * Descripción de Método
 	 * @return
 	 */
+
 	public String getFormatType() {
 		return m_formatType;
 	} // getFormatType
@@ -241,6 +241,7 @@ public final class ImpFormat {
 	 * Descripción de Método
 	 * @param newBPartner
 	 */
+
 	public void setBPartner(String newBPartner) {
 		m_BPartner = newBPartner;
 	} // setBPartner
@@ -249,6 +250,7 @@ public final class ImpFormat {
 	 * Descripción de Método
 	 * @return
 	 */
+
 	public String getBPartner() {
 		return m_BPartner;
 	} // getVPartner
@@ -257,6 +259,7 @@ public final class ImpFormat {
 	 * Descripción de Método
 	 * @param row
 	 */
+
 	public void addRow(ImpFormatRow row) {
 		m_rows.add(row);
 	} // addRow
@@ -266,11 +269,11 @@ public final class ImpFormat {
 	 * @param index
 	 * @return
 	 */
+
 	public ImpFormatRow getRow(int index) {
 		if ((index >= 0) && (index < m_rows.size())) {
 			return (ImpFormatRow) m_rows.get(index);
 		}
-
 		return null;
 	} // getRow
 
@@ -278,39 +281,22 @@ public final class ImpFormat {
 	 * Descripción de Método
 	 * @return
 	 */
+
 	public int getRowCount() {
 		return m_rows.size();
 	} // getRowCount
-
-	public void addRowIdentifier(ImpFormatRow row) {
-		if (rowIdentifiers == null) {
-			rowIdentifiers = new ArrayList<ImpFormatRow>();
-		}
-		rowIdentifiers.add(row);
-	}
-
-	public ImpFormatRow getRowIdentifier(int index) {
-		if ((index >= 0) && (index < rowIdentifiers.size())) {
-			return rowIdentifiers.get(index);
-		}
-		return null;
-	}
-
-	public int getRowIdentifierCount() {
-		return rowIdentifiers != null ? rowIdentifiers.size() : 0;
-	}
 
 	/**
 	 * Descripción de Método
 	 * @param name
 	 * @return
 	 */
+
 	public static ImpFormat load(String name) {
 		log.config(name);
 
 		ImpFormat retValue = null;
 		String sql = "SELECT * FROM AD_ImpFormat WHERE Name=?";
-		setAD_ImpFormat_ID(0);
 
 		try {
 			PreparedStatement pstmt = DB.prepareStatement(sql);
@@ -321,7 +307,8 @@ public final class ImpFormat {
 
 			if (rs.next()) {
 				retValue = new ImpFormat(name, rs.getInt("AD_Table_ID"), rs.getString("FormatType"), rs.getString("Delimiter"));
-				setAD_ImpFormat_ID(rs.getInt("AD_ImpFormat_ID"));
+				retValue.setM_AD_Process_ID(rs.getInt("AD_Process_ID"));
+				retValue.setAD_ImpFormat_ID(rs.getInt("AD_ImpFormat_ID"));
 			}
 
 			rs.close();
@@ -337,19 +324,12 @@ public final class ImpFormat {
 		return retValue;
 	} // getFormat
 
-	public int getAD_ImpFormat_ID() {
-		return AD_ImpFormat_ID;
-	}
-
-	private static void setAD_ImpFormat_ID(int impFormatID) {
-		AD_ImpFormat_ID = impFormatID;
-	}
-
 	/**
 	 * Descripción de Método
 	 * @param format
 	 * @param ID
 	 */
+
 	private static void loadRows(ImpFormat format) {
 		StringBuffer sql = new StringBuffer();
 
@@ -364,36 +344,29 @@ public final class ImpFormat {
 		sql.append("	f.DecimalPoint, ");
 		sql.append("	f.DivideBy100, ");
 		sql.append("	f.ConstantValue, ");
-		sql.append("	f.Callout, ");
-		sql.append("	f.skip_value, ");
-		sql.append("	f.key, ");
-		sql.append("	f.AD_ImpFormat_Row_ID ");
+		sql.append("	f.Callout ");
 		sql.append("FROM ");
 		sql.append("	AD_ImpFormat_Row f, ");
 		sql.append("	AD_Column c ");
 		sql.append("WHERE ");
 		sql.append("	AD_ImpFormat_ID = ? ");
-		sql.append("	AND (f.skip_value = 'N' OR f.key = 'Y') ");
 		sql.append("	AND f.AD_Column_ID = c.AD_Column_ID ");
 		sql.append("ORDER BY ");
 		sql.append("	SeqNo");
 
 		try {
 			PreparedStatement pstmt = DB.prepareStatement(sql.toString());
-			pstmt.setInt(1, AD_ImpFormat_ID);
+
+			pstmt.setInt(1, format.getAD_ImpFormat_ID());
 
 			ResultSet rs = pstmt.executeQuery();
 
 			while (rs.next()) {
 				ImpFormatRow row = new ImpFormatRow(rs.getInt(1), rs.getString(2), rs.getInt(3), rs.getInt(4), rs.getString(5), rs.getInt(6));
-				row.setFormatInfo(rs.getString(7), rs.getString(8), rs.getString(9).equals("Y"), rs.getString(10), rs.getString(11), rs.getInt(14));
 
-				if (rs.getString(12).equals("N")) { // Si no está marcado para omitir
-					format.addRow(row);
-				}
-				if (rs.getString(13).equals("Y")) { // Si está marcado como identificador
-					format.addRowIdentifier(row);
-				}
+				row.setFormatInfo(rs.getString(7), rs.getString(8), rs.getString(9).equals("Y"), rs.getString(10), rs.getString(11));
+
+				format.addRow(row);
 			}
 
 			rs.close();
@@ -403,48 +376,6 @@ public final class ImpFormat {
 		}
 	} // loadLines
 
-	private Integer containsFormatIdentifier(String line) {
-		for (int i = 0; i < getRowIdentifierCount(); i++) {
-			ImpFormatRow row = getRowIdentifier(i);
-			try {
-				String identifier = line.substring(row.getStartNo(), row.getEndNo());
-				if (identifier == null || identifier.trim().isEmpty()) {
-					return null; // Identificador no puede ser una cadena vacía.
-				}
-				if (row.getDataType().equalsIgnoreCase(ImpFormatRow.DATATYPE_Date)) {
-					DateFormat formatter;
-					if (row.getDataFormat() != null && !row.getDataFormat().trim().isEmpty()) {
-						formatter = new SimpleDateFormat(row.getDataFormat());
-					} else {
-						formatter = new SimpleDateFormat();
-					}
-					formatter.parse(identifier);
-					return row.getM_ImpFormat_Row_ID(); // Parseado correctamente. El identificador de fecha es válido.
-				}
-				if (row.getDataType().equalsIgnoreCase(ImpFormatRow.DATATYPE_Number)) {
-					Double.parseDouble(identifier);
-					return row.getM_ImpFormat_Row_ID(); // Parseado correctamente. El identificador numérico es válido.
-				}
-				if (row.getDataType().equalsIgnoreCase(ImpFormatRow.DATATYPE_String)) {
-					return row.getM_ImpFormat_Row_ID(); // El identificador es válido.
-				}
-				if (row.getDataType().equalsIgnoreCase(ImpFormatRow.DATATYPE_Constant)) {
-					if (identifier.equalsIgnoreCase(row.getConstantValue())) {
-						return row.getM_ImpFormat_Row_ID(); // El identificador constante es válido.
-					}
-				}
-			} catch(IndexOutOfBoundsException e) {
-				return null; // La linea no respeta el tamaño establecido por el formato.
-			} catch (ParseException e) {
-				return null; // No se pudo parsear a fecha, formato inválido
-			} catch(NumberFormatException e) {
-				return null; // No se pudo parsear a número, formato inválido.
-			}
-		}
-		// Si no hay identificadores definidos, se devuelve true para conservar el funcionamiento standard.
-		return -1;
-	}
-
 	/**
 	 * Descripción de Método
 	 * @param line
@@ -453,16 +384,11 @@ public final class ImpFormat {
 	 * @param ignoreEmpty
 	 * @return
 	 */
+
 	public String[] parseLine(String line, boolean withLabel, boolean trace, boolean ignoreEmpty) {
 		if (trace) {
 			log.config("" + line);
 		}
-
-		Integer identifierId = containsFormatIdentifier(line);
-
-		// TODO si es null, identificador inválido.
-		// Si es -1, continuar normalmente.
-		// Sino, el num q trae es el id del campo correspondiente al validador.
 
 		ArrayList<String> list = new ArrayList<String>();
 
@@ -581,7 +507,6 @@ public final class ImpFormat {
 
 			if (line.charAt(pos) == delimiter) {
 				pos++;
-
 				continue;
 			}
 
@@ -603,7 +528,6 @@ public final class ImpFormat {
 
 					else if (line.charAt(pos) == QUOTE) {
 						pos++;
-
 						break;
 					}
 
@@ -666,8 +590,17 @@ public final class ImpFormat {
 		int UpdatedBy = Env.getAD_User_ID(ctx);
 
 		// Check if the record is already there ------------------------------
-		StringBuffer sql = new StringBuffer("SELECT COUNT(*), MAX(").append(m_tablePK).append(") FROM ").append(m_tableName).append(" WHERE AD_Client_ID=").append(AD_Client_ID).append(" AND (");
-		//
+		StringBuffer sql = new StringBuffer();
+
+		sql.append("SELECT ");
+		sql.append("	COUNT(*), ");
+		sql.append(" 	MAX(" + m_tablePK + ") ");
+		sql.append("FROM ");
+		sql.append("	" + m_tableName + " ");
+		sql.append("WHERE ");
+		sql.append(" 	AD_Client_ID=" + AD_Client_ID + " ");
+		sql.append("	AND (");
+
 		String where1 = null;
 		String where2 = null;
 		String whereParentChild = null;
@@ -759,6 +692,7 @@ public final class ImpFormat {
 	 * @param line
 	 * @return
 	 */
+
 	public boolean updateDB(Properties ctx, String line) {
 		if ((line == null) || (line.trim().length() == 0)) {
 			log.finest("No Line");
@@ -904,7 +838,6 @@ public final class ImpFormat {
 			log.log(Level.SEVERE, m_tablePK + "=" + ID + " - rows updated=" + no);
 			return false;
 		}
-
 		return true;
 	} // updateDB
 
@@ -917,10 +850,26 @@ public final class ImpFormat {
 		return m_flexDelimiter;
 	}
 
+	public int getM_AD_Process_ID() {
+		return m_AD_Process_ID;
+	}
+
+	public void setM_AD_Process_ID(int m_AD_Process_ID) {
+		this.m_AD_Process_ID = m_AD_Process_ID;
+	}
+
+	public int getAD_ImpFormat_ID() {
+		return AD_ImpFormat_ID;
+	}
+
+	public void setAD_ImpFormat_ID(int aD_ImpFormat_ID) {
+		AD_ImpFormat_ID = aD_ImpFormat_ID;
+	}
+
 } // ImpFormat
 
-/* @(#)ImpFormat.java 02.07.07
- *
+/*
+ * @(#)ImpFormat.java 02.07.07
  * Fin del fichero ImpFormat.java
- *
- * Versión 2.2 */
+ * Versión 2.2
+ */
