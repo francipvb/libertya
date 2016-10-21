@@ -13,7 +13,6 @@ import org.openXpertya.model.MSequence;
 import org.openXpertya.model.X_C_AllocationHdr;
 import org.openXpertya.model.X_C_AllocationLine;
 import org.openXpertya.model.X_C_BankAccount;
-import org.openXpertya.model.X_C_BankList;
 import org.openXpertya.model.X_C_BankListLine;
 import org.openXpertya.model.X_C_Payment;
 import org.openXpertya.util.CLogger;
@@ -112,7 +111,7 @@ public class GenerateBankList extends AbstractSvrProcess {
 					throw new Exception(CLogger.retrieveErrorAsString());
 				}
 				checkCount++;
-				line.add(new BigDecimal(10));
+				line = line.add(new BigDecimal(10));
 			}
 			// Actualizar la OP en la lista del banco y los nros de secuencia
 			bankList.setDailySeqNo(new BigDecimal(MBankList.getSeqNo(getCtx(), bankList.getC_DocType_ID(), bankList.getDateTrx(), get_TrxName()) + 1));
