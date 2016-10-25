@@ -1,13 +1,13 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por AD_ImpFormat_Row
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-09-14 10:54:30.777 */
+ *  @version  - 2016-10-20 17:02:08.197 */
 public class X_AD_ImpFormat_Row extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -16,15 +16,14 @@ public X_AD_ImpFormat_Row (Properties ctx, int AD_ImpFormat_Row_ID, String trxNa
 super (ctx, AD_ImpFormat_Row_ID, trxName);
 /** if (AD_ImpFormat_Row_ID == 0)
 {
+setAD_Column_ID (0);
 setAD_ImpFormat_ID (0);
 setAD_ImpFormat_Row_ID (0);
 setDataType (null);
 setDecimalPoint (null);	// .
 setDivideBy100 (false);
-setkey (false);
 setName (null);
 setSeqNo (0);	// @SQL=SELECT NVL(MAX(SeqNo),0)+10 AS DefaultValue FROM AD_ImpFormat_Row WHERE AD_ImpFormat_ID=@AD_ImpFormat_ID@
-setskip_value (false);
 }
  */
 }
@@ -57,8 +56,6 @@ return sb.toString();
 Column in the table */
 public void setAD_Column_ID (int AD_Column_ID)
 {
-if (AD_Column_ID <= 0) set_Value ("AD_Column_ID", null);
- else 
 set_Value ("AD_Column_ID", new Integer(AD_Column_ID));
 }
 /** Get Column.
@@ -186,9 +183,9 @@ public static final String DATATYPE_Constant = "C";
 Type of data */
 public void setDataType (String DataType)
 {
-if (DataType == null) throw new IllegalArgumentException ("DataType is mandatory");
 if (DataType.equals("S") || DataType.equals("N") || DataType.equals("D") || DataType.equals("C"));
  else throw new IllegalArgumentException ("DataType Invalid value - Reference = DATATYPE_AD_Reference_ID - S - N - D - C");
+if (DataType == null) throw new IllegalArgumentException ("DataType is mandatory");
 if (DataType.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -250,22 +247,6 @@ Integer ii = (Integer)get_Value("EndNo");
 if (ii == null) return 0;
 return ii.intValue();
 }
-/** Set key */
-public void setkey (boolean key)
-{
-set_Value ("key", new Boolean(key));
-}
-/** Get key */
-public boolean iskey() 
-{
-Object oo = get_Value("key");
-if (oo != null) 
-{
- if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
- return "Y".equals(oo);
-}
-return false;
-}
 /** Set Name.
 Alphanumeric identifier of the entity */
 public void setName (String Name)
@@ -320,22 +301,6 @@ public int getSeqNo()
 Integer ii = (Integer)get_Value("SeqNo");
 if (ii == null) return 0;
 return ii.intValue();
-}
-/** Set Skip value */
-public void setskip_value (boolean skip_value)
-{
-set_Value ("skip_value", new Boolean(skip_value));
-}
-/** Get Skip value */
-public boolean isskip_value() 
-{
-Object oo = get_Value("skip_value");
-if (oo != null) 
-{
- if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
- return "Y".equals(oo);
-}
-return false;
 }
 /** Set Start No.
 Starting number/position */
