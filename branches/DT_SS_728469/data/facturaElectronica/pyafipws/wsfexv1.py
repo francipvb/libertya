@@ -25,6 +25,7 @@ import datetime
 import decimal
 import os
 import sys
+import codecs
 from utils import inicializar_y_capturar_excepciones, BaseWS, get_install_dir
 
 HOMO = True
@@ -631,7 +632,7 @@ if __name__ == "__main__":
 			raise RuntimeError(wsfexv1.Excepcion)
 			
 		try:
-			entrada = open("entrada.txt")
+			entrada = codecs.open("entrada.txt", "r", "utf8")
 		except:
 			try:
 				open("error.txt","w").write("Error abriendo entrada.txt")
