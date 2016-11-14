@@ -91,7 +91,7 @@ public class PercepcionCABA extends PercepcionStandard {
 
 	private BigDecimal getPerception(String padronType) {
 		if (padronType == null) {
-			super.getPercepcionPercToApply();
+			return super.getPercepcionPercToApply();
 		}
 		String taxID = getPercepcionData().getBpartner().getTaxID();
 		return MBPartnerPadronBsAs.getBPartnerPerc("percepcion", taxID, Env.getDate(), padronType, null);
