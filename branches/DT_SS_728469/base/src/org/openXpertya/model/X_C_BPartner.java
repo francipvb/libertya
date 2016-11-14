@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_BPartner
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-01-09 19:48:20.36 */
+ *  @version  - 2016-11-14 15:01:33.54 */
 public class X_C_BPartner extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -21,9 +21,9 @@ setAllowPartialPayment (false);
 setAutomaticCreditNotes (false);
 setC_BPartner_ID (0);
 setC_BP_Group_ID (0);
+setC_Categoria_Iva_ID (0);
 setCreditMinimumAmt (Env.ZERO);
 setDiscountContext (null);	// B
-setDUNS (null);
 setIsConvenioMultilateral (false);
 setIsCustomer (false);
 setIsEmployee (false);
@@ -197,6 +197,28 @@ if (oo != null)
 }
 return false;
 }
+public static final int BATCH_PAYMENT_RULE_AD_Reference_ID = MReference.getReferenceID("Batch Payment Rules");
+/** Check = C */
+public static final String BATCH_PAYMENT_RULE_Check = "C";
+/** Electronic Check = E */
+public static final String BATCH_PAYMENT_RULE_ElectronicCheck = "E";
+/** Set Batch Payment Rule */
+public void setBatch_Payment_Rule (String Batch_Payment_Rule)
+{
+if (Batch_Payment_Rule == null || Batch_Payment_Rule.equals("C") || Batch_Payment_Rule.equals("E"));
+ else throw new IllegalArgumentException ("Batch_Payment_Rule Invalid value - Reference = BATCH_PAYMENT_RULE_AD_Reference_ID - C - E");
+if (Batch_Payment_Rule != null && Batch_Payment_Rule.length() > 1)
+{
+log.warning("Length > 1 - truncated");
+Batch_Payment_Rule = Batch_Payment_Rule.substring(0,1);
+}
+set_Value ("Batch_Payment_Rule", Batch_Payment_Rule);
+}
+/** Get Batch Payment Rule */
+public String getBatch_Payment_Rule() 
+{
+return (String)get_Value("Batch_Payment_Rule");
+}
 public static final int BPARTNER_PARENT_ID_AD_Reference_ID = MReference.getReferenceID("C_BPartner (No Summary)");
 /** Set Partner Parent.
 Business Partner Parent */
@@ -211,6 +233,38 @@ Business Partner Parent */
 public int getBPartner_Parent_ID() 
 {
 Integer ii = (Integer)get_Value("BPartner_Parent_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
+/** Set BuiltCabaJurisdiction */
+public void setBuiltCabaJurisdiction (boolean BuiltCabaJurisdiction)
+{
+set_Value ("BuiltCabaJurisdiction", new Boolean(BuiltCabaJurisdiction));
+}
+/** Get BuiltCabaJurisdiction */
+public boolean isBuiltCabaJurisdiction() 
+{
+Object oo = get_Value("BuiltCabaJurisdiction");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
+/** Set Bank Account.
+Account at the Bank */
+public void setC_BankAccount_ID (int C_BankAccount_ID)
+{
+if (C_BankAccount_ID <= 0) set_Value ("C_BankAccount_ID", null);
+ else 
+set_Value ("C_BankAccount_ID", new Integer(C_BankAccount_ID));
+}
+/** Get Bank Account.
+Account at the Bank */
+public int getC_BankAccount_ID() 
+{
+Integer ii = (Integer)get_Value("C_BankAccount_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
@@ -245,8 +299,6 @@ return ii.intValue();
 /** Set Categoría de IVA */
 public void setC_Categoria_Iva_ID (int C_Categoria_Iva_ID)
 {
-if (C_Categoria_Iva_ID <= 0) set_Value ("C_Categoria_Iva_ID", null);
- else 
 set_Value ("C_Categoria_Iva_ID", new Integer(C_Categoria_Iva_ID));
 }
 /** Get Categoría de IVA */
@@ -352,6 +404,21 @@ Copy From Record */
 public String getCopyFrom() 
 {
 return (String)get_Value("CopyFrom");
+}
+/** Set Copy Vendor Products */
+public void setCopyVendorProducts (String CopyVendorProducts)
+{
+if (CopyVendorProducts != null && CopyVendorProducts.length() > 1)
+{
+log.warning("Length > 1 - truncated");
+CopyVendorProducts = CopyVendorProducts.substring(0,1);
+}
+set_Value ("CopyVendorProducts", CopyVendorProducts);
+}
+/** Get Copy Vendor Products */
+public String getCopyVendorProducts() 
+{
+return (String)get_Value("CopyVendorProducts");
 }
 /** Set Payment Term.
 The terms for Payment of this transaction */
@@ -565,8 +632,7 @@ return ii.intValue();
 Dun & Bradstreet Number */
 public void setDUNS (String DUNS)
 {
-if (DUNS == null) throw new IllegalArgumentException ("DUNS is mandatory");
-if (DUNS.length() > 11)
+if (DUNS != null && DUNS.length() > 11)
 {
 log.warning("Length > 11 - truncated");
 DUNS = DUNS.substring(0,11);
@@ -1103,10 +1169,6 @@ Alphanumeric identifier of the entity */
 public String getName() 
 {
 return (String)get_Value("Name");
-}
-public KeyNamePair getKeyNamePair() 
-{
-return new KeyNamePair(getID(), getName());
 }
 /** Set Name 2.
 Additional Name */
@@ -1768,57 +1830,8 @@ public String getValue()
 {
 return (String)get_Value("Value");
 }
-public static final int BATCH_PAYMENT_RULE_AD_Reference_ID = MReference.getReferenceID("Batch Payment Rules");
-/** Electronic Payment = E */
-public static final String BATCH_PAYMENT_RULE_ElectronicPayment = "E";
-/** Check = C */
-public static final String BATCH_PAYMENT_RULE_Check = "C";
-/** Set Batch Payment Rule */
-public void setBatch_Payment_Rule (String Batch_Payment_Rule)
+public KeyNamePair getKeyNamePair() 
 {
-if (Batch_Payment_Rule == null || Batch_Payment_Rule.equals("E") || Batch_Payment_Rule.equals("C"));
- else throw new IllegalArgumentException ("Batch_Payment_Rule Invalid value - Reference = BATCH_PAYMENT_RULE_AD_Reference_ID - E - C");
-if (Batch_Payment_Rule != null && Batch_Payment_Rule.length() > 1)
-{
-log.warning("Length > 1 - truncated");
-Batch_Payment_Rule = Batch_Payment_Rule.substring(0,1);
-}
-set_Value ("Batch_Payment_Rule", Batch_Payment_Rule);
-}
-/** Get Batch Payment Rule */
-public String getBatch_Payment_Rule() 
-{
-return (String)get_Value("Batch_Payment_Rule");
-}
-/** Set Bank Account.
-Account at the Bank */
-public void setC_BankAccount_ID (int C_BankAccount_ID)
-{
-if (C_BankAccount_ID <= 0) set_Value ("C_BankAccount_ID", null);
- else 
-set_Value ("C_BankAccount_ID", new Integer(C_BankAccount_ID));
-}
-/** Get Bank Account.
-Account at the Bank */
-public int getC_BankAccount_ID() 
-{
-Integer ii = (Integer)get_Value("C_BankAccount_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
-/** Set Copy Vendor Products */
-public void setCopyVendorProducts (String CopyVendorProducts)
-{
-if (CopyVendorProducts != null && CopyVendorProducts.length() > 1)
-{
-log.warning("Length > 1 - truncated");
-CopyVendorProducts = CopyVendorProducts.substring(0,1);
-}
-set_Value ("CopyVendorProducts", CopyVendorProducts);
-}
-/** Get Copy Vendor Products */
-public String getCopyVendorProducts() 
-{
-return (String)get_Value("CopyVendorProducts");
+return new KeyNamePair(getID(), getValue());
 }
 }

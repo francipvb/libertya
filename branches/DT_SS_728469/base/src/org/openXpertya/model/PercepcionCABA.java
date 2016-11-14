@@ -10,9 +10,9 @@ public class PercepcionCABA extends PercepcionStandard {
 	private BigDecimal percepcionPercToApply = null;
 	private String arcibaNormCode = null;
 
-	final String codigo_De_Norma_Regimen_General = "14";
+	final String codigo_De_Norma_Regimen_General = "29";
 	final String codigo_De_Norma_Padron_Alto_Riesgo = "16";
-	final String codigo_De_Norma_Regimen_Simplificado = "18";
+	final String codigo_De_Norma_Regimen_Simplificado = "29";
 	final String codigo_De_Norma_Estandar = "29";
 
 	public PercepcionCABA() {
@@ -58,19 +58,21 @@ public class PercepcionCABA extends PercepcionStandard {
 		int c_Region_BP_ID = location.getC_Region_ID();
 
 		if (c_Region_Tax_ID == c_Region_BP_ID) {
-			// VERIFICO PADRON DE ALTO RIESGO
+			// PADRON DE ALTO RIESGO
 			percepcionPercToApply = getPerception(MBPartnerPadronBsAs.PADRONTYPE_PadrónDeAltoRiesgoCABA);
 			if (percepcionPercToApply == null) {
-				// VERIFICO PADRON DE REGIMENES GENERALES
+				// PADRON DE REGIMENES GENERALES
 				percepcionPercToApply = getPerception(MBPartnerPadronBsAs.PADRONTYPE_PadrónDeRegímenesGenerales);
 				if (percepcionPercToApply == null) {
-					// VERIFICO PADRON DE REGIMEN SIMPLIFICADO
+					// PADRON DE REGIMEN SIMPLIFICADO
 					percepcionPercToApply = getPerception(MBPartnerPadronBsAs.PADRONTYPE_RégimenSimplificadoCABA);
 					if (percepcionPercToApply == null) {
-						// DEFAULT .
-						percepcionPercToApply = getPerception(null);
-						minimumNetAmount = super.getMinimumNetAmount();
-						arcibaNormCode = codigo_De_Norma_Estandar;
+						// DEFAULT (si es de convenio multilateral).
+						if (getPercepcionData().getBpartner().isBuiltCabaJurisdiction()) {
+							percepcionPercToApply = getPerception(null);
+							minimumNetAmount = super.getMinimumNetAmount();
+							arcibaNormCode = codigo_De_Norma_Estandar;
+						}
 					} else {
 						// PADRON DE REGIMEN SIMPLIFICADO
 						arcibaNormCode = codigo_De_Norma_Regimen_Simplificado;
