@@ -4,12 +4,11 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.util.Properties;
-
 import org.openXpertya.util.Env;
 import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por C_PaymentBatchPODetail
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-08-12 13:59:51.737 */
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
+ *  @version  - 2016-11-23 11:40:37.039 */
 public class X_C_PaymentBatchPODetail extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -21,8 +20,9 @@ super (ctx, C_PaymentBatchPODetail_ID, trxName);
 setC_BPartner_ID (0);
 setC_PaymentBatchpoDetail_ID (0);
 setC_PaymentBatchPO_ID (0);
+setPaymentDate (new Timestamp(System.currentTimeMillis()));
 }
- */
+*/
 }
 /** Load Constructor */
 public X_C_PaymentBatchPODetail (Properties ctx, ResultSet rs, String trxName)
@@ -50,15 +50,15 @@ StringBuffer sb = new StringBuffer ("X_C_PaymentBatchPODetail[").append(getID())
 return sb.toString();
 }
 public static final int BATCH_PAYMENT_RULE_AD_Reference_ID = MReference.getReferenceID("Batch Payment Rules");
-/** Electronic Payment = E */
-public static final String BATCH_PAYMENT_RULE_ElectronicPayment = "E";
 /** Check = C */
 public static final String BATCH_PAYMENT_RULE_Check = "C";
+/** Electronic Check = E */
+public static final String BATCH_PAYMENT_RULE_ElectronicCheck = "E";
 /** Set Batch Payment Rule */
 public void setBatch_Payment_Rule (String Batch_Payment_Rule)
 {
-if (Batch_Payment_Rule == null || Batch_Payment_Rule.equals("E") || Batch_Payment_Rule.equals("C"));
- else throw new IllegalArgumentException ("Batch_Payment_Rule Invalid value - Reference = BATCH_PAYMENT_RULE_AD_Reference_ID - E - C");
+if (Batch_Payment_Rule == null || Batch_Payment_Rule.equals("C") || Batch_Payment_Rule.equals("E"));
+ else throw new IllegalArgumentException ("Batch_Payment_Rule Invalid value - Reference = BATCH_PAYMENT_RULE_AD_Reference_ID - C - E");
 if (Batch_Payment_Rule != null && Batch_Payment_Rule.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -133,6 +133,10 @@ Integer ii = (Integer)get_Value("C_BPartner_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
+public KeyNamePair getKeyNamePair() 
+{
+return new KeyNamePair(getID(), String.valueOf(getC_BPartner_ID()));
+}
 /** Set C_PaymentBatchpoDetail_ID */
 public void setC_PaymentBatchpoDetail_ID (int C_PaymentBatchpoDetail_ID)
 {
@@ -192,6 +196,7 @@ return bd;
 /** Set PaymentDate */
 public void setPaymentDate (Timestamp PaymentDate)
 {
+if (PaymentDate == null) throw new IllegalArgumentException ("PaymentDate is mandatory");
 set_Value ("PaymentDate", PaymentDate);
 }
 /** Get PaymentDate */

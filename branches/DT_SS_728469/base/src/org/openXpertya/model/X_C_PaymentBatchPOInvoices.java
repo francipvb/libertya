@@ -1,13 +1,14 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.util.logging.Level;
- import java.util.*;
-import java.sql.*;
-import java.math.*;
-import org.openXpertya.util.*;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.Timestamp;
+import java.util.Properties;
+import org.openXpertya.util.Env;
+import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por C_PaymentBatchPOInvoices
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-08-22 10:22:25.856 */
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
+ *  @version  - 2016-11-23 11:40:37.057 */
 public class X_C_PaymentBatchPOInvoices extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -27,7 +28,7 @@ setInvoiceAmount (Env.ZERO);
 setOpenAmount (Env.ZERO);
 setPaymentAmount (Env.ZERO);
 }
- */
+*/
 }
 /** Load Constructor */
 public X_C_PaymentBatchPOInvoices (Properties ctx, ResultSet rs, String trxName)
@@ -82,6 +83,7 @@ Integer ii = (Integer)get_Value("C_InvoicePaySchedule_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
+public static final int C_PAYMENTBATCHPODETAIL_ID_AD_Reference_ID = MReference.getReferenceID("C_PaymentBatchPODetail");
 /** Set C_PaymentBatchpoDetail_ID */
 public void setC_PaymentBatchpoDetail_ID (int C_PaymentBatchpoDetail_ID)
 {
