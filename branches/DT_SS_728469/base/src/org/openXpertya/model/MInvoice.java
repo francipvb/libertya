@@ -4529,7 +4529,9 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 	public boolean voidIt() {
 		log.info(toString());
 
-		voidProcess = true;
+		if (MPreference.GetCustomPreferenceValueBool("SinPercepcionNCManual")) {
+			voidProcess = true;
+		}
 
 		if (DOCSTATUS_Closed.equals(getDocStatus())
 				|| DOCSTATUS_Reversed.equals(getDocStatus())

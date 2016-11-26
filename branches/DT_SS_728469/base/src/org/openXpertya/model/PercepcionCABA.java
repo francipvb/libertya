@@ -11,8 +11,8 @@ public class PercepcionCABA extends PercepcionStandard {
 	private String arcibaNormCode = null;
 
 	final String codigo_De_Norma_Regimen_General = "29";
-	final String codigo_De_Norma_Padron_Alto_Riesgo = "16";
-	final String codigo_De_Norma_Regimen_Simplificado = "29";
+	final String codigo_De_Norma_Padron_Alto_Riesgo = "14";
+	final String codigo_De_Norma_Regimen_Simplificado = "18";
 	final String codigo_De_Norma_Estandar = "29";
 
 	public PercepcionCABA() {
@@ -68,7 +68,10 @@ public class PercepcionCABA extends PercepcionStandard {
 					percepcionPercToApply = getPerception(MBPartnerPadronBsAs.PADRONTYPE_RégimenSimplificadoCABA);
 					if (percepcionPercToApply == null) {
 						// DEFAULT (si es de convenio multilateral).
-						if (getPercepcionData().getBpartner().isBuiltCabaJurisdiction()) {
+						boolean ApplyDefaultAllowed = !(
+								getPercepcionData().getBpartner().isBuiltCabaJurisdiction() && 
+								!getPercepcionData().isUseCABAJurisdiction());
+						if (ApplyDefaultAllowed) {
 							percepcionPercToApply = getPerception(null);
 							minimumNetAmount = super.getMinimumNetAmount();
 							arcibaNormCode = codigo_De_Norma_Estandar;
