@@ -1,12 +1,13 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.util.logging.Level;
- import java.util.*;
-import java.sql.*;
-import java.math.*;
-import org.openXpertya.util.*;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.Timestamp;
+import java.util.Properties;
+import org.openXpertya.util.Env;
+import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por C_Payment
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke
  *  @version  - 2016-10-20 15:19:02.375 */
 public class X_C_Payment extends org.openXpertya.model.PO
 {
@@ -14,36 +15,6 @@ public class X_C_Payment extends org.openXpertya.model.PO
 public X_C_Payment (Properties ctx, int C_Payment_ID, String trxName)
 {
 super (ctx, C_Payment_ID, trxName);
-/** if (C_Payment_ID == 0)
-{
-setC_BankAccount_ID (0);
-setC_BPartner_ID (0);
-setC_Currency_ID (0);
-setC_DocType_ID (0);
-setC_Payment_ID (0);
-setChecked (false);
-setDateAcct (new Timestamp(System.currentTimeMillis()));	// @#Date@
-setDateTrx (new Timestamp(System.currentTimeMillis()));	// @#Date@
-setDocAction (null);	// CO
-setDocStatus (null);	// DR
-setDocumentNo (null);
-setIsAllocated (false);
-setIsApproved (false);	// N
-setIsDelayedCapture (false);
-setIsOnline (false);
-setIsOverUnderPayment (false);	// N
-setIsPrepayment (false);
-setIsReceipt (null);	// N
-setIsReconciled (false);
-setIsSelfService (false);
-setIsSOTrx (false);	// @IsSOTrx@
-setPayAmt (Env.ZERO);	// 0
-setPosted (false);	// N
-setProcessed (false);
-setTenderType (null);	// K
-setTrxType (null);	// S
-}
- */
 }
 /** Load Constructor */
 public X_C_Payment (Properties ctx, ResultSet rs, String trxName)
@@ -921,9 +892,9 @@ public static final String DOCACTION_Void = "VO";
 The targeted status of the document */
 public void setDocAction (String DocAction)
 {
+if (DocAction == null) throw new IllegalArgumentException ("DocAction is mandatory");
 if (DocAction.equals("AP") || DocAction.equals("CL") || DocAction.equals("PR") || DocAction.equals("IN") || DocAction.equals("CO") || DocAction.equals("--") || DocAction.equals("RC") || DocAction.equals("RJ") || DocAction.equals("RA") || DocAction.equals("WC") || DocAction.equals("XL") || DocAction.equals("RE") || DocAction.equals("PO") || DocAction.equals("VO"));
  else throw new IllegalArgumentException ("DocAction Invalid value - Reference = DOCACTION_AD_Reference_ID - AP - CL - PR - IN - CO - -- - RC - RJ - RA - WC - XL - RE - PO - VO");
-if (DocAction == null) throw new IllegalArgumentException ("DocAction is mandatory");
 if (DocAction.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -966,9 +937,9 @@ public static final String DOCSTATUS_Reversed = "RE";
 The current status of the document */
 public void setDocStatus (String DocStatus)
 {
+if (DocStatus == null) throw new IllegalArgumentException ("DocStatus is mandatory");
 if (DocStatus.equals("VO") || DocStatus.equals("NA") || DocStatus.equals("IP") || DocStatus.equals("CO") || DocStatus.equals("AP") || DocStatus.equals("CL") || DocStatus.equals("WC") || DocStatus.equals("WP") || DocStatus.equals("??") || DocStatus.equals("DR") || DocStatus.equals("IN") || DocStatus.equals("RE"));
  else throw new IllegalArgumentException ("DocStatus Invalid value - Reference = DOCSTATUS_AD_Reference_ID - VO - NA - IP - CO - AP - CL - WC - WP - ?? - DR - IN - RE");
-if (DocStatus == null) throw new IllegalArgumentException ("DocStatus is mandatory");
 if (DocStatus.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -1133,9 +1104,9 @@ public static final String ISRECEIPT_Ingreso = "Y";
 This is a sales transaction (receipt) */
 public void setIsReceipt (String IsReceipt)
 {
+if (IsReceipt == null) throw new IllegalArgumentException ("IsReceipt is mandatory");
 if (IsReceipt.equals("N") || IsReceipt.equals("Y"));
  else throw new IllegalArgumentException ("IsReceipt Invalid value - Reference = ISRECEIPT_AD_Reference_ID - N - Y");
-if (IsReceipt == null) throw new IllegalArgumentException ("IsReceipt is mandatory");
 if (IsReceipt.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -1704,9 +1675,9 @@ public static final String TENDERTYPE_Cash = "CA";
 Method of Payment */
 public void setTenderType (String TenderType)
 {
+if (TenderType == null) throw new IllegalArgumentException ("TenderType is mandatory");
 if (TenderType.equals("K") || TenderType.equals("D") || TenderType.equals("A") || TenderType.equals("C") || TenderType.equals("CA"));
  else throw new IllegalArgumentException ("TenderType Invalid value - Reference = TENDERTYPE_AD_Reference_ID - K - D - A - C - CA");
-if (TenderType == null) throw new IllegalArgumentException ("TenderType is mandatory");
 if (TenderType.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -1737,9 +1708,9 @@ public static final String TRXTYPE_Void = "V";
 Type of credit card transaction */
 public void setTrxType (String TrxType)
 {
+if (TrxType == null) throw new IllegalArgumentException ("TrxType is mandatory");
 if (TrxType.equals("S") || TrxType.equals("D") || TrxType.equals("C") || TrxType.equals("F") || TrxType.equals("A") || TrxType.equals("V"));
  else throw new IllegalArgumentException ("TrxType Invalid value - Reference = TRXTYPE_AD_Reference_ID - S - D - C - F - A - V");
-if (TrxType == null) throw new IllegalArgumentException ("TrxType is mandatory");
 if (TrxType.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -1817,5 +1788,31 @@ public BigDecimal getWriteOffAmt()
 BigDecimal bd = (BigDecimal)get_Value("WriteOffAmt");
 if (bd == null) return Env.ZERO;
 return bd;
+}
+public static final int AUDITSTATUS_AD_Reference_ID = MReference.getReferenceID("Audit Status");
+/** Closure Pending = CP */
+public static final String AUDITSTATUS_ClosurePending = "CP";
+/** To Verify = TV */
+public static final String AUDITSTATUS_ToVerify = "TV";
+/** Paid = P */
+public static final String AUDITSTATUS_Paid = "P";
+/** Rejected = R */
+public static final String AUDITSTATUS_Rejected = "R";
+/** Set AuditStatus */
+public void setAuditStatus (String AuditStatus)
+{
+if (AuditStatus == null || AuditStatus.equals("CP") || AuditStatus.equals("TV") || AuditStatus.equals("P") || AuditStatus.equals("R"));
+ else throw new IllegalArgumentException ("AuditStatus Invalid value - Reference = AUDITSTATUS_AD_Reference_ID - CP - TV - P - R");
+if (AuditStatus != null && AuditStatus.length() > 2)
+{
+log.warning("Length > 2 - truncated");
+AuditStatus = AuditStatus.substring(0,2);
+}
+set_Value ("AuditStatus", AuditStatus);
+}
+/** Get AuditStatus */
+public String getAuditStatus() 
+{
+return (String)get_Value("AuditStatus");
 }
 }
