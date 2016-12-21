@@ -1,28 +1,21 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.util.logging.Level;
- import java.util.*;
-import java.sql.*;
-import java.math.*;
-import org.openXpertya.util.*;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.Timestamp;
+import java.util.Properties;
+import org.openXpertya.util.Env;
+import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por C_CreditCardSettlement
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-11-18 10:23:40.249 */
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
+ *  @version  - 2016-12-21 14:49:15.435 */
 public class X_C_CreditCardSettlement extends org.openXpertya.model.PO
 {
+private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_CreditCardSettlement (Properties ctx, int C_CreditCardSettlement_ID, String trxName)
 {
 super (ctx, C_CreditCardSettlement_ID, trxName);
-/** if (C_CreditCardSettlement_ID == 0)
-{
-setC_CreditCardSettlement_ID (0);
-setDocStatus (null);	// DR
-setIsReconciled (false);
-setM_EntidadFinanciera_ID (0);
-setPaymentDate (new Timestamp(System.currentTimeMillis()));
-}
- */
 }
 /** Load Constructor */
 public X_C_CreditCardSettlement (Properties ctx, ResultSet rs, String trxName)
@@ -148,12 +141,13 @@ public static final String DOCACTION_Void = "VO";
 The targeted status of the document */
 public void setDocAction (String DocAction)
 {
-if (DocAction == null || DocAction.equals("AP") || DocAction.equals("CL") || DocAction.equals("PR") || DocAction.equals("IN") || DocAction.equals("CO") || DocAction.equals("--") || DocAction.equals("RC") || DocAction.equals("RJ") || DocAction.equals("RA") || DocAction.equals("WC") || DocAction.equals("XL") || DocAction.equals("RE") || DocAction.equals("PO") || DocAction.equals("VO"));
+if (DocAction == null) throw new IllegalArgumentException ("DocAction is mandatory");
+if (DocAction.equals("AP") || DocAction.equals("CL") || DocAction.equals("PR") || DocAction.equals("IN") || DocAction.equals("CO") || DocAction.equals("--") || DocAction.equals("RC") || DocAction.equals("RJ") || DocAction.equals("RA") || DocAction.equals("WC") || DocAction.equals("XL") || DocAction.equals("RE") || DocAction.equals("PO") || DocAction.equals("VO"));
  else throw new IllegalArgumentException ("DocAction Invalid value - Reference = DOCACTION_AD_Reference_ID - AP - CL - PR - IN - CO - -- - RC - RJ - RA - WC - XL - RE - PO - VO");
-if (DocAction != null && DocAction.length() > 1)
+if (DocAction.length() > 2)
 {
-log.warning("Length > 1 - truncated");
-DocAction = DocAction.substring(0,1);
+log.warning("Length > 2 - truncated");
+DocAction = DocAction.substring(0,2);
 }
 set_Value ("DocAction", DocAction);
 }
@@ -192,9 +186,9 @@ public static final String DOCSTATUS_Reversed = "RE";
 The current status of the document */
 public void setDocStatus (String DocStatus)
 {
+if (DocStatus == null) throw new IllegalArgumentException ("DocStatus is mandatory");
 if (DocStatus.equals("VO") || DocStatus.equals("NA") || DocStatus.equals("IP") || DocStatus.equals("CO") || DocStatus.equals("AP") || DocStatus.equals("CL") || DocStatus.equals("WC") || DocStatus.equals("WP") || DocStatus.equals("??") || DocStatus.equals("DR") || DocStatus.equals("IN") || DocStatus.equals("RE"));
  else throw new IllegalArgumentException ("DocStatus Invalid value - Reference = DOCSTATUS_AD_Reference_ID - VO - NA - IP - CO - AP - CL - WC - WP - ?? - DR - IN - RE");
-if (DocStatus == null) throw new IllegalArgumentException ("DocStatus is mandatory");
 if (DocStatus.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -219,6 +213,24 @@ public BigDecimal getExpenses()
 BigDecimal bd = (BigDecimal)get_Value("Expenses");
 if (bd == null) return Env.ZERO;
 return bd;
+}
+/** Set Approved.
+Indicates if this document requires approval */
+public void setIsApproved (boolean IsApproved)
+{
+set_Value ("IsApproved", new Boolean(IsApproved));
+}
+/** Get Approved.
+Indicates if this document requires approval */
+public boolean isApproved() 
+{
+Object oo = get_Value("IsApproved");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
 }
 /** Set Reconciled.
 Payment is reconciled with bank statement */
@@ -323,6 +335,40 @@ Posting status */
 public boolean isPosted() 
 {
 Object oo = get_Value("Posted");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
+/** Set Processed.
+The document has been processed */
+public void setProcessed (boolean Processed)
+{
+set_Value ("Processed", new Boolean(Processed));
+}
+/** Get Processed.
+The document has been processed */
+public boolean isProcessed() 
+{
+Object oo = get_Value("Processed");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
+/** Set Process Now */
+public void setProcessing (boolean Processing)
+{
+set_Value ("Processing", new Boolean(Processing));
+}
+/** Get Process Now */
+public boolean isProcessing() 
+{
+Object oo = get_Value("Processing");
 if (oo != null) 
 {
  if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
