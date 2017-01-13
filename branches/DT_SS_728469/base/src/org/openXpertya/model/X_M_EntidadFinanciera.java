@@ -1,31 +1,20 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.util.logging.Level;
- import java.util.*;
-import java.sql.*;
-import java.math.*;
-import org.openXpertya.util.*;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.util.Properties;
+import org.openXpertya.util.Env;
+import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por M_EntidadFinanciera
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2014-08-18 23:30:03.83 */
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
+ *  @version  - 2017-01-11 17:12:38.995 */
 public class X_M_EntidadFinanciera extends org.openXpertya.model.PO
 {
+private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_M_EntidadFinanciera (Properties ctx, int M_EntidadFinanciera_ID, String trxName)
 {
 super (ctx, M_EntidadFinanciera_ID, trxName);
-/** if (M_EntidadFinanciera_ID == 0)
-{
-setC_BankAccount_ID (0);
-setC_BPartner_ID (0);
-setCreditCardCashRetirementLimit (Env.ZERO);
-setCreditCardType (null);
-setIsAllowCreditCardCashRetirement (false);
-setM_EntidadFinanciera_ID (0);
-setName (null);
-setValue (null);
-}
- */
 }
 /** Load Constructor */
 public X_M_EntidadFinanciera (Properties ctx, ResultSet rs, String trxName)
@@ -161,9 +150,9 @@ public static final String CREDITCARDTYPE_Discover = "N";
 Credit Card (Visa, MC, AmEx) */
 public void setCreditCardType (String CreditCardType)
 {
+if (CreditCardType == null) throw new IllegalArgumentException ("CreditCardType is mandatory");
 if (CreditCardType.equals("D") || CreditCardType.equals("C") || CreditCardType.equals("P") || CreditCardType.equals("M") || CreditCardType.equals("V") || CreditCardType.equals("A") || CreditCardType.equals("N"));
  else throw new IllegalArgumentException ("CreditCardType Invalid value - Reference = CREDITCARDTYPE_AD_Reference_ID - D - C - P - M - V - A - N");
-if (CreditCardType == null) throw new IllegalArgumentException ("CreditCardType is mandatory");
 if (CreditCardType.length() > 20)
 {
 log.warning("Length > 20 - truncated");
@@ -176,6 +165,21 @@ Credit Card (Visa, MC, AmEx) */
 public String getCreditCardType() 
 {
 return (String)get_Value("CreditCardType");
+}
+/** Set Establishment Number */
+public void setEstablishmentNumber (String EstablishmentNumber)
+{
+if (EstablishmentNumber != null && EstablishmentNumber.length() > 45)
+{
+log.warning("Length > 45 - truncated");
+EstablishmentNumber = EstablishmentNumber.substring(0,45);
+}
+set_Value ("EstablishmentNumber", EstablishmentNumber);
+}
+/** Get Establishment Number */
+public String getEstablishmentNumber() 
+{
+return (String)get_Value("EstablishmentNumber");
 }
 /** Set Allow Credit Card Cash Retirement */
 public void setIsAllowCreditCardCashRetirement (boolean IsAllowCreditCardCashRetirement)
