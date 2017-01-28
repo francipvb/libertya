@@ -171,7 +171,7 @@ public class LaunchInvoice extends SvrProcess {
 		}
 		
 		// Descuentos aplicados totales
-		jasperwrapper.addParameter("NROCOMPROBANTE", invoice.getNumeroDeDocumento());
+		jasperwrapper.addParameter("NROCOMPROBANTE", invoice.getNumeroDeDocumento().replace("<", "").replace(">", ""));
 		jasperwrapper.addParameter("TIPOCOMPROBANTE", JasperReportsUtil
 			.getDocTypeName(getCtx(), invoice.getC_DocTypeTarget_ID(),
 					"FACTURA", get_TrxName()));
@@ -411,6 +411,8 @@ public class LaunchInvoice extends SvrProcess {
 					"CLIENT_CATEGORIA_IVA",
 					JasperReportsUtil.getCategoriaIVAName(getCtx(),
 							client.getCategoriaIva(invoice.getAD_Org_ID()), get_TrxName()));
+		
+		jasperwrapper.addParameter("INGBRUTO_CLIENT", clientInfo.getIIBB());
 		
 		/* Codigo original
 		jasperwrapper.addParameter("CLIENT_CUIT",clientInfo.getCUIT());

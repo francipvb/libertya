@@ -1084,6 +1084,17 @@ public class PluginXMLUpdater {
 			if (componentVersion <= 0)
 				throw new Exception("Version de componente incorrecta: " + componentVersion);
 
+			// Si estoy eliminando, registrar dicha actividad en el changelog
+			if (MChangeLog.OPERATIONTYPE_Deletion.equals(changeGroup.getOperation())) {
+				// Instanciar y persistir en el changelog
+				MChangeLog aChangeLog = null;
+				/* DisplayType: usamos siempre String dado que asi esta en el XML. El AD_Column es uno dummy dado que no se requiere en eliminaciones */
+				aChangeLog = new MChangeLog(Env.getCtx(), 0, m_trxName, 666, M_Table.getID(changeGroup.getTableName(), m_trxName), DB.getSQLValue(null, "SELECT min(ad_column_id) FROM AD_Column"), recordID, Env.getAD_Client_ID(Env.getCtx()), Env.getAD_Org_ID(Env.getCtx()), null, null, changeGroup.getUid(), componentVersion, changeGroup.getOperation(), DisplayType.String, changelogGroupID);
+				if (!aChangeLog.insertDirect())
+					throw new Exception(" Error al guardar el changelog: UID:" + changeGroup.getTableName() + " - OP:" + changeGroup.getOperation());
+				return;
+			}
+			
 			// Si estoy insertando, utilizar el nextValue correspondiente a la tabla, en caso contrario usar el UID
 			if (MChangeLog.OPERATIONTYPE_Insertion.equals(changeGroup.getOperation()))
 				recordID = keyColumnValue;
@@ -1107,7 +1118,7 @@ public class PluginXMLUpdater {
 					{
 						String refKeyColumnName = getKeyColumnName(column.getRefTable());
 						int refRecordID = getReferenceRecordID(refKeyColumnName, column);
-						newValue = (refRecordID == -1 ? "null" : Integer.toString(refRecordID));
+						newValue = (refRecordID == -1 ? MChangeLog.NULL : Integer.toString(refRecordID));
 					}
 				}
 				// Instanciar y persistir en el changelog

@@ -23,44 +23,35 @@ import org.openXpertya.util.DB;
 import org.openXpertya.util.Msg;
 
 public class GeneratePaymentProposalProcess extends SvrProcess {
-	private int AD_Org_ID = 0;
-	private Timestamp dueDate = null;
-	private String batchPaymentRule = null;
-
-	private MPaymentBatchPO paymentBatch = null;
-
-	/**
-	 * Utilizado para calcular los milisegundos a añadir, si la
-	 * regla de fecha de pago del lote es PAYMENTDATERULE_LastDueDate
-	 */
-	private long paymentBatchDays = 0;
+	
+	Timestamp dueDate = null;
+	String batchPaymentRule = null;
+	
+	MPaymentBatchPO paymentBatch = null;
 
 	@Override
 	protected void prepare() {
-		ProcessInfoParameter[] para = getParameter();
-		for (int i = 0; i < para.length; i++) {
-			log.fine("prepare - " + para[i]);
+		ProcessInfoParameter[] para = getParameter();	
+		for( int i = 0;i < para.length;i++ ) {
+			log.fine( "prepare - " + para[ i ] );
 
-			String name = para[i].getParameterName();
+			String name = para[ i ].getParameterName();
 
-			if (para[i].getParameter() == null) {
+			if( para[ i ].getParameter() == null ) {
 				;
-			} else if (name.equalsIgnoreCase("AD_Org_ID")) {
-				AD_Org_ID = para[i].getParameterAsInt();
-			} else if (name.equalsIgnoreCase("dueDate")) {
-				dueDate = (Timestamp) para[i].getParameter();
-			} else if (name.equalsIgnoreCase("batchPaymentRule")) {
-				batchPaymentRule = (String) para[i].getParameter();
-			} else {
-				log.log(Level.SEVERE, "prepare - Unknown Parameter: " + name);
-			}
+			} else if( name.equalsIgnoreCase( "dueDate" )) {
+				dueDate = (Timestamp)para[i].getParameter();
+            } else if( name.equalsIgnoreCase( "batchPaymentRule" )) {
+            	batchPaymentRule = (String)para[ i ].getParameter();            	
+            } else {
+                log.log( Level.SEVERE,"prepare - Unknown Parameter: " + name );
+            }
 		}
-		// Lote de pagos
+		
+		//Lote de pagos
 		paymentBatch = new MPaymentBatchPO(getCtx(), getRecord_ID(), get_TrxName());
-		// 86400000 = 24 * 60 * 60 * 1000 = Milisegundos en un dia.
-		paymentBatchDays = new Timestamp(paymentBatch.getAddDays() * 86400000).getTime();
 	}
-
+	
 	private void validateParameters() throws Exception {
 		if (dueDate == null) {
             log.log( Level.SEVERE,"Se produjo un error al obtener los Parámetros del reporte." );
@@ -92,57 +83,41 @@ public class GeneratePaymentProposalProcess extends SvrProcess {
 	}
 
 	/**
-	 * @return Retorna todas los C_InvoicePaySchedule según parámetros para
-	 * generar el detalle de pagos agrupados en un map por proveedor.
+	 * Retorna todas los C_InvoicePaySchedule según parámetros para generar el detalle de pagos
+	 * agrupados en un map por proveedor
+	 * @return
 	 */
 	private Map<Integer, List<MInvoicePaySchedule>> getInvoices() {
 		Map<Integer, List<MInvoicePaySchedule>> map = new HashMap<Integer, List<MInvoicePaySchedule>>();
-
-		// Construyo la query
-		StringBuffer sql = new StringBuffer();
-
-		sql.append("SELECT ");
-		sql.append("	ps.* ");
-		sql.append("FROM ");
-		sql.append("	C_InvoicePaySchedule ps ");
-		sql.append("	INNER JOIN C_Invoice i ");
-		sql.append("		ON ps.C_Invoice_ID = i.C_Invoice_ID ");
-		sql.append("	INNER JOIN C_BPartner bp ");
-		sql.append("		ON i.C_BPartner_ID = bp.C_BPartner_ID ");
-		sql.append("WHERE ");
-		sql.append("	ps.duedate <= ? ");
-		// Considerando autorizadas las facturas que están completas o cerradas.
-		sql.append("	AND i.docstatus IN ('CO', 'CL') ");
-		sql.append("	AND bp.batch_payment_rule IS NOT NULL ");
-		sql.append("	AND invoiceopen(i.C_Invoice_ID, ps.c_InvoicePaySchedule_ID) > 0 ");
-		sql.append("	AND ps.ad_org_id = ? ");
-
-		if (batchPaymentRule != null) {
-			sql.append("AND bp.batch_payment_rule = ? ");
-		}
-		// Parámetro opcional. Filtra las facturas según la Organización.
-		if (AD_Org_ID > 0) {
-			sql.append("AND i.ad_org_id = ? ");
-		}
-		sql.append("ORDER BY ps.duedate ASC");
-
+		
+		//Construyo la query
+		String sql = "SELECT ps.* " + 
+					 "FROM C_InvoicePaySchedule ps " +
+					 "INNER JOIN C_Invoice i ON ps.C_Invoice_ID = i.C_Invoice_ID " +
+					 "INNER JOIN C_BPartner bp ON i.C_BPartner_ID = bp.C_BPartner_ID " +
+					 "WHERE " + 
+					  "ps.duedate <= ? " +
+					  "AND i.docstatus IN ('CO', 'CL') " +  //Considerando autorizadas las facturas que están completas o cerradas
+					  "AND bp.batch_payment_rule IS NOT NULL " +
+					  "AND invoiceopen(i.C_Invoice_ID, ps.c_InvoicePaySchedule_ID) > 0 " +
+					  "AND ps.ad_org_id = ? ";
+		
+		if (batchPaymentRule != null)
+			sql += "AND bp.batch_payment_rule = ? ";
+		
+		sql += "ORDER BY ps.duedate ASC";
+				
 		PreparedStatement ps = null;
 		ResultSet rs = null;
 		try {
-			ps = DB.prepareStatement(sql.toString(), get_TrxName());
-
-			// Parámetros
+			ps = DB.prepareStatement(sql, get_TrxName());
+			
+			//Parámetros
 			ps.setTimestamp(1, dueDate);
 			ps.setInt(2, paymentBatch.getAD_Org_ID());
-			int index = 3;
-			if (batchPaymentRule != null) {
+			if (batchPaymentRule != null)
 				ps.setString(3, batchPaymentRule);
-				index = 4;
-			}
-			if (AD_Org_ID > 0) {
-				ps.setInt(index, AD_Org_ID);
-			}
-
+			
 			rs = ps.executeQuery();
 			while (rs.next()) {
 				MInvoicePaySchedule paySchedule = new MInvoicePaySchedule(getCtx(), rs, get_TrxName());
@@ -167,29 +142,37 @@ public class GeneratePaymentProposalProcess extends SvrProcess {
 				e.printStackTrace();
 			}
 		}
+		
 		return map;
 	}
-
+	
 	private void generateBatchDetails(Integer cBPartnerId, List<MInvoicePaySchedule> payList) {
 		//Proveedor
 		MBPartner vendor = new MBPartner(getCtx(), cBPartnerId, get_TrxName());
 		MBankAccount backAccount = new MBankAccount(getCtx(), vendor.getC_BankAccount_ID(), get_TrxName());
-
-		// Campos calculados
+		
+		
+		
+		//Campos calculados
 		Timestamp firstDueDate = null;
 		Timestamp lastDueDate = null;
+//		BigDecimal totalAmount = new BigDecimal(0);
 		Timestamp total = null;
-
+		Timestamp avg = null; 
+		
 		for (MInvoicePaySchedule paySchedule : payList) {
 			if (firstDueDate == null || firstDueDate.compareTo(paySchedule.getDueDate()) > 0)
 				firstDueDate = new Timestamp(paySchedule.getDueDate().getTime());
 			if (lastDueDate == null || lastDueDate.compareTo(paySchedule.getDueDate()) < 0)
 				lastDueDate = new Timestamp(paySchedule.getDueDate().getTime());
+//			totalAmount = totalAmount.add(paySchedule.getOpenAmount());
 			if (total == null)
 				total = new Timestamp(paySchedule.getDueDate().getTime());
 			else 
 				total.setTime(total.getTime() + paySchedule.getDueDate().getTime());
 		}
+		
+		avg = new Timestamp(total.getTime() / payList.size());
 		
 		//Creo el Detalle de Pagos
 		MPaymentBatchPODetail detail = new MPaymentBatchPODetail(getCtx(), 0, get_TrxName());
@@ -200,19 +183,25 @@ public class GeneratePaymentProposalProcess extends SvrProcess {
 		detail.setC_Bank_ID(backAccount.getC_Bank_ID());
 		detail.setFirstDueDate(firstDueDate);
 		detail.setLastDueDate(lastDueDate);
-
-		if (paymentBatch.getPaymentDateRule().equals(MPaymentBatchPO.PAYMENTDATERULE_LastDueDate)) {
-			detail.setPaymentDate(new Timestamp(lastDueDate.getTime() + paymentBatchDays));
+		if (paymentBatch.getPaymentDateRule().equals("U")) {
+			detail.setPaymentDate(
+					new Timestamp(
+							lastDueDate.getTime() + (
+									new Timestamp(
+											paymentBatch.getAddDays() * 24 * 60 * 60 * 1000
+									).getTime()
+							)
+					)
+			);
 		}
-		else if (paymentBatch.getPaymentDateRule().equals(MPaymentBatchPO.PAYMENTDATERULE_FixedDate)) {
+		if (paymentBatch.getPaymentDateRule().equals("F")) {
 			detail.setPaymentDate(paymentBatch.getPaymentDate());
 		}
-		else if (paymentBatch.getPaymentDateRule().equals(MPaymentBatchPO.PAYMENTDATERULE_AverageDate)) {
-			Timestamp avg = new Timestamp(total.getTime() / payList.size());
+		if (paymentBatch.getPaymentDateRule().equals("P")) {
 			detail.setPaymentDate(avg);
 		}
-		detail.setPaymentAmount(BigDecimal.ZERO);
-
+		detail.setPaymentAmount(new BigDecimal(0));
+		
 		//Verifico que la fecha de pago no sea menor a la del lote
 		if (detail.getPaymentDate().compareTo(paymentBatch.getBatchDate()) < 0)
 			detail.setPaymentDate(paymentBatch.getBatchDate());

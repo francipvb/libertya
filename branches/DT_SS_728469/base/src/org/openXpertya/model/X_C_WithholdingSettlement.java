@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_WithholdingSettlement
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-11-18 10:23:44.268 */
+ *  @version  - 2016-11-30 14:29:20.57 */
 public class X_C_WithholdingSettlement extends org.openXpertya.model.PO
 {
 /** Constructor estándar */

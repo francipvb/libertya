@@ -30,7 +30,15 @@
 	<parameter name="FechaHasta" isForPrompting="false" class="java.util.Date"/>
 	<parameter name="M_Warehouse_ID" isForPrompting="false" class="java.math.BigDecimal"/>
 	<parameter name="IsSoTrx" isForPrompting="false" class="java.lang.String"/>
-	<queryString><![CDATA[SELECT movementdate, o.name AS organizacion, w.name as almacen, documentno, bp.name as entidadcomercial, docstatus
+	<parameter name="CURRENT_LANG" isForPrompting="false" class="java.lang.String"/>
+	<queryString><![CDATA[SELECT movementdate, o.name AS organizacion, w.name as almacen, documentno, bp.name as entidadcomercial,
+	(select (case when $P{CURRENT_LANG} = 'en_US' then rl.name else rlt.name end) 
+			from ad_ref_list_trl rlt
+			inner join ad_ref_list rl on rl.ad_ref_list_id = rlt.ad_ref_list_id
+			inner join ad_reference r on r.ad_reference_id = rl.ad_reference_id
+			where io.docstatus = rl.value
+				and r.ad_componentobjectuid = 'CORE-AD_Reference-131'
+				and ad_language = $P{CURRENT_LANG}) as docstatus
 FROM m_inout io
 INNER JOIN ad_org o ON (o.ad_org_id = io.ad_org_id)
 INNER JOIN m_warehouse w ON (w.m_warehouse_id = io.m_warehouse_id)
@@ -445,7 +453,7 @@ WHERE (($P{AD_Org_ID} IS NULL) OR (0 = $P{AD_Org_ID}) OR (io.ad_org_id = $P{AD_O
 					<textElement textAlignment="Left">
 						<font size="6"/>
 					</textElement>
-				<textFieldExpression   class="java.lang.String"><![CDATA[($F{docstatus}.equals("CO") ? "Completo" : ($F{docstatus}.equals("CL") ? "Cerrado" : ($F{docstatus}.equals("DR") ? "Borrador" : "NOSE")))]]></textFieldExpression>
+				<textFieldExpression   class="java.lang.String"><![CDATA[$F{docstatus}]]></textFieldExpression>
 				</textField>
 			</band>
 		</detail>

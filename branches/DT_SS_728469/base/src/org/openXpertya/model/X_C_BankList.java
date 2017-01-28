@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_BankList
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-10-18 15:03:48.721 */
+ *  @version  - 2016-10-24 20:39:54.459 */
 public class X_C_BankList extends org.openXpertya.model.PO
 {
 /** Constructor estándar */

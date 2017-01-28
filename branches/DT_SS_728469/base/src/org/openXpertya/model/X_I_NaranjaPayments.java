@@ -1,19 +1,25 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por I_NaranjaPayments
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2017-01-02 12:50:46.953 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2017-01-25 11:08:42.434 */
 public class X_I_NaranjaPayments extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_I_NaranjaPayments (Properties ctx, int I_NaranjaPayments_ID, String trxName)
 {
 super (ctx, I_NaranjaPayments_ID, trxName);
+/** if (I_NaranjaPayments_ID == 0)
+{
+setI_IsImported (false);
+setI_Naranjapayments_ID (0);
+}
+ */
 }
 /** Load Constructor */
 public X_I_NaranjaPayments (Properties ctx, ResultSet rs, String trxName)

@@ -91,6 +91,7 @@ public class FilterCoupons extends SvrProcess {
 			while (rs.next()) {
 				X_C_CouponsSettlements couponsSettlements = new X_C_CouponsSettlements(getCtx(), 0, get_TrxName());
 				couponsSettlements.setC_CreditCardSettlement_ID(filter.getC_CreditCardSettlement_ID());
+
 				couponsSettlements.setC_CreditCardCouponFilter_ID(filter.getC_CreditCardCouponFilter_ID());
 				
 				couponsSettlements.setM_EntidadFinanciera_ID(rs.getInt(1));

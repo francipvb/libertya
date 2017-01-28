@@ -1,14 +1,13 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.sql.Timestamp;
-import java.util.Properties;
-import org.openXpertya.util.Env;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_PaymentBatchPODetail
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2016-11-23 11:40:37.039 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2016-10-24 12:48:12.399 */
 public class X_C_PaymentBatchPODetail extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -22,7 +21,7 @@ setC_PaymentBatchpoDetail_ID (0);
 setC_PaymentBatchPO_ID (0);
 setPaymentDate (new Timestamp(System.currentTimeMillis()));
 }
-*/
+ */
 }
 /** Load Constructor */
 public X_C_PaymentBatchPODetail (Properties ctx, ResultSet rs, String trxName)
@@ -136,6 +135,22 @@ return ii.intValue();
 public KeyNamePair getKeyNamePair() 
 {
 return new KeyNamePair(getID(), String.valueOf(getC_BPartner_ID()));
+}
+/** Set Order.
+Order */
+public void setC_Order_ID (int C_Order_ID)
+{
+if (C_Order_ID <= 0) set_Value ("C_Order_ID", null);
+ else 
+set_Value ("C_Order_ID", new Integer(C_Order_ID));
+}
+/** Get Order.
+Order */
+public int getC_Order_ID() 
+{
+Integer ii = (Integer)get_Value("C_Order_ID");
+if (ii == null) return 0;
+return ii.intValue();
 }
 /** Set C_PaymentBatchpoDetail_ID */
 public void setC_PaymentBatchpoDetail_ID (int C_PaymentBatchpoDetail_ID)

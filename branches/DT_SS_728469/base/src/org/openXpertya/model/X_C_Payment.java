@@ -1,20 +1,49 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.sql.Timestamp;
-import java.util.Properties;
-import org.openXpertya.util.Env;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_Payment
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke
- *  @version  - 2016-10-20 15:19:02.375 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2016-11-30 14:28:46.846 */
 public class X_C_Payment extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
 public X_C_Payment (Properties ctx, int C_Payment_ID, String trxName)
 {
 super (ctx, C_Payment_ID, trxName);
+/** if (C_Payment_ID == 0)
+{
+setC_BankAccount_ID (0);
+setC_BPartner_ID (0);
+setC_Currency_ID (0);
+setC_DocType_ID (0);
+setChecked (false);
+setC_Payment_ID (0);
+setDateAcct (new Timestamp(System.currentTimeMillis()));	// @#Date@
+setDateTrx (new Timestamp(System.currentTimeMillis()));	// @#Date@
+setDocAction (null);	// CO
+setDocStatus (null);	// DR
+setDocumentNo (null);
+setIsAllocated (false);
+setIsApproved (false);	// N
+setIsDelayedCapture (false);
+setIsOnline (false);
+setIsOverUnderPayment (false);	// N
+setIsPrepayment (false);
+setIsReceipt (null);	// N
+setIsReconciled (false);
+setIsSelfService (false);
+setIsSOTrx (false);	// @IsSOTrx@
+setPayAmt (Env.ZERO);	// 0
+setPosted (false);	// N
+setProcessed (false);
+setTenderType (null);	// K
+setTrxType (null);	// S
+}
+ */
 }
 /** Load Constructor */
 public X_C_Payment (Properties ctx, ResultSet rs, String trxName)
@@ -55,6 +84,23 @@ set_Value ("A_Bank", A_Bank);
 public String getA_Bank() 
 {
 return (String)get_Value("A_Bank");
+}
+/** Set Account No.
+Account Number */
+public void setAccountNo (String AccountNo)
+{
+if (AccountNo != null && AccountNo.length() > 20)
+{
+log.warning("Length > 20 - truncated");
+AccountNo = AccountNo.substring(0,20);
+}
+set_Value ("AccountNo", AccountNo);
+}
+/** Get Account No.
+Account Number */
+public String getAccountNo() 
+{
+return (String)get_Value("AccountNo");
 }
 /** Set Account City.
 City or the Credit Card or Account Holder */
@@ -104,6 +150,23 @@ set_Value ("A_CUIT", A_CUIT);
 public String getA_CUIT() 
 {
 return (String)get_Value("A_CUIT");
+}
+public static final int AD_ORGTRX_ID_AD_Reference_ID = MReference.getReferenceID("AD_Org (Trx)");
+/** Set Trx Organization.
+Performing or initiating organization */
+public void setAD_OrgTrx_ID (int AD_OrgTrx_ID)
+{
+if (AD_OrgTrx_ID <= 0) set_Value ("AD_OrgTrx_ID", null);
+ else 
+set_Value ("AD_OrgTrx_ID", new Integer(AD_OrgTrx_ID));
+}
+/** Get Trx Organization.
+Performing or initiating organization */
+public int getAD_OrgTrx_ID() 
+{
+Integer ii = (Integer)get_Value("AD_OrgTrx_ID");
+if (ii == null) return 0;
+return ii.intValue();
 }
 /** Set Account EMail.
 Email Address */
@@ -207,56 +270,31 @@ public String getA_Street()
 {
 return (String)get_Value("A_Street");
 }
-/** Set Account Zip/Postal.
-Zip Code of the Credit Card or Account Holder */
-public void setA_Zip (String A_Zip)
+public static final int AUDITSTATUS_AD_Reference_ID = MReference.getReferenceID("Audit Status");
+/** Closure Pending = CP */
+public static final String AUDITSTATUS_ClosurePending = "CP";
+/** To Verify = TV */
+public static final String AUDITSTATUS_ToVerify = "TV";
+/** Paid = P */
+public static final String AUDITSTATUS_Paid = "P";
+/** Rejected = R */
+public static final String AUDITSTATUS_Rejected = "R";
+/** Set AuditStatus */
+public void setAuditStatus (String AuditStatus)
 {
-if (A_Zip != null && A_Zip.length() > 20)
+if (AuditStatus == null || AuditStatus.equals("CP") || AuditStatus.equals("TV") || AuditStatus.equals("P") || AuditStatus.equals("R"));
+ else throw new IllegalArgumentException ("AuditStatus Invalid value - Reference = AUDITSTATUS_AD_Reference_ID - CP - TV - P - R");
+if (AuditStatus != null && AuditStatus.length() > 2)
 {
-log.warning("Length > 20 - truncated");
-A_Zip = A_Zip.substring(0,20);
+log.warning("Length > 2 - truncated");
+AuditStatus = AuditStatus.substring(0,2);
 }
-set_Value ("A_Zip", A_Zip);
+set_Value ("AuditStatus", AuditStatus);
 }
-/** Get Account Zip/Postal.
-Zip Code of the Credit Card or Account Holder */
-public String getA_Zip() 
+/** Get AuditStatus */
+public String getAuditStatus() 
 {
-return (String)get_Value("A_Zip");
-}
-/** Set Account No.
-Account Number */
-public void setAccountNo (String AccountNo)
-{
-if (AccountNo != null && AccountNo.length() > 20)
-{
-log.warning("Length > 20 - truncated");
-AccountNo = AccountNo.substring(0,20);
-}
-set_Value ("AccountNo", AccountNo);
-}
-/** Get Account No.
-Account Number */
-public String getAccountNo() 
-{
-return (String)get_Value("AccountNo");
-}
-public static final int AD_ORGTRX_ID_AD_Reference_ID = MReference.getReferenceID("AD_Org (Trx)");
-/** Set Trx Organization.
-Performing or initiating organization */
-public void setAD_OrgTrx_ID (int AD_OrgTrx_ID)
-{
-if (AD_OrgTrx_ID <= 0) set_Value ("AD_OrgTrx_ID", null);
- else 
-set_Value ("AD_OrgTrx_ID", new Integer(AD_OrgTrx_ID));
-}
-/** Get Trx Organization.
-Performing or initiating organization */
-public int getAD_OrgTrx_ID() 
-{
-Integer ii = (Integer)get_Value("AD_OrgTrx_ID");
-if (ii == null) return 0;
-return ii.intValue();
+return (String)get_Value("AuditStatus");
 }
 /** Set Authorization Code */
 public void setAuthCode (String AuthCode)
@@ -288,6 +326,23 @@ if (oo != null)
  return "Y".equals(oo);
 }
 return false;
+}
+/** Set Account Zip/Postal.
+Zip Code of the Credit Card or Account Holder */
+public void setA_Zip (String A_Zip)
+{
+if (A_Zip != null && A_Zip.length() > 20)
+{
+log.warning("Length > 20 - truncated");
+A_Zip = A_Zip.substring(0,20);
+}
+set_Value ("A_Zip", A_Zip);
+}
+/** Get Account Zip/Postal.
+Zip Code of the Credit Card or Account Holder */
+public String getA_Zip() 
+{
+return (String)get_Value("A_Zip");
 }
 /** Set Bank Payment Date */
 public void setBank_Payment_Date (Timestamp Bank_Payment_Date)
@@ -330,6 +385,20 @@ Integer ii = (Integer)get_Value("C_Activity_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
+/** Set Bank Account.
+Account at the Bank */
+public void setC_BankAccount_ID (int C_BankAccount_ID)
+{
+set_Value ("C_BankAccount_ID", new Integer(C_BankAccount_ID));
+}
+/** Get Bank Account.
+Account at the Bank */
+public int getC_BankAccount_ID() 
+{
+Integer ii = (Integer)get_Value("C_BankAccount_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
 /** Set Bank.
 Bank */
 public void setC_Bank_ID (int C_Bank_ID)
@@ -343,20 +412,6 @@ Bank */
 public int getC_Bank_ID() 
 {
 Integer ii = (Integer)get_Value("C_Bank_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
-/** Set Bank Account.
-Account at the Bank */
-public void setC_BankAccount_ID (int C_BankAccount_ID)
-{
-set_Value ("C_BankAccount_ID", new Integer(C_BankAccount_ID));
-}
-/** Get Bank Account.
-Account at the Bank */
-public int getC_BankAccount_ID() 
-{
-Integer ii = (Integer)get_Value("C_BankAccount_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
@@ -375,6 +430,20 @@ Integer ii = (Integer)get_Value("C_Bankpaymentstatus_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
+/** Set Business Partner .
+Identifies a Business Partner */
+public void setC_BPartner_ID (int C_BPartner_ID)
+{
+set_Value ("C_BPartner_ID", new Integer(C_BPartner_ID));
+}
+/** Get Business Partner .
+Identifies a Business Partner */
+public int getC_BPartner_ID() 
+{
+Integer ii = (Integer)get_Value("C_BPartner_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
 /** Set Partner Bank Account.
 Bank Account of the Business Partner */
 public void setC_BP_BankAccount_ID (int C_BP_BankAccount_ID)
@@ -388,20 +457,6 @@ Bank Account of the Business Partner */
 public int getC_BP_BankAccount_ID() 
 {
 Integer ii = (Integer)get_Value("C_BP_BankAccount_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
-/** Set Business Partner .
-Identifies a Business Partner */
-public void setC_BPartner_ID (int C_BPartner_ID)
-{
-set_Value ("C_BPartner_ID", new Integer(C_BPartner_ID));
-}
-/** Get Business Partner .
-Identifies a Business Partner */
-public int getC_BPartner_ID() 
-{
-Integer ii = (Integer)get_Value("C_BPartner_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
@@ -481,116 +536,6 @@ Integer ii = (Integer)get_Value("C_DocType_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
-/** Set Invoice.
-Invoice Identifier */
-public void setC_Invoice_ID (int C_Invoice_ID)
-{
-if (C_Invoice_ID <= 0) set_Value ("C_Invoice_ID", null);
- else 
-set_Value ("C_Invoice_ID", new Integer(C_Invoice_ID));
-}
-/** Get Invoice.
-Invoice Identifier */
-public int getC_Invoice_ID() 
-{
-Integer ii = (Integer)get_Value("C_Invoice_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
-/** Set Order.
-Order */
-public void setC_Order_ID (int C_Order_ID)
-{
-if (C_Order_ID <= 0) set_Value ("C_Order_ID", null);
- else 
-set_Value ("C_Order_ID", new Integer(C_Order_ID));
-}
-/** Get Order.
-Order */
-public int getC_Order_ID() 
-{
-Integer ii = (Integer)get_Value("C_Order_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
-/** Set Payment.
-Payment identifier */
-public void setC_Payment_ID (int C_Payment_ID)
-{
-set_ValueNoCheck ("C_Payment_ID", new Integer(C_Payment_ID));
-}
-/** Get Payment.
-Payment identifier */
-public int getC_Payment_ID() 
-{
-Integer ii = (Integer)get_Value("C_Payment_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
-/** Set Payment Batch.
-Payment batch for EFT */
-public void setC_PaymentBatch_ID (int C_PaymentBatch_ID)
-{
-if (C_PaymentBatch_ID <= 0) set_Value ("C_PaymentBatch_ID", null);
- else 
-set_Value ("C_PaymentBatch_ID", new Integer(C_PaymentBatch_ID));
-}
-/** Get Payment Batch.
-Payment batch for EFT */
-public int getC_PaymentBatch_ID() 
-{
-Integer ii = (Integer)get_Value("C_PaymentBatch_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
-/** Set POS Journal.
-POS Journal */
-public void setC_POSJournal_ID (int C_POSJournal_ID)
-{
-if (C_POSJournal_ID <= 0) set_Value ("C_POSJournal_ID", null);
- else 
-set_Value ("C_POSJournal_ID", new Integer(C_POSJournal_ID));
-}
-/** Get POS Journal.
-POS Journal */
-public int getC_POSJournal_ID() 
-{
-Integer ii = (Integer)get_Value("C_POSJournal_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
-/** Set POS Payment Medium.
-POS Terminal Payment Medium */
-public void setC_POSPaymentMedium_ID (int C_POSPaymentMedium_ID)
-{
-if (C_POSPaymentMedium_ID <= 0) set_Value ("C_POSPaymentMedium_ID", null);
- else 
-set_Value ("C_POSPaymentMedium_ID", new Integer(C_POSPaymentMedium_ID));
-}
-/** Get POS Payment Medium.
-POS Terminal Payment Medium */
-public int getC_POSPaymentMedium_ID() 
-{
-Integer ii = (Integer)get_Value("C_POSPaymentMedium_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
-/** Set Project.
-Financial Project */
-public void setC_Project_ID (int C_Project_ID)
-{
-if (C_Project_ID <= 0) set_Value ("C_Project_ID", null);
- else 
-set_Value ("C_Project_ID", new Integer(C_Project_ID));
-}
-/** Get Project.
-Financial Project */
-public int getC_Project_ID() 
-{
-Integer ii = (Integer)get_Value("C_Project_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
 /** Set Charge amount.
 Charge Amount */
 public void setChargeAmt (int ChargeAmt)
@@ -664,6 +609,38 @@ public String getCheckStatus()
 {
 return (String)get_Value("CheckStatus");
 }
+/** Set Invoice.
+Invoice Identifier */
+public void setC_Invoice_ID (int C_Invoice_ID)
+{
+if (C_Invoice_ID <= 0) set_Value ("C_Invoice_ID", null);
+ else 
+set_Value ("C_Invoice_ID", new Integer(C_Invoice_ID));
+}
+/** Get Invoice.
+Invoice Identifier */
+public int getC_Invoice_ID() 
+{
+Integer ii = (Integer)get_Value("C_Invoice_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
+/** Set Order.
+Order */
+public void setC_Order_ID (int C_Order_ID)
+{
+if (C_Order_ID <= 0) set_Value ("C_Order_ID", null);
+ else 
+set_Value ("C_Order_ID", new Integer(C_Order_ID));
+}
+/** Get Order.
+Order */
+public int getC_Order_ID() 
+{
+Integer ii = (Integer)get_Value("C_Order_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
 /** Set Coupon Batch Number */
 public void setCouponBatchNumber (String CouponBatchNumber)
 {
@@ -695,6 +672,84 @@ Credit Card Payment Coupon Number */
 public String getCouponNumber() 
 {
 return (String)get_Value("CouponNumber");
+}
+/** Set Payment Batch.
+Payment batch for EFT */
+public void setC_PaymentBatch_ID (int C_PaymentBatch_ID)
+{
+if (C_PaymentBatch_ID <= 0) set_Value ("C_PaymentBatch_ID", null);
+ else 
+set_Value ("C_PaymentBatch_ID", new Integer(C_PaymentBatch_ID));
+}
+/** Get Payment Batch.
+Payment batch for EFT */
+public int getC_PaymentBatch_ID() 
+{
+Integer ii = (Integer)get_Value("C_PaymentBatch_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
+/** Set Payment.
+Payment identifier */
+public void setC_Payment_ID (int C_Payment_ID)
+{
+set_ValueNoCheck ("C_Payment_ID", new Integer(C_Payment_ID));
+}
+/** Get Payment.
+Payment identifier */
+public int getC_Payment_ID() 
+{
+Integer ii = (Integer)get_Value("C_Payment_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
+/** Set POS Journal.
+POS Journal */
+public void setC_POSJournal_ID (int C_POSJournal_ID)
+{
+if (C_POSJournal_ID <= 0) set_Value ("C_POSJournal_ID", null);
+ else 
+set_Value ("C_POSJournal_ID", new Integer(C_POSJournal_ID));
+}
+/** Get POS Journal.
+POS Journal */
+public int getC_POSJournal_ID() 
+{
+Integer ii = (Integer)get_Value("C_POSJournal_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
+/** Set POS Payment Medium.
+POS Terminal Payment Medium */
+public void setC_POSPaymentMedium_ID (int C_POSPaymentMedium_ID)
+{
+if (C_POSPaymentMedium_ID <= 0) set_Value ("C_POSPaymentMedium_ID", null);
+ else 
+set_Value ("C_POSPaymentMedium_ID", new Integer(C_POSPaymentMedium_ID));
+}
+/** Get POS Payment Medium.
+POS Terminal Payment Medium */
+public int getC_POSPaymentMedium_ID() 
+{
+Integer ii = (Integer)get_Value("C_POSPaymentMedium_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
+/** Set Project.
+Financial Project */
+public void setC_Project_ID (int C_Project_ID)
+{
+if (C_Project_ID <= 0) set_Value ("C_Project_ID", null);
+ else 
+set_Value ("C_Project_ID", new Integer(C_Project_ID));
+}
+/** Get Project.
+Financial Project */
+public int getC_Project_ID() 
+{
+Integer ii = (Integer)get_Value("C_Project_ID");
+if (ii == null) return 0;
+return ii.intValue();
 }
 /** Set Exp. Month.
 Expiry Month */
@@ -892,9 +947,9 @@ public static final String DOCACTION_Void = "VO";
 The targeted status of the document */
 public void setDocAction (String DocAction)
 {
-if (DocAction == null) throw new IllegalArgumentException ("DocAction is mandatory");
 if (DocAction.equals("AP") || DocAction.equals("CL") || DocAction.equals("PR") || DocAction.equals("IN") || DocAction.equals("CO") || DocAction.equals("--") || DocAction.equals("RC") || DocAction.equals("RJ") || DocAction.equals("RA") || DocAction.equals("WC") || DocAction.equals("XL") || DocAction.equals("RE") || DocAction.equals("PO") || DocAction.equals("VO"));
  else throw new IllegalArgumentException ("DocAction Invalid value - Reference = DOCACTION_AD_Reference_ID - AP - CL - PR - IN - CO - -- - RC - RJ - RA - WC - XL - RE - PO - VO");
+if (DocAction == null) throw new IllegalArgumentException ("DocAction is mandatory");
 if (DocAction.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -937,9 +992,9 @@ public static final String DOCSTATUS_Reversed = "RE";
 The current status of the document */
 public void setDocStatus (String DocStatus)
 {
-if (DocStatus == null) throw new IllegalArgumentException ("DocStatus is mandatory");
 if (DocStatus.equals("VO") || DocStatus.equals("NA") || DocStatus.equals("IP") || DocStatus.equals("CO") || DocStatus.equals("AP") || DocStatus.equals("CL") || DocStatus.equals("WC") || DocStatus.equals("WP") || DocStatus.equals("??") || DocStatus.equals("DR") || DocStatus.equals("IN") || DocStatus.equals("RE"));
  else throw new IllegalArgumentException ("DocStatus Invalid value - Reference = DOCSTATUS_AD_Reference_ID - VO - NA - IP - CO - AP - CL - WC - WP - ?? - DR - IN - RE");
+if (DocStatus == null) throw new IllegalArgumentException ("DocStatus is mandatory");
 if (DocStatus.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -1104,9 +1159,9 @@ public static final String ISRECEIPT_Ingreso = "Y";
 This is a sales transaction (receipt) */
 public void setIsReceipt (String IsReceipt)
 {
-if (IsReceipt == null) throw new IllegalArgumentException ("IsReceipt is mandatory");
 if (IsReceipt.equals("N") || IsReceipt.equals("Y"));
  else throw new IllegalArgumentException ("IsReceipt Invalid value - Reference = ISRECEIPT_AD_Reference_ID - N - Y");
+if (IsReceipt == null) throw new IllegalArgumentException ("IsReceipt is mandatory");
 if (IsReceipt.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -1238,6 +1293,21 @@ public String getOProcessing()
 {
 return (String)get_Value("OProcessing");
 }
+public static final int ORIGINAL_REF_PAYMENT_ID_AD_Reference_ID = MReference.getReferenceID("C_Payment");
+/** Set Original Payment ID */
+public void setOriginal_Ref_Payment_ID (int Original_Ref_Payment_ID)
+{
+if (Original_Ref_Payment_ID <= 0) set_Value ("Original_Ref_Payment_ID", null);
+ else 
+set_Value ("Original_Ref_Payment_ID", new Integer(Original_Ref_Payment_ID));
+}
+/** Get Original Payment ID */
+public int getOriginal_Ref_Payment_ID() 
+{
+Integer ii = (Integer)get_Value("Original_Ref_Payment_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
 /** Set Original Transaction ID.
 Original Transaction ID */
 public void setOrig_TrxID (String Orig_TrxID)
@@ -1254,21 +1324,6 @@ Original Transaction ID */
 public String getOrig_TrxID() 
 {
 return (String)get_Value("Orig_TrxID");
-}
-public static final int ORIGINAL_REF_PAYMENT_ID_AD_Reference_ID = MReference.getReferenceID("C_Payment");
-/** Set Original Payment ID */
-public void setOriginal_Ref_Payment_ID (int Original_Ref_Payment_ID)
-{
-if (Original_Ref_Payment_ID <= 0) set_Value ("Original_Ref_Payment_ID", null);
- else 
-set_Value ("Original_Ref_Payment_ID", new Integer(Original_Ref_Payment_ID));
-}
-/** Get Original Payment ID */
-public int getOriginal_Ref_Payment_ID() 
-{
-Integer ii = (Integer)get_Value("Original_Ref_Payment_ID");
-if (ii == null) return 0;
-return ii.intValue();
 }
 /** Set Over/Under Payment.
 Over-Payment (unallocated) or Under-Payment (partial payment) Amount */
@@ -1487,6 +1542,46 @@ if (oo != null)
 }
 return false;
 }
+public static final int REF_PAYMENT_ID_AD_Reference_ID = MReference.getReferenceID("C_Payment");
+/** Set Referenced Payment */
+public void setRef_Payment_ID (int Ref_Payment_ID)
+{
+if (Ref_Payment_ID <= 0) set_ValueNoCheck ("Ref_Payment_ID", null);
+ else 
+set_ValueNoCheck ("Ref_Payment_ID", new Integer(Ref_Payment_ID));
+}
+/** Get Referenced Payment */
+public int getRef_Payment_ID() 
+{
+Integer ii = (Integer)get_Value("Ref_Payment_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
+/** Set Rejected Comments */
+public void setRejectedComments (String RejectedComments)
+{
+if (RejectedComments != null && RejectedComments.length() > 1000)
+{
+log.warning("Length > 1000 - truncated");
+RejectedComments = RejectedComments.substring(0,1000);
+}
+set_Value ("RejectedComments", RejectedComments);
+}
+/** Get Rejected Comments */
+public String getRejectedComments() 
+{
+return (String)get_Value("RejectedComments");
+}
+/** Set Rejected Date */
+public void setRejectedDate (Timestamp RejectedDate)
+{
+set_Value ("RejectedDate", RejectedDate);
+}
+/** Get Rejected Date */
+public Timestamp getRejectedDate() 
+{
+return (Timestamp)get_Value("RejectedDate");
+}
 /** Set Info.
 Response info */
 public void setR_Info (String R_Info)
@@ -1503,6 +1598,23 @@ Response info */
 public String getR_Info() 
 {
 return (String)get_Value("R_Info");
+}
+/** Set Routing No.
+Bank Routing Number */
+public void setRoutingNo (String RoutingNo)
+{
+if (RoutingNo != null && RoutingNo.length() > 20)
+{
+log.warning("Length > 20 - truncated");
+RoutingNo = RoutingNo.substring(0,20);
+}
+set_Value ("RoutingNo", RoutingNo);
+}
+/** Get Routing No.
+Bank Routing Number */
+public String getRoutingNo() 
+{
+return (String)get_Value("RoutingNo");
 }
 /** Set Reference.
 Payment reference */
@@ -1572,63 +1684,6 @@ public String getR_Result()
 {
 return (String)get_Value("R_Result");
 }
-public static final int REF_PAYMENT_ID_AD_Reference_ID = MReference.getReferenceID("C_Payment");
-/** Set Referenced Payment */
-public void setRef_Payment_ID (int Ref_Payment_ID)
-{
-if (Ref_Payment_ID <= 0) set_ValueNoCheck ("Ref_Payment_ID", null);
- else 
-set_ValueNoCheck ("Ref_Payment_ID", new Integer(Ref_Payment_ID));
-}
-/** Get Referenced Payment */
-public int getRef_Payment_ID() 
-{
-Integer ii = (Integer)get_Value("Ref_Payment_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
-/** Set Rejected Comments */
-public void setRejectedComments (String RejectedComments)
-{
-if (RejectedComments != null && RejectedComments.length() > 1000)
-{
-log.warning("Length > 1000 - truncated");
-RejectedComments = RejectedComments.substring(0,1000);
-}
-set_Value ("RejectedComments", RejectedComments);
-}
-/** Get Rejected Comments */
-public String getRejectedComments() 
-{
-return (String)get_Value("RejectedComments");
-}
-/** Set Rejected Date */
-public void setRejectedDate (Timestamp RejectedDate)
-{
-set_Value ("RejectedDate", RejectedDate);
-}
-/** Get Rejected Date */
-public Timestamp getRejectedDate() 
-{
-return (Timestamp)get_Value("RejectedDate");
-}
-/** Set Routing No.
-Bank Routing Number */
-public void setRoutingNo (String RoutingNo)
-{
-if (RoutingNo != null && RoutingNo.length() > 20)
-{
-log.warning("Length > 20 - truncated");
-RoutingNo = RoutingNo.substring(0,20);
-}
-set_Value ("RoutingNo", RoutingNo);
-}
-/** Get Routing No.
-Bank Routing Number */
-public String getRoutingNo() 
-{
-return (String)get_Value("RoutingNo");
-}
 /** Set Swipe.
 Track 1 and 2 of the Credit Card */
 public void setSwipe (String Swipe)
@@ -1675,9 +1730,9 @@ public static final String TENDERTYPE_Cash = "CA";
 Method of Payment */
 public void setTenderType (String TenderType)
 {
-if (TenderType == null) throw new IllegalArgumentException ("TenderType is mandatory");
 if (TenderType.equals("K") || TenderType.equals("D") || TenderType.equals("A") || TenderType.equals("C") || TenderType.equals("CA"));
  else throw new IllegalArgumentException ("TenderType Invalid value - Reference = TENDERTYPE_AD_Reference_ID - K - D - A - C - CA");
+if (TenderType == null) throw new IllegalArgumentException ("TenderType is mandatory");
 if (TenderType.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -1708,9 +1763,9 @@ public static final String TRXTYPE_Void = "V";
 Type of credit card transaction */
 public void setTrxType (String TrxType)
 {
-if (TrxType == null) throw new IllegalArgumentException ("TrxType is mandatory");
 if (TrxType.equals("S") || TrxType.equals("D") || TrxType.equals("C") || TrxType.equals("F") || TrxType.equals("A") || TrxType.equals("V"));
  else throw new IllegalArgumentException ("TrxType Invalid value - Reference = TRXTYPE_AD_Reference_ID - S - D - C - F - A - V");
+if (TrxType == null) throw new IllegalArgumentException ("TrxType is mandatory");
 if (TrxType.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -1788,31 +1843,5 @@ public BigDecimal getWriteOffAmt()
 BigDecimal bd = (BigDecimal)get_Value("WriteOffAmt");
 if (bd == null) return Env.ZERO;
 return bd;
-}
-public static final int AUDITSTATUS_AD_Reference_ID = MReference.getReferenceID("Audit Status");
-/** Closure Pending = CP */
-public static final String AUDITSTATUS_ClosurePending = "CP";
-/** To Verify = TV */
-public static final String AUDITSTATUS_ToVerify = "TV";
-/** Paid = P */
-public static final String AUDITSTATUS_Paid = "P";
-/** Rejected = R */
-public static final String AUDITSTATUS_Rejected = "R";
-/** Set AuditStatus */
-public void setAuditStatus (String AuditStatus)
-{
-if (AuditStatus == null || AuditStatus.equals("CP") || AuditStatus.equals("TV") || AuditStatus.equals("P") || AuditStatus.equals("R"));
- else throw new IllegalArgumentException ("AuditStatus Invalid value - Reference = AUDITSTATUS_AD_Reference_ID - CP - TV - P - R");
-if (AuditStatus != null && AuditStatus.length() > 2)
-{
-log.warning("Length > 2 - truncated");
-AuditStatus = AuditStatus.substring(0,2);
-}
-set_Value ("AuditStatus", AuditStatus);
-}
-/** Get AuditStatus */
-public String getAuditStatus() 
-{
-return (String)get_Value("AuditStatus");
 }
 }

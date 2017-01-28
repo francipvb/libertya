@@ -70,6 +70,74 @@ public class PostInstallUpgradeFrom1604 extends PluginPostInstallProcess {
 	protected final static String CHEQUES_SIN_CONCILIAR_REPORT_UID = "CORE-AD_Process-1010424";
 	protected final static String CHEQUES_SIN_CONCILIAR_REPORT_FILENAME = "UnreconciledCheksReport.jrxml";
 	
+	/** UID del Listado de Control de Facturas sin Remitos */
+	protected final static String INVOICES_WITHOUT_INOUT_JASPER_REPORT_UID = "CORE-AD_JasperReport-1010125";
+	protected final static String INVOICES_WITHOUT_INOUT_JASPER_REPORT_FILENAME = "InvoicesWithoutInOut.jasper";
+
+	/** UID del Reporte de libro diario */
+	protected final static String LIBRO_DIARIO_REPORT_UID = "CORE-AD_Process-1010379";
+	protected final static String LIBRO_DIARIO_REPORT_FILENAME = "LibroDiario.jrxml";
+	
+	/** UID del Reporte de libro diario resumido */
+	protected final static String LIBRO_DIARIO_RESUMIDO_REPORT_UID = "CORE-AD_Process-1010428";
+	protected final static String LIBRO_DIARIO_RESUMIDO_REPORT_FILENAME = "LibroDiarioResumido.jrxml";
+
+	/** UID Impresión Cheques */
+	protected final static String CHECK_PRINTING_JASPER_REPORT_UID = "SSTE2CORE-AD_JasperReport-1010144-20161018155925";
+	protected final static String CHECK_PRINTING_JASPER_REPORT_FILENAME = "ChequesFrances.jasper";
+	
+	/** UID Informe de Lote de Pagos */
+	protected final static String PAYMENT_BATCH_JASPER_REPORT_UID = "SSTE2CORE-AD_JasperReport-1010171-20161024123925";
+	protected final static String PAYMENT_BATCH_JASPER_REPORT_FILENAME = "InformeLoteDePagos.jasper";
+
+	/** UID Subreporte Informe de Lote de Pagos */
+	protected final static String PAYMENT_BATCH_SUBREPORT_JASPER_REPORT_UID = "SSTE2CORE-AD_JasperReport-1010170-20161024123925";
+	protected final static String PAYMENT_BATCH_SUBREPORT_JASPER_REPORT_FILENAME = "InformeLoteDePagos_subreport.jasper";
+	
+	/** Listado de OC */
+	protected final static String PURCHASE_ORDER_REPORT_UID = "CORE-AD_Process-1010433";
+	protected final static String PURCHASE_ORDER_REPORT_FILENAME = "PurchaseOrderReport.jrxml";
+	
+	/** Reporte de Recepciones de Proveedor */
+	protected final static String RECEPTIONS_VENDOR_REPORT_UID = "CORE-AD_Process-1010431";
+	protected final static String RECEPTIONS_VENDOR_REPORT_FILENAME = "ReceptionsVendor.jrxml";
+	
+	/** UID del Informe de Débitos y Créditos de Cliente */
+	protected final static String CUSTOMER_DEBITS_CREDITS_REPORT_UID = "CORE-AD_Process-1010346";
+	protected final static String CUSTOMER_DEBITS_CREDITS_REPORT_FILENAME = "CustomerDebitsCredits.jrxml";
+	
+	/** UID del Informe DE Auditoría de Creación de Línea de Caja */
+	protected final static String CREATE_CASHLINE_AUDIT_REPORT_UID = "CORE-AD_Process-1010500";
+	protected final static String CREATE_CASHLINE_AUDIT_REPORT_FILENAME = "CreateCashLineAudit.jrxml";
+	
+	/** UID del Informe de Cheques por Cuenta */
+	protected final static String CHECKS_BY_ACCOUNT_JASPER_REPORT_UID = "CORE-AD_JasperReport-1010104";
+	protected final static String CHECKS_BY_ACCOUNT_JASPER_REPORT_FILENAME = "ChecksByAccount.jasper";
+	
+	/** UID del Reporte de Remitos */
+	protected final static String IN_OUT_REPORT_UID = "CORE-AD_Process-1010422";
+	protected final static String IN_OUT_REPORT_FILENAME = "InOutReport.jrxml";
+	
+	/** UID del Informe de Ranking de Ventas */
+	protected final static String SALES_RANKING_JASPER_REPORT_UID = "CORE-AD_JasperReport-1010099";
+	protected final static String SALES_RANKING_JASPER_REPORT_FILENAME = "SalesRanking.jasper";
+	
+	/** UID del Informe de Cambio de Precios */
+	protected final static String PRICE_CHANGING_JASPER_REPORT_UID = "CORE-AD_JasperReport-1010121";
+	protected final static String PRICE_CHANGING_JASPER_REPORT_FILENAME = "PriceChanging.jasper";
+
+	/** UID del Listado de Cupones Totalizados por Estado */
+	protected final static String COUPON_LIST_BY_STATUS_JASPER_REPORT_UID = "RPRT2CORE-AD_JasperReport-1010181-20170125125731";
+	protected final static String COUPON_LIST_BY_STATUS_JASPER_REPORT_FILENAME = "CouponListByStatus.jasper";
+	
+	/** UID del Reporte de Control de Tarjetas */
+	protected final static String CARD_CONTROL_JASPER_REPORT_UID = "RPRT2CORE-AD_JasperReport-1010177-20170125125355";
+	protected final static String CARD_CONTROL_JASPER_REPORT_FILENAME = "CardControl.jasper";
+	
+	/** UID del Listado de Liquidaciones */
+	protected final static String SETTLEMENT_LIST_JASPER_REPORT_UID = "RPRT2CORE-AD_JasperReport-1010180-20170125125715";
+	protected final static String SETTLEMENT_LIST_JASPER_REPORT_FILENAME = "SettlementList.jasper";
+	
 	@Override
 	protected String doIt() throws Exception {
 		super.doIt();
@@ -285,7 +353,194 @@ public class PostInstallUpgradeFrom1604 extends PluginPostInstallProcess {
 						.readBinaryFromJar(
 								jarFileURL,
 								getBinaryFileURL(CHEQUES_SIN_CONCILIAR_REPORT_FILENAME)));
-				
+		
+		// Informe de Control de Facturas Sin Remito
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					INVOICES_WITHOUT_INOUT_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(INVOICES_WITHOUT_INOUT_JASPER_REPORT_FILENAME)));
+
+		// Reporte de Libro Diario
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				LIBRO_DIARIO_REPORT_UID,
+				LIBRO_DIARIO_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(LIBRO_DIARIO_REPORT_FILENAME)));
+		
+		// Reporte de Libro Diario Resumido
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				LIBRO_DIARIO_RESUMIDO_REPORT_UID,
+				LIBRO_DIARIO_RESUMIDO_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(LIBRO_DIARIO_RESUMIDO_REPORT_FILENAME)));
+
+		// Impresión de cheques - Francés
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					CHECK_PRINTING_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(CHECK_PRINTING_JASPER_REPORT_FILENAME)));
+		
+		// Informe Lote de Pagos
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					PAYMENT_BATCH_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(PAYMENT_BATCH_JASPER_REPORT_FILENAME)));
+		
+		// Informe Lote de Pagos - Subreporte
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					PAYMENT_BATCH_SUBREPORT_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(PAYMENT_BATCH_SUBREPORT_JASPER_REPORT_FILENAME)));
+		
+		// Listado de OC
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				PURCHASE_ORDER_REPORT_UID,
+				PURCHASE_ORDER_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(PURCHASE_ORDER_REPORT_FILENAME)));
+		
+		// Reporte de Recepciones de Proveedor
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				RECEPTIONS_VENDOR_REPORT_UID,
+				RECEPTIONS_VENDOR_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(RECEPTIONS_VENDOR_REPORT_FILENAME)));
+		
+		// Informe de Débitos y Créditos de Clientes
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				CUSTOMER_DEBITS_CREDITS_REPORT_UID,
+				CUSTOMER_DEBITS_CREDITS_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(CUSTOMER_DEBITS_CREDITS_REPORT_FILENAME)));
+		
+		// Informe de Auditoría de Creación de Línea de Caja
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				CREATE_CASHLINE_AUDIT_REPORT_UID,
+				CREATE_CASHLINE_AUDIT_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(CREATE_CASHLINE_AUDIT_REPORT_FILENAME)));
+		
+		// Informe de Cheques por Cuenta
+		MJasperReport
+				.updateBinaryData(
+						get_TrxName(),
+						getCtx(),
+						CHECKS_BY_ACCOUNT_JASPER_REPORT_UID,
+						JarHelper
+								.readBinaryFromJar(
+										jarFileURL,
+										getBinaryFileURL(CHECKS_BY_ACCOUNT_JASPER_REPORT_FILENAME)));
+		
+		// Reporte de Remitos
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				IN_OUT_REPORT_UID,
+				IN_OUT_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(IN_OUT_REPORT_FILENAME)));
+		
+		// Informe de Ranking de Ventas
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					SALES_RANKING_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(SALES_RANKING_JASPER_REPORT_FILENAME)));
+		
+		// Informe de Cambio de Precios
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					PRICE_CHANGING_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(PRICE_CHANGING_JASPER_REPORT_FILENAME)));
+		
+		// Listado de Cupones Totalizados por Estado
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					COUPON_LIST_BY_STATUS_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(COUPON_LIST_BY_STATUS_JASPER_REPORT_FILENAME)));
+
+		// Reporte de Control de Tarjetas
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					CARD_CONTROL_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(CARD_CONTROL_JASPER_REPORT_FILENAME)));
+		
+		// Listado de Liquidaciones
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					SETTLEMENT_LIST_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(SETTLEMENT_LIST_JASPER_REPORT_FILENAME)));
+		
 		return " ";
 	}
 	

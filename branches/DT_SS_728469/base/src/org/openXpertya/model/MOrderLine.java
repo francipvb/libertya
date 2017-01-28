@@ -59,6 +59,9 @@ public class MOrderLine extends X_C_OrderLine {
 	/** Bypass para que no actualice el precio al guardar la línea */
 	private boolean updatePriceInSave = true;
 	
+	/** Bypass para no controlar las cantidades mínimas ni de empaquetado */
+	private boolean allowAnyQty = false;
+	
 	/**
 	 * Lugar de Retiro. Utilizado para evitar reserva de stock en pedidos que se
 	 * retiran por TPV. Por defecto el lugar de retiro es Almacén lo cual
@@ -682,6 +685,7 @@ public class MOrderLine extends X_C_OrderLine {
         // Get Defaults from Parent
 
         MOrder o = new MOrder( getCtx(),getC_Order_ID(),get_TrxName());
+        MDocType orderDocType = MDocType.get(getCtx(), o.getC_DocTypeTarget_ID());
         		
         // En caso de tener una preferencia en el campo m_warehouse_id de la cabecera, se setea incorrectamente
         // ese valor por más de que se haya especificado un valor diferente en dicho campo.  Por lo tanto se
@@ -896,6 +900,32 @@ public class MOrderLine extends X_C_OrderLine {
 					new Object[] { MUOM.get(getCtx(), getC_UOM_ID()).getName(),
 							getQtyEntered() }), "");
 			return false;
+        }
+        
+		// Controlar que la cantidad no sea menor a la mínima de compra y que la
+		// cantidad sea múltiplo a ordenar 
+        if(!isAllowAnyQty()
+        		&& !o.isSOTrx()
+				&& orderDocType.getDocTypeKey().equals(MDocType.DOCTYPE_PurchaseOrder)){
+			MProductPO ppo = MProductPO.get(getCtx(), getM_Product_ID(), o.getC_BPartner_ID(), get_TrxName());
+			if (ppo != null && ppo.isActive()) {
+				// Cantidad mínima
+				if(ppo.getOrder_Min().compareTo(getQtyEntered()) > 0){
+	        		MProduct prod = MProduct.get(getCtx(), getM_Product_ID());
+					log.saveError("SaveError", Msg.getMsg(getCtx(), "QtyEnteredLessThanOrderMinQty",
+							new Object[] { prod.getValue(), prod.getName(), ppo.getOrder_Min(), getQtyEntered() }));
+					return false;
+				}
+				// Múltiplo a ordenar
+				if (!Util.isEmpty(ppo.getOrder_Pack(), true)
+						&& getQtyEntered().remainder(ppo.getOrder_Pack()).compareTo(BigDecimal.ZERO) != 0) {
+					MProduct prod = MProduct.get(getCtx(), getM_Product_ID());
+					log.saveError("SaveError", Msg.getMsg(getCtx(), "QtyEnteredMustBeMultipleOfOrderPack",
+							new Object[] { prod.getValue(), prod.getName(), ppo.getOrder_Pack(), getQtyEntered() }));
+					return false;
+				}
+        	}
+			
         }
         
         return true;
@@ -1378,7 +1408,7 @@ public class MOrderLine extends X_C_OrderLine {
      *  NO MODIFICAR FIRMA, SE USA EN LA IMPRESIÓN DE LA FACTURA
      */
     public BigDecimal getPriceEnteredNet(){
-    	return amtByTax(getPriceEntered(), getTaxAmt(getPriceEntered()), isTaxIncluded(), false);
+    	return amtByTax(getPriceEntered(), getTaxAmt(getPriceEntered()), isTaxIncluded(), false).setScale(2, BigDecimal.ROUND_HALF_UP);
     }
     
     /**
@@ -1809,6 +1839,14 @@ public class MOrderLine extends X_C_OrderLine {
 
 	public void setUpdatePriceInSave(boolean updatePriceInSave) {
 		this.updatePriceInSave = updatePriceInSave;
+	}
+
+	public boolean isAllowAnyQty() {
+		return allowAnyQty;
+	}
+
+	public void setAllowAnyQty(boolean allowAnyQty) {
+		this.allowAnyQty = allowAnyQty;
 	}
 }    // MOrderLine
 

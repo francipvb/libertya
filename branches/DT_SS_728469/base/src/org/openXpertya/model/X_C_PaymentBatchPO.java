@@ -1,14 +1,13 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.sql.Timestamp;
-import java.util.Properties;
-import org.openXpertya.util.Env;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_PaymentBatchPO
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2016-11-23 11:40:37.014 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2016-11-01 17:59:46.24 */
 public class X_C_PaymentBatchPO extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -28,7 +27,7 @@ setGrandTotal (Env.ZERO);
 setPaymentDateRule (null);
 setProcessed (false);
 }
-*/
+ */
 }
 /** Load Constructor */
 public X_C_PaymentBatchPO (Properties ctx, ResultSet rs, String trxName)
@@ -167,9 +166,9 @@ public static final String DOCACTION_Void = "VO";
 The targeted status of the document */
 public void setDocAction (String DocAction)
 {
-if (DocAction == null) throw new IllegalArgumentException ("DocAction is mandatory");
 if (DocAction.equals("AP") || DocAction.equals("CL") || DocAction.equals("PR") || DocAction.equals("IN") || DocAction.equals("CO") || DocAction.equals("--") || DocAction.equals("RC") || DocAction.equals("RJ") || DocAction.equals("RA") || DocAction.equals("WC") || DocAction.equals("XL") || DocAction.equals("RE") || DocAction.equals("PO") || DocAction.equals("VO"));
  else throw new IllegalArgumentException ("DocAction Invalid value - Reference = DOCACTION_AD_Reference_ID - AP - CL - PR - IN - CO - -- - RC - RJ - RA - WC - XL - RE - PO - VO");
+if (DocAction == null) throw new IllegalArgumentException ("DocAction is mandatory");
 if (DocAction.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -212,9 +211,9 @@ public static final String DOCSTATUS_Reversed = "RE";
 The current status of the document */
 public void setDocStatus (String DocStatus)
 {
-if (DocStatus == null) throw new IllegalArgumentException ("DocStatus is mandatory");
 if (DocStatus.equals("VO") || DocStatus.equals("NA") || DocStatus.equals("IP") || DocStatus.equals("CO") || DocStatus.equals("AP") || DocStatus.equals("CL") || DocStatus.equals("WC") || DocStatus.equals("WP") || DocStatus.equals("??") || DocStatus.equals("DR") || DocStatus.equals("IN") || DocStatus.equals("RE"));
  else throw new IllegalArgumentException ("DocStatus Invalid value - Reference = DOCSTATUS_AD_Reference_ID - VO - NA - IP - CO - AP - CL - WC - WP - ?? - DR - IN - RE");
+if (DocStatus == null) throw new IllegalArgumentException ("DocStatus is mandatory");
 if (DocStatus.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -315,9 +314,9 @@ public static final String PAYMENTDATERULE_AverageDate = "P";
 /** Set PaymentDateRule */
 public void setPaymentDateRule (String PaymentDateRule)
 {
-if (PaymentDateRule == null) throw new IllegalArgumentException ("PaymentDateRule is mandatory");
 if (PaymentDateRule.equals("U") || PaymentDateRule.equals("F") || PaymentDateRule.equals("P"));
  else throw new IllegalArgumentException ("PaymentDateRule Invalid value - Reference = PAYMENTDATERULE_AD_Reference_ID - U - F - P");
+if (PaymentDateRule == null) throw new IllegalArgumentException ("PaymentDateRule is mandatory");
 if (PaymentDateRule.length() > 1)
 {
 log.warning("Length > 1 - truncated");

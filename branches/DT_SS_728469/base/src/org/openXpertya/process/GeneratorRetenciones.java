@@ -77,6 +77,7 @@ public class GeneratorRetenciones {
 		this.vfechaPago = dateTrx;
 		setPaymentRule(paymentRule);
 	}
+	
 	private void setM_C_Currency_ID(MCurrency currency) {	
 		m_C_Currency_ID = currency.getC_Currency_ID();
 		
@@ -197,7 +198,7 @@ public class GeneratorRetenciones {
 			lista_retenciones.get(i).setProjectID(getProjectID());
 			lista_retenciones.get(i).setCampaignID(getCampaignID());
 			lista_retenciones.get(i).setPaymentRule(getPaymentRule());
-			m_retenciones.add(lista_retenciones.get(i).save(alloc, true));
+			m_retenciones.addAll(lista_retenciones.get(i).save(alloc, true));
 			//lista_retenciones.get(i).save(alloc);
 		}
 	}

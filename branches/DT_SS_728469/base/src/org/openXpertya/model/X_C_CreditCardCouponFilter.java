@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_CreditCardCouponFilter
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-11-18 10:23:40.232 */
+ *  @version  - 2016-11-30 14:28:24.765 */
 public class X_C_CreditCardCouponFilter extends org.openXpertya.model.PO
 {
 /** Constructor estándar */

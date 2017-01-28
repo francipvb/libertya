@@ -1,19 +1,25 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por I_AmexPaymentsAndTaxes
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2017-01-02 12:50:46.557 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2017-01-25 11:08:36.238 */
 public class X_I_AmexPaymentsAndTaxes extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_I_AmexPaymentsAndTaxes (Properties ctx, int I_AmexPaymentsAndTaxes_ID, String trxName)
 {
 super (ctx, I_AmexPaymentsAndTaxes_ID, trxName);
+/** if (I_AmexPaymentsAndTaxes_ID == 0)
+{
+setI_Amexpaymentsandtaxes_ID (0);
+setI_IsImported (false);
+}
+ */
 }
 /** Load Constructor */
 public X_I_AmexPaymentsAndTaxes (Properties ctx, ResultSet rs, String trxName)

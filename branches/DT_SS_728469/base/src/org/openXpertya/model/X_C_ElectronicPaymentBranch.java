@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_ElectronicPaymentBranch
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-09-28 13:29:50.908 */
+ *  @version  - 2016-10-24 20:12:33.886 */
 public class X_C_ElectronicPaymentBranch extends org.openXpertya.model.PO
 {
 /** Constructor estándar */

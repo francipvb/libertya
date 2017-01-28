@@ -836,6 +836,14 @@ public class PoSOnline extends PoSConnectionState {
 			cashChange = cashChange.subtract(changeAux); 
 		}
 		
+		// Forma de pago del pedido
+		if(Util.isEmpty(sumaCreditPayments, true)){
+			order.setPaymentRule(MInvoice.PAYMENTRULE_Cash);
+		}
+		else{
+			order.setPaymentRule(MInvoice.PAYMENTRULE_OnCredit);
+		}
+		
 		if (invalidPayment)
 			throw new InvalidPaymentException();
 	}
@@ -994,68 +1002,70 @@ public class PoSOnline extends PoSConnectionState {
 	 */
 	private void checkCredit(Order order) throws InsufficientCreditException, Exception {
 		currentAccountSalesConditions = new HashMap<String, BigDecimal>();
-		MBPartner bp = new MBPartner(getCtx(), order.getBusinessPartner().getId(), getTrxName());
-		MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), getTrxName());
-		// Obtengo el manager actual
-		CurrentAccountManager manager = CurrentAccountManagerFactory
-				.getManager();
-		// Seteo el estado actual del cliente y lo obtengo
-		CallResult result = manager.setCurrentAccountStatus(getCtx(), bp, org,
-				null);
-		// Si hubo error, obtengo el mensaje y tiro la excepción
-		if (result.isError()) {
-			throw new InsufficientCreditException(result.getMsg());
-		}
-		// Me guardo el estado de la entidad comercial
-		String creditStatus = (String)result.getResult(); 
-		// Determino los tipos de pago a verificar el estado de crédito
-		result = manager.getTenderTypesToControlStatus(getCtx(), org, bp,
-				getTrxName());
-		// Si hubo error, obtengo el mensaje y tiro la excepción
-		if (result.isError()) {
-			throw new Exception(result.getMsg());
-		}
-		// Me guardo la lista de tipos de pago a verificar
-		Set<String> tenderTypesAllowed = (Set<String>)result.getResult();
-		Map<String, BigDecimal> pays = new HashMap<String, BigDecimal>();
-		BigDecimal convertedPayAmt;
-		String paymentRule;
-		for (Payment pay : order.getPayments()) {
-			// Verificar por el manager de cuentas corrientes si debo verificar
-			// el estado de crédito en base a los tipos de pago obtenidos
-			paymentRule = CurrentAccountBalanceStrategy
-					.getPaymentRuleEquivalent(pay.getTenderType());
-			if(!Util.isEmpty(paymentRule, true)){
-				if (tenderTypesAllowed != null
-						&& tenderTypesAllowed.contains(pay.getTenderType())) {
-					shouldUpdateBPBalance = true;
-					// Verificar la situación de crédito de la entidad comercial
-					result = manager.validateCurrentAccountStatus(getCtx(), org, bp, 
-							creditStatus, getTrxName());
-					// Si hubo error, obtengo el mensaje y tiro la excepción
-					if (result.isError()) {
-						throw new InsufficientCreditException(result.getMsg());
-					}
-					currentAccountSalesConditions.put(paymentRule, BigDecimal.ZERO);
-				}
-				// Convierto el monto del pago a partir de su moneda
-				convertedPayAmt = MConversionRate.convertBase(getCtx(), pay
-						.getAmount(), pay.getCurrencyId(), order.getDate(), 0, Env
-						.getAD_Client_ID(getCtx()), Env.getAD_Org_ID(getCtx()));
-				pays.put(paymentRule, convertedPayAmt);
-				// Si existe el payment rule significa que se agregó porque es
-				// paymentrule de cuenta corriente, entonces actualizar su monto
-				if(currentAccountSalesConditions.get(paymentRule) != null){
-					currentAccountSalesConditions.put(paymentRule, convertedPayAmt);
-				}
+		if(MBPartner.PAYMENTRULE_OnCredit.equals(order.getPaymentRule())){
+			MBPartner bp = new MBPartner(getCtx(), order.getBusinessPartner().getId(), getTrxName());
+			MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), getTrxName());
+			// Obtengo el manager actual
+			CurrentAccountManager manager = CurrentAccountManagerFactory
+					.getManager(true);
+			// Seteo el estado actual del cliente y lo obtengo
+			CallResult result = manager.setCurrentAccountStatus(getCtx(), bp, org,
+					null);
+			// Si hubo error, obtengo el mensaje y tiro la excepción
+			if (result.isError()) {
+				throw new InsufficientCreditException(result.getMsg());
 			}
-		}		
-		// Verificar el crédito con la factura
-		result = manager.checkInvoicePaymentRulesBalance(getCtx(), bp, org,
-				pays, getTrxName());
-		// Si hubo error, obtengo el mensaje y tiro la excepción
-		if (result.isError()) {
-			throw new InsufficientCreditException(result.getMsg());
+			// Me guardo el estado de la entidad comercial
+			String creditStatus = (String)result.getResult(); 
+			// Determino los tipos de pago a verificar el estado de crédito
+			result = manager.getTenderTypesToControlStatus(getCtx(), org, bp,
+					getTrxName());
+			// Si hubo error, obtengo el mensaje y tiro la excepción
+			if (result.isError()) {
+				throw new Exception(result.getMsg());
+			}
+			// Me guardo la lista de tipos de pago a verificar
+			Set<String> tenderTypesAllowed = (Set<String>)result.getResult();
+			Map<String, BigDecimal> pays = new HashMap<String, BigDecimal>();
+			BigDecimal convertedPayAmt;
+			String paymentRule;
+			for (Payment pay : order.getPayments()) {
+				// Verificar por el manager de cuentas corrientes si debo verificar
+				// el estado de crédito en base a los tipos de pago obtenidos
+				paymentRule = CurrentAccountBalanceStrategy
+						.getPaymentRuleEquivalent(pay.getTenderType());
+				if(!Util.isEmpty(paymentRule, true)){
+					if (tenderTypesAllowed != null
+							&& tenderTypesAllowed.contains(pay.getTenderType())) {
+						shouldUpdateBPBalance = true;
+						// Verificar la situación de crédito de la entidad comercial
+						result = manager.validateCurrentAccountStatus(getCtx(), org, bp, 
+								creditStatus, getTrxName());
+						// Si hubo error, obtengo el mensaje y tiro la excepción
+						if (result.isError()) {
+							throw new InsufficientCreditException(result.getMsg());
+						}
+						currentAccountSalesConditions.put(paymentRule, BigDecimal.ZERO);
+					}
+					// Convierto el monto del pago a partir de su moneda
+					convertedPayAmt = MConversionRate.convertBase(getCtx(), pay
+							.getAmount(), pay.getCurrencyId(), order.getDate(), 0, Env
+							.getAD_Client_ID(getCtx()), Env.getAD_Org_ID(getCtx()));
+					pays.put(paymentRule, convertedPayAmt);
+					// Si existe el payment rule significa que se agregó porque es
+					// paymentrule de cuenta corriente, entonces actualizar su monto
+					if(currentAccountSalesConditions.get(paymentRule) != null){
+						currentAccountSalesConditions.put(paymentRule, convertedPayAmt);
+					}
+				}
+			}		
+			// Verificar el crédito con la factura
+			result = manager.checkInvoicePaymentRulesBalance(getCtx(), bp, org,
+					pays, getTrxName());
+			// Si hubo error, obtengo el mensaje y tiro la excepción
+			if (result.isError()) {
+				throw new InsufficientCreditException(result.getMsg());
+			}
 		}
 	}
 
@@ -1127,7 +1137,7 @@ public class PoSOnline extends PoSConnectionState {
 		MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), getTrxName());
 		// Obtengo el manager actual
 		CurrentAccountManager manager = CurrentAccountManagerFactory
-				.getManager();
+				.getManager(true);
 		// Realizo las tareas adicionales necesarias
 		// Factura
 		if(invoice != null){
@@ -1192,7 +1202,7 @@ public class PoSOnline extends PoSConnectionState {
 		MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), getTrxName());
 		// Obtengo el manager actual
 		CurrentAccountManager manager = CurrentAccountManagerFactory
-				.getManager();
+				.getManager(true);
 		// Actualizo el crédito
 		CallResult result = new CallResult();
 		try{
@@ -1249,6 +1259,8 @@ public class PoSOnline extends PoSConnectionState {
 		mo.setNombreCli(order.getBusinessPartner().getCustomerName());
 		mo.setInvoice_Adress(order.getBusinessPartner().getCustomerAddress());
 		mo.setNroIdentificCliente(order.getBusinessPartner().getCustomerIdentification());
+		
+		mo.setPaymentRule(order.getPaymentRule());
 		
 		debug("Guardando el Pedido (Encabezado, sin líneas aún)");
 		throwIfFalse(mo.save(), mo);
@@ -1417,12 +1429,7 @@ public class PoSOnline extends PoSConnectionState {
 			inv.setC_POSPaymentMedium_Credit_ID(order.getCreditPOSPaymentMediumID());
 		}
 		
-		if(Util.isEmpty(sumaCreditPayments, true)){
-			inv.setPaymentRule(MInvoice.PAYMENTRULE_Cash);
-		}
-		else{
-			inv.setPaymentRule(MInvoice.PAYMENTRULE_OnCredit);
-		}
+		inv.setPaymentRule(order.getPaymentRule());
 		
 		throwIfFalse(inv.save(), inv, InvoiceCreateException.class);
 		
@@ -1758,10 +1765,10 @@ public class PoSOnline extends PoSConnectionState {
 	 * @throws PosException
 	 */
 	private MAllocationLine createOxpMAllocationLine(Integer debitInvoiceID, Payment p, MPayment pay, MCashLine cashLine, Integer creditInvoiceID) throws PosException {
-		return createOxpMAllocationLine(debitInvoiceID, p, pay, cashLine, creditInvoiceID, null);
+		return createOxpMAllocationLine(debitInvoiceID, p, pay, cashLine, creditInvoiceID, null, false);
 	}
 	
-	private MAllocationLine createOxpMAllocationLine(Integer debitInvoiceID, Payment p, MPayment pay, MCashLine cashLine, Integer creditInvoiceID, BigDecimal amount) throws PosException {
+	private MAllocationLine createOxpMAllocationLine(Integer debitInvoiceID, Payment p, MPayment pay, MCashLine cashLine, Integer creditInvoiceID, BigDecimal amount, boolean isReturn) throws PosException {
 		BigDecimal allocLineAmt = currencyConvert(amount == null ? p
 				.getAmount().abs() : amount.abs(), p.getCurrencyId(),
 				allocHdr.getC_Currency_ID());
@@ -1774,7 +1781,8 @@ public class PoSOnline extends PoSConnectionState {
 		}
 		
 		// Si el monto de la línea del allocation es distinto al total del payment, entonces va a writeoff
-		if((allocLineAmt.add(changeAmt)).compareTo(p.getConvertedAmount()) != 0){
+		if (!isReturn && p.getCurrencyId() != allocHdr.getC_Currency_ID()
+				&& (allocLineAmt.add(changeAmt)).compareTo(p.getConvertedAmount()) != 0) {
 			writeOffAmt = writeOffAmt.add(p.getConvertedAmount().subtract((allocLineAmt.add(changeAmt))));
 		}
 		
@@ -1992,7 +2000,7 @@ public class PoSOnline extends PoSConnectionState {
 		creditCardRetirementInvoice.setNombreCli(order.getBusinessPartner().getCustomerName());
 		creditCardRetirementInvoice.setInvoice_Adress(order.getBusinessPartner().getCustomerAddress());
 		creditCardRetirementInvoice.setNroIdentificCliente(order.getBusinessPartner().getCustomerIdentification());
-		creditCardRetirementInvoice.setPaymentRule(MInvoice.PAYMENTRULE_CreditCard);
+		creditCardRetirementInvoice.setPaymentRule(invoice.getPaymentRule());
 		// Tipo de documento de retiro de efectivo de tarjeta de crédito de la
 		// config del tpv
 		creditCardRetirementInvoice.setC_DocTypeTarget_ID(getPoSCOnfig()
@@ -2039,7 +2047,7 @@ public class PoSOnline extends PoSConnectionState {
 				creditCardRetirementInvoice, InvoiceCreateException.class);
 		// Creo la línea del allocation
 		createOxpMAllocationLine(creditCardRetirementInvoice.getID(), p, pay,
-				null, null, p.getChangeAmt());
+				null, null, p.getChangeAmt(), true);
 		
 		// Crear la línea del efectivo para el retiro de la caja
 		CashPayment cashPayment = new CashPayment(p.getChangeAmt().negate());
@@ -2058,7 +2066,7 @@ public class PoSOnline extends PoSConnectionState {
 		cashLine.setC_Payment_ID(pay.getID());
 		throwIfFalse(cashLine.save(), cashLine);
 		// Agregar al allocation de manera unidireccional
-		createOxpMAllocationLine(0, cashPayment, null, cashLine, null);
+		createOxpMAllocationLine(0, cashPayment, null, cashLine, null, null, true);
 	}
 	
 	private void createOxpCreditPayment(CreditPayment p) throws PosException {
@@ -2095,7 +2103,7 @@ public class PoSOnline extends PoSConnectionState {
 			cashPayment.setAmount(p.getChangeAmt().negate());
 			cashPayment.setDescription(Msg.translate(getCtx(), "CNCashReturning"));
 			MCashLine cashLine = createOxpCashPayment(p.getInvoiceID(), cashPayment, false, false);
-			createOxpMAllocationLine(p.getInvoiceID(), cashPayment, null, cashLine, null);
+			createOxpMAllocationLine(p.getInvoiceID(), cashPayment, null, cashLine, null, null, true);
 		}
 	}
 

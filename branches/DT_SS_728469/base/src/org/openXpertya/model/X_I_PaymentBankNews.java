@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por I_PaymentBankNews
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-10-20 17:02:17.204 */
+ *  @version  - 2016-10-25 15:20:07.162 */
 public class X_I_PaymentBankNews extends org.openXpertya.model.PO
 {
 /** Constructor estándar */

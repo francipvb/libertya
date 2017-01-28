@@ -20,10 +20,10 @@ import org.openXpertya.util.Util;
 
 /**
  * Transferencia de Mercadería
+ * 
  * @author Franco Bonafine - Disytel
  */
 public class MTransfer extends X_M_Transfer implements DocAction {
-	private static final long serialVersionUID = 1L;
 
 	/** Cache de líneas de la transferencia */
 	private List<MTransferLine> lines = null;
@@ -147,38 +147,64 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 		// No es posible cambiar el almacén si existen líneas debido a que las
 		// mismas referencian ubicaciones del almacén previo.
 		if (isOutgoing() && is_ValueChanged("M_Warehouse_ID") && hasLines()) {
-			log.saveError("SaveError", Msg.translate(getCtx(), "CannotChangeWarehouse"));
+			log.saveError("SaveError",
+					Msg.translate(getCtx(), "CannotChangeWarehouse"));
 			return false;
 		}
 
-		// Para Transferencias entre Almacenes el almacén origen y destino deben ser
-		// diferentes. Para realizar movimientos de mercadería dentro de un almacén
+		// Para Transferencias entre Almacenes el almacén origen y destino deben
+		// ser
+		// diferentes. Para realizar movimientos de mercadería dentro de un
+		// almacén
 		// se utiliza la ventana de Movimiento de Inventario.
-		if (isWarehouseTransfer() && (getM_Warehouse_ID() == getM_WarehouseTo_ID())) {
-			log.saveError("SaveError", Msg.translate(getCtx(), "MaterialTransferUniqueWarehouseError"));
+		if (isWarehouseTransfer()
+				&& (getM_Warehouse_ID() == getM_WarehouseTo_ID())) {
+			log.saveError("SaveError", Msg.translate(getCtx(),
+					"MaterialTransferUniqueWarehouseError"));
 			return false;
 		}
 
-		// La fecha de vencimiento debe ser mayor o igual a la fecha de la transferencia
+		// La fecha de vencimiento debe ser mayor o igual a la fecha de la
+		// transferencia
 		if (getDueDate().compareTo(getDateTrx()) < 0) {
-			log.saveError("SaveError", Msg.translate(getCtx(), "InvalidDueDate"));
+			log.saveError("SaveError",
+					Msg.translate(getCtx(), "InvalidDueDate"));
 			return false;
 		}
 
-		// En Movimientos en dos Etapas el almacén origen y destino es el mismo siempre.
+		// En Movimientos en dos Etapas el almacén origen y destino es el mismo
+		// siempre.
 		if (isTwoPhaseMovement()) {
 			setM_WarehouseTo_ID(getM_Warehouse_ID());
 		}
+
+		// Esto se comenta ya que en un principio se pedía la validación, pero
+		// luego se decidió que no se implementa
+		// ------------------------------------------------------------------------
+		// // Verificar que no exista la misma cadena de guía de transporte, lo
+		// // cual no debe permitir guardar
+		// String docNo = getDocNoTransferByStrColumnCondition(getCtx(),
+		// "Transport_Guide", getTransport_Guide(), getID(), get_TrxName());
+		// if(docNo != null){
+		// log.saveError("", Msg.getMsg(getCtx(), "TransportGuideWarning",
+		// new Object[] { docNo }));
+		// return false;
+		// }
+		// ------------------------------------------------------------------------
 
 		return true;
 	}
 
 	@Override
 	protected boolean beforeDelete() {
-		// Las transferencias entrantes no se puede borrar debido a que se perdería
-		// la mercadería habiéndose ya realizado la salida de la misma desde el almacén origen.
+		// Las transferencias entrantes no se puede borrar debido a que se
+		// perdería
+		// la mercadería habiéndose ya realizado la salida de la misma desde el
+		// almacén
+		// origen.
 		if (isIncoming()) {
-			log.saveError("DeleteError", Msg.translate(getCtx(), "IncomingMaterialTransferDeleteNotAllowed"));
+			log.saveError("DeleteError", Msg.translate(getCtx(),
+					"IncomingMaterialTransferDeleteNotAllowed"));
 			return false;
 		}
 		return true;
@@ -237,12 +263,9 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 	 * @return Indica si esta transferencia contiene al menos una línea.
 	 */
 	public boolean hasLines() {
-		StringBuffer sql = new StringBuffer();
-		sql.append("SELECT COUNT(*) ");
-		sql.append("FROM M_TransferLine ");
-		sql.append("WHERE M_Transfer_ID = ?");
-
-		int linesCount = DB.getSQLValue(get_TrxName(), sql.toString(), getM_Transfer_ID());
+		int linesCount = DB.getSQLValue(get_TrxName(),
+				"SELECT COUNT(*) FROM M_TransferLine WHERE M_Transfer_ID = ?",
+				getM_Transfer_ID());
 		return linesCount > 0;
 	}
 
@@ -675,7 +698,8 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 	}
 
 	//
-	// Métodos de DocAction que no aplican para transferencias entre organizaciones
+	// Métodos de DocAction que no aplican para transferencias entre
+	// organizaciones
 	//
 
 	@Override
@@ -820,7 +844,8 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 							return false;
 						}
 						if (!incomingTransfer.save()) {
-							log.saveError("SaveError", Msg.translate(getCtx(), "TransferVoidSaveError"));
+							log.saveError("SaveError", Msg.translate(getCtx(), "TransferVoidSaveError") + "."
+									+ CLogger.retrieveErrorAsString());
 							return false;
 						}
 					} catch (Exception e) {
@@ -838,29 +863,30 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 				return false;
 			}
 			if (!inventory.save()) {
-				log.saveError("SaveError", Msg.translate(getCtx(), "TransferVoidSaveError"));
+				log.saveError("SaveError", Msg.translate(getCtx(), "TransferVoidSaveError")+ "."
+						+ CLogger.retrieveErrorAsString());
 				return false;
 			}
 		}
 		return true;
 	}
 
-	@Override
 	public void setAD_Org_ID(int AD_Org_ID) {
 		super.setAD_Org_ID(AD_Org_ID);
-	}
+	} // setAD_Org_ID
 
 	/**
 	 * Descripción de Método
-	 * @param order
-	 * @param M_Warehouse_Origin_ID
-	 * @param M_Warehouse_Destination_ID
-	 * @param transferType
-	 * @param trxName
+	 * 
+	 * 
+	 * @param dt
+	 * @param movementDate
+	 * 
 	 * @return
-	 * @throws Exception
 	 */
-	public static MTransfer createTransfer(MOrder order, int M_Warehouse_Origin_ID, int M_Warehouse_Destination_ID, String transferType, String trxName) throws Exception {
+	public static MTransfer createTransfer(MOrder order,
+			int M_Warehouse_Origin_ID, int M_Warehouse_Destination_ID,
+			String transferType, String trxName) throws Exception {
 		MTransfer transfer = new MTransfer(order);
 
 		transfer.setDateTrx(Env.getDate());
@@ -877,7 +903,8 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 
 		if (transfer.getID() == 0) { // not saved yet
 			if (!transfer.save(trxName)) {
-				throw new Exception("Error creando cabecera de transferencia: " + CLogger.retrieveErrorAsString());
+				throw new Exception("Error creando cabecera de transferencia: "
+						+ CLogger.retrieveErrorAsString());
 			}
 		}
 
@@ -885,63 +912,70 @@ public class MTransfer extends X_M_Transfer implements DocAction {
 		return transfer;
 	}
 
-	/**
-	 * Descripción de Método
-	 * @param transfer
-	 * @param order
-	 * @param trxName
-	 * @throws Exception
-	 */
-	public static void addLines(MTransfer transfer, MOrder order, String trxName) throws Exception {
+	public static void addLines(MTransfer transfer, MOrder order,
+			String trxName) throws Exception {
 		MOrderLine[] oLines = order.getLines(true, null);
 		for (int i = 0; i < oLines.length; i++) {
 			MOrderLine oLine = oLines[i];
 			MTransferLine tLine = new MTransferLine(transfer);
 
 			// Qty = Ordered - Delivered
-			BigDecimal MovementQty = oLine.getQtyOrdered().subtract(oLine.getQtyDelivered());
+			BigDecimal MovementQty = oLine.getQtyOrdered().subtract(
+					oLine.getQtyDelivered());
 
-			if (MovementQty.signum() > 0) {
+			if(MovementQty.signum() > 0){
 				// Location Origin
-				int M_Locator_Origin_ID = MStorage.getM_Locator_ID(transfer.getM_Warehouse_ID(), oLine.getM_Product_ID(), oLine.getM_AttributeSetInstance_ID(), MovementQty, trxName);
-				// Get default Location
-				if (M_Locator_Origin_ID == 0) {
-					MWarehouse wh = MWarehouse.get(order.getCtx(), transfer.getM_Warehouse_ID());
+				int M_Locator_Origin_ID = MStorage.getM_Locator_ID(
+						transfer.getM_Warehouse_ID(), oLine.getM_Product_ID(),
+						oLine.getM_AttributeSetInstance_ID(), MovementQty, trxName);
+				if (M_Locator_Origin_ID == 0) { // Get default Location
+					MWarehouse wh = MWarehouse.get(order.getCtx(),
+							transfer.getM_Warehouse_ID());
 					M_Locator_Origin_ID = wh.getDefaultLocator().getM_Locator_ID();
 				}
+	
 				// Location Destination
-				MWarehouse wh = MWarehouse.get(order.getCtx(), transfer.getM_WarehouseTo_ID());
-				int M_Locator_Destination_ID = wh.getDefaultLocator().getM_Locator_ID();
-
-				tLine.setOrderLine(oLine, M_Locator_Origin_ID, M_Locator_Destination_ID, MovementQty);
+				MWarehouse wh = MWarehouse.get(order.getCtx(),
+						transfer.getM_WarehouseTo_ID());
+				int M_Locator_Destination_ID = wh.getDefaultLocator()
+						.getM_Locator_ID();
+	
+				tLine.setOrderLine(oLine, M_Locator_Origin_ID,
+						M_Locator_Destination_ID, MovementQty);
 				tLine.setQty(MovementQty);
-
-				if (!tLine.save(trxName)) {
-					throw new Exception("Error creando linea de transferencia: " + CLogger.retrieveErrorAsString());
-				}
+	
+				if (!tLine.save(trxName))
+					throw new Exception("Error creando linea de transferencia: "
+							+ CLogger.retrieveErrorAsString());
 			}
 		}
 
 	}
 
 	/**
-	 * Constructor de la clase
+	 * Constructor de la clase ...
+	 * 
+	 * 
 	 * @param order
+	 * @param C_DocTypeShipment_ID
+	 * @param movementDate
 	 */
+
 	public MTransfer(MOrder order) {
 		this(order.getCtx(), 0, order.get_TrxName());
-	}
+	} // MTransfer
+	
+	@Override 
+	public void setProcessed( boolean processed ) {
+        super.setProcessed( processed );
 
-	@Override
-	public void setProcessed(boolean processed) {
-		super.setProcessed(processed);
+        if( getID() == 0 ) {
+            return;
+        }
 
-		if (getID() == 0) {
-			return;
-		}
-
-		String set = "SET Processed = '" + (processed ? "Y" : "N") + "' WHERE M_Transfer_ID = " + getID();
-		DB.executeUpdate("UPDATE M_TransferLine " + set, get_TrxName());
-	}
-
+        String set = "SET Processed='" + ( processed
+                                           ?"Y"
+                                           :"N" ) + "' WHERE M_Transfer_ID=" + getID();
+        DB.executeUpdate( "UPDATE M_TransferLine " + set,get_TrxName());
+    }    // setProcessed
 }

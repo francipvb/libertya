@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_PerceptionsSettlement
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-11-18 10:23:42.212 */
+ *  @version  - 2016-11-30 14:28:52.947 */
 public class X_C_PerceptionsSettlement extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -18,6 +18,7 @@ super (ctx, C_PerceptionsSettlement_ID, trxName);
 {
 setC_CreditCardSettlement_ID (0);
 setC_PerceptionsSettlement_ID (0);
+setC_TaxCategory_ID (0);
 setInternalNo (null);
 }
  */
@@ -85,6 +86,20 @@ Integer ii = (Integer)get_Value("C_PerceptionsSettlement_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
+/** Set Tax Category.
+Tax Category */
+public void setC_TaxCategory_ID (int C_TaxCategory_ID)
+{
+set_Value ("C_TaxCategory_ID", new Integer(C_TaxCategory_ID));
+}
+/** Get Tax Category.
+Tax Category */
+public int getC_TaxCategory_ID() 
+{
+Integer ii = (Integer)get_Value("C_TaxCategory_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
 /** Set Internal Number */
 public void setInternalNo (String InternalNo)
 {
@@ -100,20 +115,5 @@ set_Value ("InternalNo", InternalNo);
 public String getInternalNo() 
 {
 return (String)get_Value("InternalNo");
-}
-/** Set Perception Type */
-public void setPerceptionType (String PerceptionType)
-{
-if (PerceptionType != null && PerceptionType.length() > 1)
-{
-log.warning("Length > 1 - truncated");
-PerceptionType = PerceptionType.substring(0,1);
-}
-set_Value ("PerceptionType", PerceptionType);
-}
-/** Get Perception Type */
-public String getPerceptionType() 
-{
-return (String)get_Value("PerceptionType");
 }
 }

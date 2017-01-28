@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_BankList_Config
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-09-28 11:13:13.418 */
+ *  @version  - 2016-10-24 20:11:57.664 */
 public class X_C_BankList_Config extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -16,6 +16,7 @@ public X_C_BankList_Config (Properties ctx, int C_BankList_Config_ID, String trx
 super (ctx, C_BankList_Config_ID, trxName);
 /** if (C_BankList_Config_ID == 0)
 {
+setC_BankAccount_ID (0);
 setC_Bank_ID (0);
 setC_BankList_Config_ID (0);
 setC_DocType_ID (0);
@@ -47,6 +48,20 @@ public String toString()
 {
 StringBuffer sb = new StringBuffer ("X_C_BankList_Config[").append(getID()).append("]");
 return sb.toString();
+}
+/** Set Bank Account.
+Account at the Bank */
+public void setC_BankAccount_ID (int C_BankAccount_ID)
+{
+set_Value ("C_BankAccount_ID", new Integer(C_BankAccount_ID));
+}
+/** Get Bank Account.
+Account at the Bank */
+public int getC_BankAccount_ID() 
+{
+Integer ii = (Integer)get_Value("C_BankAccount_ID");
+if (ii == null) return 0;
+return ii.intValue();
 }
 /** Set Bank.
 Bank */

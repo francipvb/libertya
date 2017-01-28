@@ -1,19 +1,28 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por AD_ImpFormat
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2016-10-12 10:07:45.553 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2016-10-25 15:17:08.523 */
 public class X_AD_ImpFormat extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_AD_ImpFormat (Properties ctx, int AD_ImpFormat_ID, String trxName)
 {
 super (ctx, AD_ImpFormat_ID, trxName);
+/** if (AD_ImpFormat_ID == 0)
+{
+setAD_ImpFormat_ID (0);
+setAD_Table_ID (0);
+setFormatType (null);
+setName (null);
+setProcessing (false);
+}
+ */
 }
 /** Load Constructor */
 public X_AD_ImpFormat (Properties ctx, ResultSet rs, String trxName)
@@ -157,9 +166,9 @@ public static final String FORMATTYPE_XML = "X";
 Format of the data */
 public void setFormatType (String FormatType)
 {
-if (FormatType == null) throw new IllegalArgumentException ("FormatType is mandatory");
 if (FormatType.equals("F") || FormatType.equals("C") || FormatType.equals("T") || FormatType.equals("X"));
  else throw new IllegalArgumentException ("FormatType Invalid value - Reference = FORMATTYPE_AD_Reference_ID - F - C - T - X");
+if (FormatType == null) throw new IllegalArgumentException ("FormatType is mandatory");
 if (FormatType.length() > 1)
 {
 log.warning("Length > 1 - truncated");

@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por AD_ImpFormat_Row
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-10-20 17:02:08.197 */
+ *  @version  - 2016-10-25 15:17:08.978 */
 public class X_AD_ImpFormat_Row extends org.openXpertya.model.PO
 {
 /** Constructor estándar */

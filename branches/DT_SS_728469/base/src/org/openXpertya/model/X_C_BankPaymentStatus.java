@@ -1,20 +1,26 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_BankPaymentStatus
- *  @author Comunidad de Desarrollo Libertya
-Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2016-10-13 16:34:18.1 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2016-10-25 15:18:16.218 */
 public class X_C_BankPaymentStatus extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_BankPaymentStatus (Properties ctx, int C_BankPaymentStatus_ID, String trxName)
 {
 super (ctx, C_BankPaymentStatus_ID, trxName);
+/** if (C_BankPaymentStatus_ID == 0)
+{
+setC_BankPaymentStatus_ID (0);
+setName (null);
+setValue (null);
+}
+ */
 }
 /** Load Constructor */
 public X_C_BankPaymentStatus (Properties ctx, ResultSet rs, String trxName)

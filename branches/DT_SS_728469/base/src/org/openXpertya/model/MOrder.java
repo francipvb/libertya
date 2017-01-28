@@ -41,6 +41,7 @@ import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.HTMLMsg;
+import org.openXpertya.util.HTMLMsg.HTMLList;
 import org.openXpertya.util.MProductCache;
 import org.openXpertya.util.Msg;
 import org.openXpertya.util.StringUtil;
@@ -1524,6 +1525,18 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
 				calculateTaxTotal();
 			}
 		}
+		
+		//Se determina la cadena de autorización para el pedido de proveedor
+		if (!isSOTrx())
+			setM_AuthorizationChain_ID(DB.getSQLValue(get_TrxName(), 
+					"SELECT audt.M_AuthorizationChain_ID FROM M_AuthorizationChainDocumentType audt "
+					+ " INNER JOIN M_AuthorizationChain au ON au.M_AuthorizationChain_ID = audt.M_AuthorizationChain_ID "
+					+ " WHERE audt.C_DocType_ID = ? "
+					+ ((getAD_Org_ID() != 0)? " AND (audt.AD_Org_ID = " + getAD_Org_ID() + " OR audt.AD_Org_ID = 0) " : "" ) 
+					+ " AND au.isActive = 'Y' "
+					+ " ORDER BY audt.AD_Org_ID desc LIMIT 1 ", 
+					((getC_DocTypeTarget_ID()!=0)?getC_DocTypeTarget_ID():getC_DocType_ID()), 
+					false));
 
         return true;
     }    // beforeSave
@@ -2009,6 +2022,27 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
 
         explodeBOM();
 
+        
+        // Controlar las cantidades minimas pedidas
+        if (!isSOTrx()
+				&& dt.getDocTypeKey()
+						.equals(MDocType.DOCTYPE_PurchaseOrder)) {
+        	CallResult result = controlOrderMinPack();
+        	if(result.isError()){
+        		m_processMsg = result.getMsg();
+                return DocAction.STATUS_Invalid;
+        	}
+        }
+        
+        // Si el tipo de documento está marcado que sólo permita artículos del proveedor
+        if(dt.isOnlyVendorProducts()){
+        	CallResult result = controlVendorProducts();
+        	if(result.isError()){
+        		setProcessMsg(result.getMsg());
+        		return DocAction.STATUS_Invalid; 
+        	}
+        }
+        
         // instanciar recien ahora las lineas
         /*
         int[] lines = PO.getAllIDs("C_OrderLine", "C_Order_ID = " + getC_Order_ID() , get_TrxName() );
@@ -2018,6 +2052,24 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
             return DocAction.STATUS_Invalid;
         }
         */
+        
+        // Validación de productos "Comprados" en las líneas del pedido si el documento
+        // es un pedido a proveedor.
+        if (dt.isDocType(MDocType.DOCTYPE_PurchaseOrder)) {
+        	List<String> notPurchasedProducts = getNotPurchasedProducts();
+        	if (!notPurchasedProducts.isEmpty()) {
+        		m_processMsg = "@NotPurchasedProductsError@ " + notPurchasedProducts.toString();
+        		return DocAction.STATUS_Invalid;
+        	}
+        	
+        	// Monto mínimo de compra
+        	if(getGrandTotal().compareTo(bpartner.getMinimumPurchasedAmt()) < 0){
+				m_processMsg = Msg.getMsg(getCtx(),
+						"GrandTotalNotSurpassMinimumPurchaseAmt",
+						new Object[] { bpartner.getMinimumPurchasedAmt() });
+        		return DocAction.STATUS_Invalid;
+        	}
+        }
         
         //Ader, Mejora II: reservación de stock mejorada
 		boolean isOrderTransferable = dt.getDocTypeKey().equalsIgnoreCase(
@@ -2035,24 +2087,6 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
             m_processMsg = "@TaxCalculatingError@";
 
             return DocAction.STATUS_Invalid;
-        }
-
-        // Validación de productos "Comprados" en las líneas del pedido si el documento
-        // es un pedido a proveedor.
-        if (dt.isDocType(MDocType.DOCTYPE_PurchaseOrder)) {
-        	List<String> notPurchasedProducts = getNotPurchasedProducts();
-        	if (!notPurchasedProducts.isEmpty()) {
-        		m_processMsg = "@NotPurchasedProductsError@ " + notPurchasedProducts.toString();
-        		return DocAction.STATUS_Invalid;
-        	}
-        	
-        	// Monto mínimo de compra
-        	if(getGrandTotal().compareTo(bpartner.getMinimumPurchasedAmt()) < 0){
-				m_processMsg = Msg.getMsg(getCtx(),
-						"GrandTotalNotSurpassMinimumPurchaseAmt",
-						new Object[] { bpartner.getMinimumPurchasedAmt() });
-        		return DocAction.STATUS_Invalid;
-        	}
         }
         
         m_justPrepared = true;
@@ -3310,7 +3344,7 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
 				if (authorizationChainManager
 						.loadAuthorizationChain(reactiveOrder())) {
 					m_processMsg = Msg.getMsg(getCtx(), "ExistsAuthorizationChainLink");
-					this.setProcessed(true);
+					//this.setProcessed(true);
 					return DOCSTATUS_WaitingConfirmation;
 				}
 			} catch (Exception e) {
@@ -3331,26 +3365,6 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
         
         for( int lineIndex = 0;lineIndex < lines.length;lineIndex++ ) {
             MOrderLine sLine   = lines[ lineIndex ];
-            
-			// Si es pedido de compra, entonces la cantidad no puede ser menor a
-			// la mínima de compra
-			if (!isSOTrx()
-					&& dt.getDocTypeKey()
-							.equals(MDocType.DOCTYPE_PurchaseOrder)) {
-				MProductPO po = MProductPO.get(getCtx(),
-						sLine.getM_Product_ID(), sLine.getC_BPartner_ID(),
-						get_TrxName());
-				if (po != null
-						&& sLine.getQtyEntered().compareTo(po.getOrder_Min()) < 0) {
-					MProduct prod = MProduct.get(getCtx(), sLine.getM_Product_ID());
-					m_processMsg = Msg.getMsg(
-							getCtx(),
-							"QtyEnteredLessThanOrderMinQty",
-							new Object[] { prod.getValue(), prod.getName(),
-									po.getOrder_Min(), sLine.getQtyEntered() });
-	            	return DocAction.STATUS_Invalid;
-            	}
-            }
 			
             // La cantidad pedida no puede ser menor a la cantidad entregada + la
     		// cantidad transferida
@@ -4953,6 +4967,94 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
 		return MOrder.this.getC_DocTypeTarget_ID();
 	}
 
+	/**
+	 * Control realizado en las líneas contra las cantidades mínimas pedidas
+	 * configuradas en el proveedor
+	 * 
+	 * @return
+	 */
+	private CallResult controlOrderMinPack(){
+		CallResult result = new CallResult();
+		String sql = "select ol.line, p.value, p.name, ol.qtyentered, po.order_min, po.order_pack "
+					+ "from c_orderline as ol "
+					+ "inner join m_product_po as po on (po.m_product_id = ol.m_product_id and ol.c_bpartner_id = po.c_bpartner_id and po.isactive = 'Y') "
+					+ "inner join m_product as p on p.m_product_id = ol.m_product_id "
+					+ "where ol.c_order_id = ? and (ol.qtyentered < po.order_min OR (ol.qtyentered % po.order_pack) <> 0)"
+					+ "order by ol.line";
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		try {
+			ps = DB.prepareStatement(sql, get_TrxName());
+			ps.setInt(1, getID());
+			rs = ps.executeQuery();
+			if(rs.next()){
+				String columnNameOrder, msg;
+				if(rs.getBigDecimal("qtyentered").compareTo(rs.getBigDecimal("order_min")) < 0){
+					msg = "QtyEnteredLessThanOrderMinQty";
+					columnNameOrder = "order_min";
+				}
+				else{
+					msg = "QtyEnteredMustBeMultipleOfOrderPack";
+					columnNameOrder = "order_pack";
+				}
+				result.setMsg(Msg.getMsg(getCtx(), msg, new Object[] { rs.getString("value"), rs.getString("name"),
+						rs.getBigDecimal(columnNameOrder), rs.getBigDecimal("qtyentered") }), true);
+			}
+		} catch (Exception e) {
+			result.setMsg(e.getMessage(), true);
+		} finally{
+			try {
+				if(rs != null) rs.close();
+				if(ps != null) ps.close();
+			} catch (Exception e2) {
+				result.setMsg(e2.getMessage(), true);
+			}
+		}
+		return result;
+	}
+	
+	/**
+	 * Realiza el control de los artículos del proveedor
+	 * @return resultado
+	 */
+	private CallResult controlVendorProducts(){
+		String sqlVendor = "select ol.m_product_id, p.value, p.name "
+				+ "from c_orderline ol "
+				+ "inner join m_product p on p.m_product_id = ol.m_product_id "
+				+ "left join (select m_product_id "
+				+ "				from m_product_po "
+				+ "				where c_bpartner_id = ? and isactive = 'Y') po on ol.m_product_id = po.m_product_id "
+				+ "where ol.c_order_id = ? and po.m_product_id is null";
+    	PreparedStatement ps = null; 
+    	ResultSet rs = null;
+    	CallResult result = new CallResult();
+    	try {
+    		ps = DB.prepareStatement(sqlVendor, get_TrxName());
+    		ps.setInt(1, getC_BPartner_ID());
+        	ps.setInt(2, getID());
+        	rs = ps.executeQuery();
+        	HTMLMsg msg = new HTMLMsg();
+			HTMLList list = msg.createList("onlyvendorproducts", "ul", Msg.getMsg(getCtx(), "OnlyVendorProducts"));
+        	while(rs.next()){
+				msg.createAndAddListElement(rs.getString("value"),
+						rs.getString("value") + " - " + rs.getString("name"), list);
+				result.setError(true);
+        	}
+        	msg.addList(list);
+        	result.setMsg(msg.toString());
+		} catch (Exception e) {
+			result.setMsg(e.getMessage(), true);
+		} finally {
+			try {
+				if(rs != null)rs.close();
+				if(ps != null)ps.close();
+			} catch (Exception e2) {
+				result.setMsg(e2.getMessage(), true);
+			}
+		}
+    	return result;
+	}
+	
 }    // MOrder
 
 

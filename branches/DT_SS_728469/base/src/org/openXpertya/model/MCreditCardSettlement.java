@@ -21,7 +21,6 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 	private static final long serialVersionUID = 1L;
 
 	private boolean m_justPrepared = false;
-
 	/**
 	 * Load contructor.
 	 * @param ctx
@@ -130,9 +129,7 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 		if (!DOCACTION_Complete.equals(getDocAction())) {
 			setDocAction(DOCACTION_Complete);
 		}
-
 		return DocAction.STATUS_InProgress;
-
 	}
 
 	@Override
@@ -200,7 +197,6 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 		setPayment("Nro Transf.: " + documentNo + " - Importe: " + currencySymbol + " " + amount +
 				" - F.Emisión: " + dateTrx + " - F.Contable: " + dateAcct);
 	}
-
 	@Override
 	public String completeIt() {
 		// Re-Check
@@ -273,10 +269,8 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 			setDocAction(DOCACTION_Complete);
 			return DocAction.STATUS_Drafted;
 		}
-
 		setProcessed(true);
 		setDocAction(DOCACTION_Close);
-
 		return DocAction.STATUS_Completed;
 	}
 

@@ -252,7 +252,12 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		to.set_ValueNoCheck("DocumentNo", null);
 		to.setIsCopy(true);
 
-		//
+		/*
+		* Ponger en null el cae y el vto cae del documento copiado para evitar errores
+		* en la emisión de facturas electrónicas por verificaciones en el cae
+		*/
+		to.setcae(null);
+		to.setvtocae(null);
 
 		to.setDocStatus(DOCSTATUS_Drafted); // Draft
 		to.setDocAction(DOCACTION_Complete);
@@ -2293,7 +2298,26 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 			setDateInvoiced(new Timestamp(
 					dateInvoicedCalendar.getTimeInMillis()));
 		}
-
+		
+		// Compras
+		if (!isSOTrx()){
+			//Se determina la cadena de autorización para la factura de proveedor
+			setM_AuthorizationChain_ID(DB.getSQLValue(get_TrxName(), 
+					"SELECT audt.M_AuthorizationChain_ID FROM M_AuthorizationChainDocumentType audt "
+					+ " INNER JOIN M_AuthorizationChain au ON au.M_AuthorizationChain_ID = audt.M_AuthorizationChain_ID "
+					+ " WHERE audt.C_DocType_ID = ? "
+					+ ((getAD_Org_ID() != 0)? " AND (audt.AD_Org_ID = " + getAD_Org_ID() + " OR audt.AD_Org_ID = 0) " : "" ) 
+					+ " AND au.isActive = 'Y' "
+					+ " ORDER BY audt.AD_Org_ID desc LIMIT 1 ", 
+					((getC_DocTypeTarget_ID()!=0)?getC_DocTypeTarget_ID():getC_DocType_ID()), 
+					false));
+			// Se verifica si está repetido el comprobante para compras
+			if(isRepeatInvoice(newRecord)){
+				log.saveError("RepeatInvoice", getRepeatInvoiceMsg());
+				return false;
+			}
+		}
+		
 		return true;
 	} // beforeSave
 
@@ -2459,6 +2483,24 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 	 * @return true si existe una factura con los mismos datos, false cc
 	 */
 	private boolean isRepeatInvoice() {
+		return isRepeatInvoice(false);
+	}
+
+	/**
+	 * Verifica si la factura se encuentra registrada en el sistema, lo que
+	 * provoca facturas repetidas. El criterio para verificar unicidad se
+	 * realiza en base a los siguientes campos:
+	 * <ul>
+	 * <li>CUIT del bpartner relacionado con la factura</li>
+	 * <li>Punto de Venta</li>
+	 * <li>Número de Factura</li>
+	 * <li>Letra de la factura</li>
+	 * </ul>
+	 * 
+	 * @param newRecord registro nuevo
+	 * @return true si existe una factura con los mismos datos, false cc
+	 */
+	private boolean isRepeatInvoice(boolean newRecord) {
 		/*
 		 * Si la factura posee monto negativo -> es una contrafactura por
 		 * anulación. Permitir repetido
@@ -2492,8 +2534,9 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		
 		// Condiciones comunes entre issotrx=Y y issotrx=N
 		StringBuffer whereClause = new StringBuffer();
-		whereClause
-				.append("(c_invoice_id != ?) AND (issotrx = ?) AND (documentno = ?) AND (c_doctypetarget_id = ?) ");
+		String invoiceIDWC = newRecord?"":" AND (c_invoice_id <> ?) ";
+		whereClause.append(" (issotrx = ?) AND (documentno = ?) AND (c_doctypetarget_id = ?) ");
+		whereClause.append(invoiceIDWC);
 		// Con el tema de nros de documento manuales en realidad un documento
 		// anulado impreso fiscalmente existe físicamente por lo tanto también
 		// se debe tener en cuenta en la validación
@@ -2504,10 +2547,12 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 			whereClause.append(" AND docStatus in ('CO', 'CL') ");
 		}
 		List<Object> whereParams = new ArrayList<Object>();
-		whereParams.add(getID());
 		whereParams.add(isSOTrx() ? "Y" : "N");
 		whereParams.add(getDocumentNo());
 		whereParams.add(getC_DocTypeTarget_ID());
+		if(!newRecord){
+			whereParams.add(getID());
+		}
 		if (!isSOTrx()) {
 			// Si locale_ar, entonces validamos por cuit
 			if (CalloutInvoiceExt.ComprobantesFiscalesActivos()) {
@@ -2534,7 +2579,25 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		// true si existe una factura
 		return res != null;
 	}
-
+	
+	protected String getRepeatInvoiceMsg(){
+		StringBuffer msgParams = new StringBuffer(" \n\n ");
+		msgParams.append(" " + Msg.translate(getCtx(), "DocumentNo") + " ")
+				.append("\n");
+		msgParams.append(" " + Msg.translate(getCtx(), "C_DocType_ID")
+				+ " ");
+		if (!isSOTrx()) {
+			if (CalloutInvoiceExt.ComprobantesFiscalesActivos()) {
+				msgParams.append("\n").append(" CUIT ");
+			} else {
+				msgParams.append("\n").append(
+						" " + Msg.translate(getCtx(), "C_BPartner_ID")
+								+ " ");
+			}
+		}
+		return msgParams.toString();
+	}
+	
 	/**
 	 * Descripción de Método
 	 * 
@@ -3088,7 +3151,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 				&& getPaymentRule().equals(MInvoice.PAYMENTRULE_OnCredit)) {
 			// Obtengo el manager actual
 			CurrentAccountManager manager = CurrentAccountManagerFactory
-					.getManager();
+					.getManager(isSOTrx());
 			// Seteo el estado actual del cliente y lo obtengo
 			CallResult result = new CallResult();
 			try {
@@ -3203,21 +3266,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 
 		// Verificar factura repetida
 		if (isRepeatInvoice()) {
-			StringBuffer msgParams = new StringBuffer(" \n\n ");
-			msgParams.append(" " + Msg.translate(getCtx(), "DocumentNo") + " ")
-					.append("\n");
-			msgParams.append(" " + Msg.translate(getCtx(), "C_DocType_ID")
-					+ " ");
-			if (!isSOTrx()) {
-				if (CalloutInvoiceExt.ComprobantesFiscalesActivos()) {
-					msgParams.append("\n").append(" CUIT ");
-				} else {
-					msgParams.append("\n").append(
-							" " + Msg.translate(getCtx(), "C_BPartner_ID")
-									+ " ");
-				}
-			}
-			m_processMsg = "@RepeatInvoice@" + msgParams.toString();
+			m_processMsg = "@RepeatInvoice@" + getRepeatInvoiceMsg();
 			return DocAction.STATUS_Invalid;
 		}
 
@@ -3541,7 +3590,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 						get_TrxName());
 				// Obtengo el manager actual
 				CurrentAccountManager manager = CurrentAccountManagerFactory
-						.getManager();
+						.getManager(isSOTrx());
 				// Actualizo el balance
 				CallResult result = new CallResult();
 				try {
@@ -3607,7 +3656,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 				if (authorizationChainManager
 						.loadAuthorizationChain(reactiveInvoice())) {
 					m_processMsg = Msg.getMsg(getCtx(), "ExistsAuthorizationChainLink");
-					this.setProcessed(true);
+					//this.setProcessed(true);
 					return DOCSTATUS_WaitingConfirmation;
 				}
 			} catch (Exception e) {
@@ -3896,7 +3945,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 				&& getPaymentRule().equals(PAYMENTRULE_OnCredit)) {
 			// Obtengo el manager actual
 			CurrentAccountManager manager = CurrentAccountManagerFactory
-					.getManager();
+					.getManager(isSOTrx());
 			// Verificar el crédito con la factura y pedido asociado
 			CallResult result = new CallResult();
 			try {
@@ -4212,7 +4261,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		}
 
 		// Caja Diaria. Intenta registrar la factura
-		if (getC_POSJournal_ID() == 0 && !MPOSJournal.registerDocument(this)) {
+		if (getC_POSJournal_ID() == 0 && !MPOSJournal.registerDocument(this, true, isSOTrx())) {
 			m_processMsg = MPOSJournal.DOCUMENT_COMPLETE_ERROR_MSG;
 			return STATUS_Invalid;
 		}
@@ -4238,7 +4287,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		// Obtengo el manager actual
 		if (isUpdateBPBalance()) {
 			CurrentAccountManager manager = CurrentAccountManagerFactory
-					.getManager();
+					.getManager(isSOTrx());
 			// Actualizo el balance
 			CallResult result = new CallResult();
 			try {
@@ -4870,7 +4919,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 			MBPartner bp = new MBPartner(getCtx(), getC_BPartner_ID(),
 					get_TrxName());
 			CurrentAccountManager manager = CurrentAccountManagerFactory
-					.getManager();
+					.getManager(isSOTrx());
 			// Actualizo el balance
 			CallResult result = new CallResult();
 			try {

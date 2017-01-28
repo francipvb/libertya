@@ -17,7 +17,6 @@ public class ExportBankListProcess extends AbstractSvrProcess {
 			exporter = new ExportRetentionsPatagonia(getCtx(), bankList, get_TrxName());
 			exporter.export();
 			exporter = new ExportListaPatagonia(getCtx(), bankList, get_TrxName());
-
 		}
 		return exporter.export();
 	}

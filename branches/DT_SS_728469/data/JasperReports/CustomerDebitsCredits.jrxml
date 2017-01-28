@@ -31,7 +31,7 @@
 	<queryString><![CDATA[select o.ad_org_id,
 	org_value,
 	org_name,
-	dateinvoiced, 
+	dateacct, 
 	bpg.c_bp_group_id, 
 	bpg.group_value,
 	bpg.group_name,
@@ -50,7 +50,7 @@ from (select ad_org_id,
 	from c_bp_group as bpg
 	inner join c_bpartner as bp ON bp.c_bp_group_id = bpg.c_bp_group_id
 	where bp.iscustomer = 'Y' and bpg.ad_client_id = $P{AD_CLIENT_ID} and ($P{C_BP_Group_ID} is null OR $P{C_BP_Group_ID} = 0 OR $P{C_BP_Group_ID} = bpg.c_bp_group_id)) as bpg,
-	(select dateinvoiced::date as dateinvoiced, 
+	(select dateacct::date as dateacct, 
 		bpg.c_bp_group_id, 
 		coalesce(sum(CASE WHEN doctypekey ILIKE 'CI%' AND docbasetype = 'ARI' THEN id.grandtotal ELSE 0 END),0) as fc,
 		coalesce(sum(CASE WHEN doctypekey ILIKE 'CD%' AND docbasetype = 'ARI' THEN id.grandtotal ELSE 0 END),0) as nd,
@@ -61,16 +61,16 @@ from (select ad_org_id,
 	where id.ad_org_id = $P{AD_Org_ID} 
 		AND id.issotrx = 'Y' 
 		AND id.docstatus IN ('CO','CL')
-		AND dateinvoiced::date >= $P{DateFrom}::date
-		AND dateinvoiced::date <= $P{DateTo}::date
+		AND dateacct::date >= $P{DateFrom}::date
+		AND dateacct::date <= $P{DateTo}::date
 		AND ($P{C_BP_Group_ID} is null OR $P{C_BP_Group_ID} = 0 OR $P{C_BP_Group_ID} = bpg.c_bp_group_id)
-	group by dateinvoiced::date, bpg.c_bp_group_id) as s 
-where dateinvoiced is not null
+	group by dateacct::date, bpg.c_bp_group_id) as s 
+where dateacct is not null
 union all
 select o.ad_org_id,
 	org_value,
 	org_name,
-	dateinvoiced, 
+	dateacct, 
 	bpg.c_bp_group_id, 
 	bpg.group_value,
 	bpg.group_name,
@@ -89,24 +89,23 @@ from (select ad_org_id,
 	from c_bp_group as bpg
 	inner join c_bpartner as bp ON bp.c_bp_group_id = bpg.c_bp_group_id
 	where bp.iscustomer = 'Y' and bpg.ad_client_id = $P{AD_CLIENT_ID} and ($P{C_BP_Group_ID} is null OR $P{C_BP_Group_ID} = 0 OR $P{C_BP_Group_ID} = bpg.c_bp_group_id)) as bpg,
-	(select datetrx::date as dateinvoiced, 
+	(select dateacct::date as dateacct, 
 		id.c_bp_group_id, 
 		sum(amount) as rec
-	from v_dailysales as id
+	from v_dailysales_current_account_payments  as id
 	where id.ad_org_id = $P{AD_Org_ID} 
 		AND id.issotrx = 'Y' 
 		AND id.docstatus IN ('CO','CL')
-		AND datetrx::date >= $P{DateFrom}::date
-		AND datetrx::date <= $P{DateTo}::date
+		AND dateacct::date >= $P{DateFrom}::date
+		AND dateacct::date <= $P{DateTo}::date
 		AND ($P{C_BP_Group_ID} is null OR $P{C_BP_Group_ID} = 0 OR $P{C_BP_Group_ID} = id.c_bp_group_id)
-		AND trxtype = 'PCA'
-	group by datetrx::date, id.c_bp_group_id) as s 
-where dateinvoiced is not null]]></queryString>
+	group by dateacct::date, id.c_bp_group_id) as s 
+where dateacct is not null]]></queryString>
 
 	<field name="ad_org_id" class="java.lang.Integer"/>
 	<field name="org_value" class="java.lang.String"/>
 	<field name="org_name" class="java.lang.String"/>
-	<field name="dateinvoiced" class="java.sql.Date"/>
+	<field name="dateacct" class="java.sql.Date"/>
 	<field name="c_bp_group_id" class="java.lang.Integer"/>
 	<field name="group_value" class="java.lang.String"/>
 	<field name="group_name" class="java.lang.String"/>
@@ -393,9 +392,9 @@ where dateinvoiced is not null]]></queryString>
 				<text><![CDATA[Grupo]]></text>
 				</staticText>
 						</cellContents>
-					</crosstabHeaderCell>					<rowGroup name="dateinvoiced" width="100" totalPosition="End">
+					</crosstabHeaderCell>					<rowGroup name="dateacct" width="100" totalPosition="End">
 						<bucket>
-							<bucketExpression class="java.util.Date"><![CDATA[$F{dateinvoiced}]]></bucketExpression>
+							<bucketExpression class="java.util.Date"><![CDATA[$F{dateacct}]]></bucketExpression>
 						</bucket>
 						<crosstabRowHeader>
 						<cellContents mode="Transparent">
@@ -413,7 +412,7 @@ where dateinvoiced is not null]]></queryString>
 					<textElement textAlignment="Center" verticalAlignment="Middle">
 						<font size="8"/>
 					</textElement>
-				<textFieldExpression   class="java.util.Date"><![CDATA[$V{dateinvoiced}]]></textFieldExpression>
+				<textFieldExpression   class="java.util.Date"><![CDATA[$V{dateacct}]]></textFieldExpression>
 				</textField>
 						</cellContents>
 						</crosstabRowHeader>
@@ -456,7 +455,7 @@ where dateinvoiced is not null]]></queryString>
 					<textElement textAlignment="Center" verticalAlignment="Middle">
 						<font size="8"/>
 					</textElement>
-				<textFieldExpression   class="java.lang.String"><![CDATA["Total "+(new SimpleDateFormat("dd/MM/yyyy").format($V{dateinvoiced}))]]></textFieldExpression>
+				<textFieldExpression   class="java.lang.String"><![CDATA["Total "+(new SimpleDateFormat("dd/MM/yyyy").format($V{dateacct}))]]></textFieldExpression>
 				</textField>
 						</cellContents>
 						</crosstabTotalRowHeader>
@@ -747,7 +746,7 @@ where dateinvoiced is not null]]></queryString>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="1Point" rightBorderColor="#000000" bottomBorder="1Point" bottomBorderColor="#000000"/>
 						</cellContents>
 					</crosstabCell>
-					<crosstabCell width="280" height="30" rowTotalGroup="dateinvoiced">
+					<crosstabCell width="280" height="30" rowTotalGroup="dateacct">
 						<cellContents mode="Transparent">
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 				<textField isStretchWithOverflow="false" pattern="#,##0.00" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
@@ -842,7 +841,7 @@ where dateinvoiced is not null]]></queryString>
 				</textField>
 						</cellContents>
 					</crosstabCell>
-					<crosstabCell width="0" height="30" rowTotalGroup="dateinvoiced" columnTotalGroup="column">
+					<crosstabCell width="0" height="30" rowTotalGroup="dateacct" columnTotalGroup="column">
 						<cellContents mode="Transparent">
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="1Point" rightBorderColor="#000000" bottomBorder="1Point" bottomBorderColor="#000000"/>
 						</cellContents>

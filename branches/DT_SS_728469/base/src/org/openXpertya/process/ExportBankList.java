@@ -42,7 +42,7 @@ public abstract class ExportBankList extends ExportProcess {
 	private String opPrefix = "";
 	/** Prefijo del tipo de documento */
 	private String opSuffix = "";
-
+	
 	public ExportBankList(Properties ctx, MBankList bankList, String trxName) {
 		localCtx = ctx;
 		localTrxName = trxName;
@@ -56,32 +56,32 @@ public abstract class ExportBankList extends ExportProcess {
 		MDocType opDocType = MDocType.getDocType(getCtx(), MDocType.DOCTYPE_Orden_De_Pago, get_TrxName());
 		// Obtener prefijo y sufijo de la secuencia de la OP
 		String opPrefix = MSequence.getPrefix(opDocType.getDocNoSequence_ID(), get_TrxName());
-		opPrefix = opPrefix == null ? "" : opPrefix;
+		opPrefix = opPrefix == null?"":opPrefix;
 		String opSuffix = MSequence.getSuffix(opDocType.getDocNoSequence_ID(), get_TrxName());
-		opSuffix = opSuffix == null ? "" : opSuffix;
+		opSuffix = opSuffix == null?"":opSuffix;
 		setOpPrefix(opPrefix);
 		setOpSuffix(opSuffix);
 	}
 
 	protected abstract String getBankListExportFormatValue();
-
+	
 	protected abstract String getFileHeader();
-
+	
 	protected abstract String getFileFooter();
 
 	protected MExpFormat getBankListExportFormat() {
 		String whereClause = "value = '" + getBankListExportFormatValue() + "'";
 		return (MExpFormat) MExpFormat.findFirst(getCtx(), MExpFormat.Table_Name, whereClause, null, null, get_TrxName());
 	}
-
+	
 	protected List<Object> getWhereClauseParams() {
 		List<Object> params = new ArrayList<Object>();
 		params.add(getBankList().getID());
 		return params;
 	}
-
+	
 	@Override
-	protected void fillDocument() throws Exception {
+	protected void fillDocument() throws Exception{
 		// Exportar la cabecera del archivo
 		write(getFileHeader());
 		// Separador de líneas
@@ -91,11 +91,11 @@ public abstract class ExportBankList extends ExportProcess {
 		// Exportar líneas totalizadoras
 		write(getFileFooter());
 	}
-
+	
 	public String export() throws Exception {
 		return super.doIt();
 	}
-
+	
 	@Override
 	public Properties getCtx() {
 		if (localCtx != null) {

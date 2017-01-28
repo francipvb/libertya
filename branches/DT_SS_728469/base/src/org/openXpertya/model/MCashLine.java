@@ -620,7 +620,7 @@ public class MCashLine extends X_C_CashLine implements DocAction {
         
 		try {
 			// Caja Diaria y validaciones relacionadas
-			if(!isIgnorePOSJournal()){
+			if(!isIgnorePOSJournal() && getCash().isValidatePOSJournal()){
 				posJournalRelated();
 			}
 			
@@ -1174,7 +1174,8 @@ public class MCashLine extends X_C_CashLine implements DocAction {
 	@Override
 	public boolean closeIt() {
 		// TODO Auto-generated method stub
-		return false;
+		//SUR SOFTWARE - Esto retornaba siempre false, lo que hacía que el método cerrar de una linea de caja nunca diera OK
+		return true;
 	}
 	
 	/**
@@ -1315,7 +1316,7 @@ public class MCashLine extends X_C_CashLine implements DocAction {
 		// actualizar su saldo, realizo las tareas correspondientes
 		if (!Util.isEmpty(getC_BPartner_ID(), true) && isUpdateBPBalance()) {
 			MBPartner bp = new MBPartner(getCtx(), getC_BPartner_ID(),get_TrxName());
-			CurrentAccountManager manager = CurrentAccountManagerFactory.getManager();
+			CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(bp.isCustomer());
 			// Actualizo el balance
 			CallResult result = manager.performAditionalWork(getCtx(), new MOrg(
 					getCtx(), Env.getAD_Org_ID(getCtx()), get_TrxName()), bp, this,
@@ -1336,8 +1337,9 @@ public class MCashLine extends X_C_CashLine implements DocAction {
 	public boolean afterProcessDocument(String processAction, boolean status) {
 
 		// Setear el crédito
-
-		if ((processAction.equals(MInvoice.DOCACTION_Complete)
+		//SUR SOFTWARE - Agrego un control de processAction = null. Cuando la linea de caja está anulada (VO) 
+		//               el processAction viene en null y hacia que de un error
+		if (processAction != null && (processAction.equals(MInvoice.DOCACTION_Complete)
 				|| processAction.equals(MInvoice.DOCACTION_Reverse_Correct) || processAction
 				.equals(MInvoice.DOCACTION_Void))
 				&& status) {
@@ -1353,7 +1355,7 @@ public class MCashLine extends X_C_CashLine implements DocAction {
 					&& isConfirmAditionalWorks()) {
 				MBPartner bp = new MBPartner(getCtx(), getC_BPartner_ID(), get_TrxName());
 				// Obtengo el manager actual
-				CurrentAccountManager manager = CurrentAccountManagerFactory.getManager();
+				CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(bp.isCustomer());
 				// Actualizo el saldo
 				CallResult result = new CallResult();
 				try{

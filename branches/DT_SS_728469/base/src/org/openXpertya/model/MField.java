@@ -1342,6 +1342,10 @@ public class MField implements Serializable,Evaluatee {
         return m_vo;
     }
 
+    public boolean isExportRealValue(){
+    	return m_vo.exportRealValue;
+    }
+    
     /**
      * Descripción de Método
      *
@@ -1397,9 +1401,17 @@ public class MField implements Serializable,Evaluatee {
      */
 
     public void setValue( Object newValue,boolean inserting ) {
+    	setValue(newValue, inserting, false);
+    }    // setValue
 
-         log.fine( "MField.setValue - " + newValue);
-
+    
+    public void setValue( Object newValue, boolean inserting, boolean controlExistsInData ) {
+    	log.fine( "MField.setValue - " + newValue);
+        
+		if (controlExistsInData && m_lookup != null && !m_lookup.containsKey(newValue)) {
+    		return;
+    	}
+    	
         if( m_valueNoFire ) {    // set the old value
             m_oldValue = m_value;
         }
@@ -1455,9 +1467,8 @@ public class MField implements Serializable,Evaluatee {
         	}
         	Env.setContext(m_vo.ctx, m_vo.WindowNo, m_vo.TabNo, m_vo.ColumnName, colValue);        	
         } // Fin Mod Franco Bonafine.
-        
-    }    // setValue
-
+    }
+    
     /**
      * Descripción de Método
      *

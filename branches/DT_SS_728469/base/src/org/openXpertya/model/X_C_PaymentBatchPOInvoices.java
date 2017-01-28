@@ -1,14 +1,13 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.sql.Timestamp;
-import java.util.Properties;
-import org.openXpertya.util.Env;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_PaymentBatchPOInvoices
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2016-11-23 11:40:37.057 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2016-10-24 12:48:12.71 */
 public class X_C_PaymentBatchPOInvoices extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -28,7 +27,7 @@ setInvoiceAmount (Env.ZERO);
 setOpenAmount (Env.ZERO);
 setPaymentAmount (Env.ZERO);
 }
-*/
+ */
 }
 /** Load Constructor */
 public X_C_PaymentBatchPOInvoices (Properties ctx, ResultSet rs, String trxName)

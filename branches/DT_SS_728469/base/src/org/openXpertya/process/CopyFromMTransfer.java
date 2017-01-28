@@ -81,14 +81,14 @@ public class CopyFromMTransfer extends SvrProcess {
 
 	private int getMLocatorId(MTransfer from, MTransfer to, MTransferLine line, boolean origin) {
 		if (origin) {
-			// Si el almacen destino de ambas Transferencias coinciden, copio la ubicación de destino
-			if (from.getM_WarehouseTo_ID() == to.getM_WarehouseTo_ID()) {
-				return line.getM_Locator_To_ID();
-			}
-		} else {
 			// Si el almacen origen de ambas Transferencias coinciden, copio la ubicación de origen
 			if (from.getM_Warehouse_ID() == to.getM_Warehouse_ID()) {
 				return line.getM_Locator_ID();
+			}
+		} else {
+			// Si el almacen destino de ambas Transferencias coinciden, copio la ubicación de destino
+			if (from.getM_WarehouseTo_ID() == to.getM_WarehouseTo_ID()) {
+				return line.getM_Locator_To_ID();
 			}
 		}
 		int mLocatorId = 0;

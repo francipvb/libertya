@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_ExpenseConcepts
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-11-18 10:23:40.903 */
+ *  @version  - 2016-11-30 14:28:33.837 */
 public class X_C_ExpenseConcepts extends org.openXpertya.model.PO
 {
 /** Constructor estándar */

@@ -1,19 +1,25 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por I_VisaPayments
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2016-12-23 15:21:41.458 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2017-01-25 11:08:47.791 */
 public class X_I_VisaPayments extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_I_VisaPayments (Properties ctx, int I_VisaPayments_ID, String trxName)
 {
 super (ctx, I_VisaPayments_ID, trxName);
+/** if (I_VisaPayments_ID == 0)
+{
+setI_IsImported (false);
+setI_Visapayments_ID (0);
+}
+ */
 }
 /** Load Constructor */
 public X_I_VisaPayments (Properties ctx, ResultSet rs, String trxName)
