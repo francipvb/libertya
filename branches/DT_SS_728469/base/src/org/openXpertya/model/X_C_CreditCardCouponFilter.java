@@ -1,26 +1,20 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.util.logging.Level;
- import java.util.*;
-import java.sql.*;
-import java.math.*;
-import org.openXpertya.util.*;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.Timestamp;
+import java.util.Properties;
+import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por C_CreditCardCouponFilter
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
  *  @version  - 2016-11-30 14:28:24.765 */
 public class X_C_CreditCardCouponFilter extends org.openXpertya.model.PO
 {
+private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_CreditCardCouponFilter (Properties ctx, int C_CreditCardCouponFilter_ID, String trxName)
 {
 super (ctx, C_CreditCardCouponFilter_ID, trxName);
-/** if (C_CreditCardCouponFilter_ID == 0)
-{
-setC_CreditCardCouponFilter_ID (0);
-setC_CreditCardSettlement_ID (0);
-setIsProcessed (false);
-}
- */
 }
 /** Load Constructor */
 public X_C_CreditCardCouponFilter (Properties ctx, ResultSet rs, String trxName)

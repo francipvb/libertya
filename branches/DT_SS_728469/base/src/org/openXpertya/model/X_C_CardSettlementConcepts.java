@@ -1,28 +1,19 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.util.logging.Level;
- import java.util.*;
-import java.sql.*;
-import java.math.*;
-import org.openXpertya.util.*;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.util.Properties;
+import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por C_CardSettlementConcepts
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-11-30 14:28:11.369 */
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
+ *  @version  - 2017-01-28 15:46:19.528 */
 public class X_C_CardSettlementConcepts extends org.openXpertya.model.PO
 {
+private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_CardSettlementConcepts (Properties ctx, int C_CardSettlementConcepts_ID, String trxName)
 {
 super (ctx, C_CardSettlementConcepts_ID, trxName);
-/** if (C_CardSettlementConcepts_ID == 0)
-{
-setC_CardSettlementConcepts_ID (0);
-setM_Product_ID (0);
-setName (null);
-setType (null);
-setValue (null);
-}
- */
 }
 /** Load Constructor */
 public X_C_CardSettlementConcepts (Properties ctx, ResultSet rs, String trxName)
@@ -99,16 +90,16 @@ public KeyNamePair getKeyNamePair()
 return new KeyNamePair(getID(), getName());
 }
 public static final int TYPE_AD_Reference_ID = MReference.getReferenceID("Concept Type");
-/** Commission = C */
-public static final String TYPE_Commission = "C";
-/** Others = O */
-public static final String TYPE_Others = "O";
+/** Others = OT */
+public static final String TYPE_Others = "OT";
+/** Commission = CO */
+public static final String TYPE_Commission = "CO";
 /** Set Type */
 public void setType (String Type)
 {
-if (Type.equals("C") || Type.equals("O"));
- else throw new IllegalArgumentException ("Type Invalid value - Reference = TYPE_AD_Reference_ID - C - O");
 if (Type == null) throw new IllegalArgumentException ("Type is mandatory");
+if (Type.equals("OT") || Type.equals("CO"));
+ else throw new IllegalArgumentException ("Type Invalid value - Reference = TYPE_AD_Reference_ID - OT - CO");
 if (Type.length() > 2)
 {
 log.warning("Length > 2 - truncated");

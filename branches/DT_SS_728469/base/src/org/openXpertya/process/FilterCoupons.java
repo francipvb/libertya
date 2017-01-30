@@ -60,8 +60,7 @@ public class FilterCoupons extends SvrProcess {
 		sql.append("FROM ");
 		sql.append("	c_paymentcoupon_v "); // Vista
 		sql.append("WHERE ");
-		sql.append("	auditstatus = ? ");
-		sql.append("	AND isreconciled = 'N' ");
+		sql.append("	isreconciled = 'N' ");
 
 		if (filter.getTrxDateFrom() != null) {
 			sql.append("AND datetrx >= ? ");
@@ -77,11 +76,10 @@ public class FilterCoupons extends SvrProcess {
 		try {
 			pstmt = DB.prepareStatement(sql.toString());
 
-			pstmt.setString(1, X_C_Payment.AUDITSTATUS_ToVerify);
-			int aux = 2;
+			int aux = 1;
 			if (filter.getTrxDateFrom() != null) {
-				pstmt.setDate(2, new Date(filter.getTrxDateFrom().getTime()));
-				aux = 3;
+				pstmt.setDate(aux, new Date(filter.getTrxDateFrom().getTime()));
+				aux++;
 			}
 			if (filter.getTrxDateTo() != null) {
 				pstmt.setDate(aux, new Date(filter.getTrxDateTo().getTime()));
@@ -99,7 +97,7 @@ public class FilterCoupons extends SvrProcess {
 				couponsSettlements.setTrxDate(rs.getTimestamp(3));
 				couponsSettlements.setAmount(rs.getBigDecimal(4));
 				couponsSettlements.setCouponNo(rs.getString(5));
-				couponsSettlements.setAllocationNumber(rs.getBigDecimal(6));
+				couponsSettlements.setAllocationNumber(rs.getString(6));
 				couponsSettlements.setCreditCardNo(rs.getString(7));
 				couponsSettlements.setPaymentBatch(rs.getString(8));
 				couponsSettlements.setC_Currency_ID(rs.getInt(9));
