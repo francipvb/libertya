@@ -1,27 +1,20 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.util.logging.Level;
- import java.util.*;
-import java.sql.*;
-import java.math.*;
-import org.openXpertya.util.*;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.util.Properties;
+import org.openXpertya.util.Env;
+import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por C_PerceptionsSettlement
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-11-30 14:28:52.947 */
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
+ *  @version  - 2017-01-30 10:34:27.652 */
 public class X_C_PerceptionsSettlement extends org.openXpertya.model.PO
 {
+private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_PerceptionsSettlement (Properties ctx, int C_PerceptionsSettlement_ID, String trxName)
 {
 super (ctx, C_PerceptionsSettlement_ID, trxName);
-/** if (C_PerceptionsSettlement_ID == 0)
-{
-setC_CreditCardSettlement_ID (0);
-setC_PerceptionsSettlement_ID (0);
-setC_TaxCategory_ID (0);
-setInternalNo (null);
-}
- */
 }
 /** Load Constructor */
 public X_C_PerceptionsSettlement (Properties ctx, ResultSet rs, String trxName)
@@ -86,17 +79,18 @@ Integer ii = (Integer)get_Value("C_PerceptionsSettlement_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
-/** Set Tax Category.
-Tax Category */
-public void setC_TaxCategory_ID (int C_TaxCategory_ID)
+public static final int C_TAX_ID_AD_Reference_ID = MReference.getReferenceID("C_Tax");
+/** Set Tax.
+Tax identifier */
+public void setC_Tax_ID (int C_Tax_ID)
 {
-set_Value ("C_TaxCategory_ID", new Integer(C_TaxCategory_ID));
+set_Value ("C_Tax_ID", new Integer(C_Tax_ID));
 }
-/** Get Tax Category.
-Tax Category */
-public int getC_TaxCategory_ID() 
+/** Get Tax.
+Tax identifier */
+public int getC_Tax_ID() 
 {
-Integer ii = (Integer)get_Value("C_TaxCategory_ID");
+Integer ii = (Integer)get_Value("C_Tax_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }

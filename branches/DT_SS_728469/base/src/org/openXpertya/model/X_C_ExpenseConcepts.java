@@ -7,7 +7,7 @@ import org.openXpertya.util.Env;
 import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por C_ExpenseConcepts
  *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2017-01-28 15:46:21.269 */
+ *  @version  - 2017-01-30 10:34:26.325 */
 public class X_C_ExpenseConcepts extends org.openXpertya.model.PO
 {
 private static final long serialVersionUID = 1L;
@@ -55,7 +55,7 @@ BigDecimal bd = (BigDecimal)get_Value("Amount");
 if (bd == null) return Env.ZERO;
 return bd;
 }
-public static final int C_CARDSETTLEMENTCONCEPTS_ID_AD_Reference_ID = MReference.getReferenceID("C_CardSettlementConcepts");
+public static final int C_CARDSETTLEMENTCONCEPTS_ID_AD_Reference_ID = MReference.getReferenceID("C_CardSettlementConceptsOthers");
 /** Set C_Cardsettlementconcepts_ID */
 public void setC_Cardsettlementconcepts_ID (int C_Cardsettlementconcepts_ID)
 {
@@ -68,7 +68,7 @@ Integer ii = (Integer)get_Value("C_Cardsettlementconcepts_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
-public static final int C_CREDITCARDSETTLEMENT_ID_AD_Reference_ID = MReference.getReferenceID("Settlements (number)");
+public static final int C_CREDITCARDSETTLEMENT_ID_AD_Reference_ID = MReference.getReferenceID("C_CreditCardSettlement_");
 /** Set Credit Card Settlement */
 public void setC_CreditCardSettlement_ID (int C_CreditCardSettlement_ID)
 {

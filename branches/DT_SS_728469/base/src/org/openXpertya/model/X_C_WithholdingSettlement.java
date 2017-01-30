@@ -1,26 +1,20 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.util.logging.Level;
- import java.util.*;
-import java.sql.*;
-import java.math.*;
-import org.openXpertya.util.*;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.util.Properties;
+import org.openXpertya.util.Env;
+import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por C_WithholdingSettlement
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-11-30 14:29:20.57 */
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
+ *  @version  - 2017-01-30 10:34:29.436 */
 public class X_C_WithholdingSettlement extends org.openXpertya.model.PO
 {
+private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_WithholdingSettlement (Properties ctx, int C_WithholdingSettlement_ID, String trxName)
 {
 super (ctx, C_WithholdingSettlement_ID, trxName);
-/** if (C_WithholdingSettlement_ID == 0)
-{
-setC_CreditCardSettlement_ID (0);
-setC_RetencionType_ID (0);
-setC_WithholdingSettlement_ID (0);
-}
- */
 }
 /** Load Constructor */
 public X_C_WithholdingSettlement (Properties ctx, ResultSet rs, String trxName)
