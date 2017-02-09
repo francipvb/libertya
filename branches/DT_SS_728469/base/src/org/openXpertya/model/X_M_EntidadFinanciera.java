@@ -1,31 +1,20 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.util.logging.Level;
- import java.util.*;
-import java.sql.*;
-import java.math.*;
-import org.openXpertya.util.*;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.util.Properties;
+import org.openXpertya.util.Env;
+import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por M_EntidadFinanciera
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2017-01-25 11:09:04.768 */
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
+ *  @version  - 2017-02-03 17:24:32.31 */
 public class X_M_EntidadFinanciera extends org.openXpertya.model.PO
 {
+private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_M_EntidadFinanciera (Properties ctx, int M_EntidadFinanciera_ID, String trxName)
 {
 super (ctx, M_EntidadFinanciera_ID, trxName);
-/** if (M_EntidadFinanciera_ID == 0)
-{
-setC_BankAccount_ID (0);
-setC_BPartner_ID (0);
-setCreditCardCashRetirementLimit (Env.ZERO);
-setCreditCardType (null);
-setIsAllowCreditCardCashRetirement (false);
-setM_EntidadFinanciera_ID (0);
-setName (null);
-setValue (null);
-}
- */
 }
 /** Load Constructor */
 public X_M_EntidadFinanciera (Properties ctx, ResultSet rs, String trxName)
@@ -161,9 +150,9 @@ public static final String CREDITCARDTYPE_Discover = "N";
 Credit Card (Visa, MC, AmEx) */
 public void setCreditCardType (String CreditCardType)
 {
-if (CreditCardType.equals("D") || CreditCardType.equals("C") || CreditCardType.equals("P") || CreditCardType.equals("M") || CreditCardType.equals("V") || CreditCardType.equals("A") || CreditCardType.equals("N"));
- else throw new IllegalArgumentException ("CreditCardType Invalid value - Reference = CREDITCARDTYPE_AD_Reference_ID - D - C - P - M - V - A - N");
 if (CreditCardType == null) throw new IllegalArgumentException ("CreditCardType is mandatory");
+if (CreditCardType.equals("D") || CreditCardType.equals("C") || CreditCardType.equals("P") || CreditCardType.equals("M") || CreditCardType.equals("V") || CreditCardType.equals("A") || CreditCardType.equals("N"));
+ else throw new IllegalArgumentException ("CreditCardType Invalid value - " + CreditCardType + " - Reference = CREDITCARDTYPE_AD_Reference_ID - D - C - P - M - V - A - N");
 if (CreditCardType.length() > 20)
 {
 log.warning("Length > 20 - truncated");
@@ -191,6 +180,32 @@ set_Value ("EstablishmentNumber", EstablishmentNumber);
 public String getEstablishmentNumber() 
 {
 return (String)get_Value("EstablishmentNumber");
+}
+public static final int FINANCINGSERVICE_AD_Reference_ID = MReference.getReferenceID("CreditCardTypes");
+/** AMEX = AM */
+public static final String FINANCINGSERVICE_AMEX = "AM";
+/** VISA = VI */
+public static final String FINANCINGSERVICE_VISA = "VI";
+/** NARANJA = NA */
+public static final String FINANCINGSERVICE_NARANJA = "NA";
+/** FIRSTDATA = FD */
+public static final String FINANCINGSERVICE_FIRSTDATA = "FD";
+/** Set FinancingService */
+public void setFinancingService (String FinancingService)
+{
+if (FinancingService == null || FinancingService.equals("AM") || FinancingService.equals("VI") || FinancingService.equals("NA") || FinancingService.equals("FD"));
+ else throw new IllegalArgumentException ("FinancingService Invalid value - " + FinancingService + " - Reference = FINANCINGSERVICE_AD_Reference_ID - AM - VI - NA - FD");
+if (FinancingService != null && FinancingService.length() > 2)
+{
+log.warning("Length > 2 - truncated");
+FinancingService = FinancingService.substring(0,2);
+}
+set_Value ("FinancingService", FinancingService);
+}
+/** Get FinancingService */
+public String getFinancingService() 
+{
+return (String)get_Value("FinancingService");
 }
 /** Set Allow Credit Card Cash Retirement */
 public void setIsAllowCreditCardCashRetirement (boolean IsAllowCreditCardCashRetirement)
