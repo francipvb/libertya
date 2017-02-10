@@ -23,7 +23,6 @@
 	<import value="net.sf.jasperreports.engine.*" />
 	<import value="net.sf.jasperreports.engine.data.*" />
 
-	<parameter name="Entidad_Financiera" isForPrompting="false" class="java.lang.String"/>
 	<parameter name="Organization" isForPrompting="false" class="java.lang.String"/>
 	<parameter name="Card_Type" isForPrompting="false" class="java.lang.String"/>
 	<parameter name="Doc_Status" isForPrompting="false" class="java.lang.String"/>
@@ -35,119 +34,143 @@
 	<parameter name="Doc_Status_Name" isForPrompting="false" class="java.lang.String"/>
 	<parameter name="Date_Text" isForPrompting="false" class="java.lang.String"/>
 	<parameter name="Date_To_Text" isForPrompting="false" class="java.lang.String"/>
+	<parameter name="C_BPartner_ID" isForPrompting="false" class="java.math.BigDecimal"/>
 	<queryString><![CDATA[SELECT
 	*
-FROM
+FROM (
 	(
 	SELECT
-		LPAD(s.settlementno, 8, '0') AS settlementno, 
-		e.name AS creditcard, 
-		COALESCE(s.amount, 0) AS amount, 
-		COALESCE(s.couponstotalamount, 0) AS done, 
-		COALESCE(s.netamount, 0) AS netamount, 
+		LPAD(s.settlementno, 8, '0') AS settlementno,
+		bp.name AS creditcard,
+		COALESCE(s.amount, 0) AS amount,
+		COALESCE(s.couponstotalamount, 0) AS done,
+		COALESCE(s.netamount, 0) AS netamount,
 		paymentdate AS date,
-		'1-IVA-' || it.name AS typename,
-		COALESCE(i.amount, 0) AS typeamount
+		'TOTAL CONCEPTOS' AS typename,
+		COALESCE(ivaamount + commissionamount + withholding + perception + expenses, 0) AS typeamount
 	FROM
 		C_CreditCardSettlement s
-		INNER JOIN M_EntidadFinanciera e ON s.m_entidadfinanciera_id = e.m_entidadfinanciera_id
-		LEFT OUTER JOIN c_ivasettlements i ON s.c_creditcardsettlement_id = i.c_creditcardsettlement_id
+		INNER JOIN C_BPartner bp ON s.c_bpartner_id = bp.c_bpartner_id
+	WHERE
+		COALESCE(s.settlementno, '') <> ''
+		AND (($P{AD_Org_ID}::integer IS NULL) OR (s.ad_org_id::integer = $P{AD_Org_ID}::integer))
+		AND (($P{C_BPartner_ID}::integer IS NULL) OR (s.c_bpartner_id::integer = $P{C_BPartner_ID}::integer))
+		AND (($P{Doc_Status}::character(2) IS NULL) OR (s.docstatus::character(2) = $P{Doc_Status}::character(2)))
+		AND (($P{Date}::date IS NULL) OR (s.paymentdate::date >= $P{Date}::date))
+		AND (($P{Date_To}::date IS NULL) OR (s.paymentdate::date <= $P{Date_To}::date))
+)
+UNION
+	(
+	SELECT
+		LPAD(s.settlementno, 8, '0') AS settlementno,
+		bp.name AS creditcard,
+		COALESCE(s.amount, 0) AS amount,
+		COALESCE(s.couponstotalamount, 0) AS done,
+		COALESCE(s.netamount, 0) AS netamount,
+		paymentdate AS date,
+		'1-IVA-' || it.name AS typename,
+		i.amount AS typeamount
+	FROM
+		C_CreditCardSettlement s
+		INNER JOIN C_BPartner bp ON s.c_bpartner_id = bp.c_bpartner_id
+		INNER JOIN c_ivasettlements i ON s.c_creditcardsettlement_id = i.c_creditcardsettlement_id
 		LEFT OUTER JOIN c_tax it ON it.c_tax_id = i.c_tax_id
 	WHERE
 		COALESCE(s.settlementno, '') <> ''
 		AND (($P{AD_Org_ID}::integer IS NULL) OR (s.ad_org_id::integer = $P{AD_Org_ID}::integer))
-		AND (($P{Card_Type}::character(2) IS NULL) OR (s.creditcardtype::character(2) = $P{Card_Type}::character(2)))
+		AND (($P{C_BPartner_ID}::integer IS NULL) OR (s.c_bpartner_id::integer = $P{C_BPartner_ID}::integer))
 		AND (($P{Doc_Status}::character(2) IS NULL) OR (s.docstatus::character(2) = $P{Doc_Status}::character(2)))
 		AND (($P{Date}::date IS NULL) OR (s.paymentdate::date >= $P{Date}::date))
 		AND (($P{Date_To}::date IS NULL) OR (s.paymentdate::date <= $P{Date_To}::date))
+)
 UNION (
 	SELECT
-		LPAD(s.settlementno, 8, '0') AS settlementno, 
-		e.name AS creditcard, 
-		COALESCE(s.amount, 0) AS amount, 
-		COALESCE(s.couponstotalamount, 0) AS done, 
-		COALESCE(s.netamount, 0) AS netamount, 
+		LPAD(s.settlementno, 8, '0') AS settlementno,
+		bp.name AS creditcard,
+		COALESCE(s.amount, 0) AS amount,
+		COALESCE(s.couponstotalamount, 0) AS done,
+		COALESCE(s.netamount, 0) AS netamount,
 		paymentdate AS date,
 		'2-RET-' || wt.name AS typename,
-		COALESCE(w.amount, 0) AS typeamount
+		w.amount AS typeamount
 	FROM
 		C_CreditCardSettlement s
-		INNER JOIN M_EntidadFinanciera e ON s.m_entidadfinanciera_id = e.m_entidadfinanciera_id
-		LEFT OUTER JOIN c_withholdingsettlement w ON s.c_creditcardsettlement_id = w.c_creditcardsettlement_id
+		INNER JOIN C_BPartner bp ON s.c_bpartner_id = bp.c_bpartner_id
+		INNER JOIN c_withholdingsettlement w ON s.c_creditcardsettlement_id = w.c_creditcardsettlement_id
 		LEFT OUTER JOIN c_retenciontype wt ON wt.c_retenciontype_id = w.c_retenciontype_id
 	WHERE
 		COALESCE(s.settlementno, '') <> ''
 		AND (($P{AD_Org_ID}::integer IS NULL) OR (s.ad_org_id::integer = $P{AD_Org_ID}::integer))
-		AND (($P{Card_Type}::character(2) IS NULL) OR (s.creditcardtype::character(2) = $P{Card_Type}::character(2)))
+		AND (($P{C_BPartner_ID}::integer IS NULL) OR (s.c_bpartner_id::integer = $P{C_BPartner_ID}::integer))
 		AND (($P{Doc_Status}::character(2) IS NULL) OR (s.docstatus::character(2) = $P{Doc_Status}::character(2)))
 		AND (($P{Date}::date IS NULL) OR (s.paymentdate::date >= $P{Date}::date))
 		AND (($P{Date_To}::date IS NULL) OR (s.paymentdate::date <= $P{Date_To}::date))
 )
 UNION (
 	SELECT
-		LPAD(s.settlementno, 8, '0') AS settlementno, 
-		e.name AS creditcard, 
-		COALESCE(s.amount, 0) AS amount, 
-		COALESCE(s.couponstotalamount, 0) AS done, 
-		COALESCE(s.netamount, 0) AS netamount, 
+		LPAD(s.settlementno, 8, '0') AS settlementno,
+		bp.name AS creditcard,
+		COALESCE(s.amount, 0) AS amount,
+		COALESCE(s.couponstotalamount, 0) AS done,
+		COALESCE(s.netamount, 0) AS netamount,
 		paymentdate AS date,
 		'3-PER-' || pt.name AS typename,
-		COALESCE(p.amount, 0) AS typeamount
+		p.amount AS typeamount
 	FROM
 		C_CreditCardSettlement s
-		INNER JOIN M_EntidadFinanciera e ON s.m_entidadfinanciera_id = e.m_entidadfinanciera_id
-		LEFT OUTER JOIN c_perceptionssettlement p ON s.c_creditcardsettlement_id = p.c_creditcardsettlement_id
+		INNER JOIN C_BPartner bp ON s.c_bpartner_id = bp.c_bpartner_id
+		INNER JOIN c_perceptionssettlement p ON s.c_creditcardsettlement_id = p.c_creditcardsettlement_id
 		LEFT OUTER JOIN c_tax pt ON pt.c_tax_id = p.c_tax_id
 	WHERE
 		COALESCE(s.settlementno, '') <> ''
 		AND (($P{AD_Org_ID}::integer IS NULL) OR (s.ad_org_id::integer = $P{AD_Org_ID}::integer))
-		AND (($P{Card_Type}::character(2) IS NULL) OR (s.creditcardtype::character(2) = $P{Card_Type}::character(2)))
+		AND (($P{C_BPartner_ID}::integer IS NULL) OR (s.c_bpartner_id::integer = $P{C_BPartner_ID}::integer))
 		AND (($P{Doc_Status}::character(2) IS NULL) OR (s.docstatus::character(2) = $P{Doc_Status}::character(2)))
 		AND (($P{Date}::date IS NULL) OR (s.paymentdate::date >= $P{Date}::date))
 		AND (($P{Date_To}::date IS NULL) OR (s.paymentdate::date <= $P{Date_To}::date))
 )
 UNION (
 	SELECT
-		LPAD(s.settlementno, 8, '0') AS settlementno, 
-		e.name AS creditcard, 
-		COALESCE(s.amount, 0) AS amount, 
-		COALESCE(s.couponstotalamount, 0) AS done, 
-		COALESCE(s.netamount, 0) AS netamount, 
+		LPAD(s.settlementno, 8, '0') AS settlementno,
+		bp.name AS creditcard,
+		COALESCE(s.amount, 0) AS amount,
+		COALESCE(s.couponstotalamount, 0) AS done,
+		COALESCE(s.netamount, 0) AS netamount,
 		paymentdate AS date,
 		'4-COM-' || c.name AS typename,
-		COALESCE(x.amount, 0) AS typeamount
+		x.amount AS typeamount
 	FROM
 		C_CreditCardSettlement s
-		INNER JOIN M_EntidadFinanciera e ON s.m_entidadfinanciera_id = e.m_entidadfinanciera_id
-		LEFT OUTER JOIN c_commissionconcepts x ON s.c_creditcardsettlement_id = x.c_creditcardsettlement_id
+		INNER JOIN C_BPartner bp ON s.c_bpartner_id = bp.c_bpartner_id
+		INNER JOIN c_commissionconcepts x ON s.c_creditcardsettlement_id = x.c_creditcardsettlement_id
 		INNER JOIN c_cardsettlementconcepts c ON c.c_cardsettlementconcepts_id = x.c_cardsettlementconcepts_id
 	WHERE
 		COALESCE(s.settlementno, '') <> ''
 		AND (($P{AD_Org_ID}::integer IS NULL) OR (s.ad_org_id::integer = $P{AD_Org_ID}::integer))
-		AND (($P{Card_Type}::character(2) IS NULL) OR (s.creditcardtype::character(2) = $P{Card_Type}::character(2)))
+		AND (($P{C_BPartner_ID}::integer IS NULL) OR (s.c_bpartner_id::integer = $P{C_BPartner_ID}::integer))
 		AND (($P{Doc_Status}::character(2) IS NULL) OR (s.docstatus::character(2) = $P{Doc_Status}::character(2)))
 		AND (($P{Date}::date IS NULL) OR (s.paymentdate::date >= $P{Date}::date))
 		AND (($P{Date_To}::date IS NULL) OR (s.paymentdate::date <= $P{Date_To}::date))
 	
 ) UNION (
 	SELECT
-		LPAD(s.settlementno, 8, '0') AS settlementno, 
-		e.name AS creditcard, 
-		COALESCE(s.amount, 0) AS amount, 
-		COALESCE(s.couponstotalamount, 0) AS done, 
-		COALESCE(s.netamount, 0) AS netamount, 
+		LPAD(s.settlementno, 8, '0') AS settlementno,
+		bp.name AS creditcard,
+		COALESCE(s.amount, 0) AS amount,
+		COALESCE(s.couponstotalamount, 0) AS done,
+		COALESCE(s.netamount, 0) AS netamount,
 		paymentdate AS date,
 		'5-OTR-' || c.name AS typename,
-		COALESCE(x.amount, 0) AS typeamount
+		x.amount AS typeamount
 	FROM
 		C_CreditCardSettlement s
-		INNER JOIN M_EntidadFinanciera e ON s.m_entidadfinanciera_id = e.m_entidadfinanciera_id
-		LEFT OUTER JOIN c_expenseconcepts x ON s.c_creditcardsettlement_id = x.c_creditcardsettlement_id
+		INNER JOIN C_BPartner bp ON s.c_bpartner_id = bp.c_bpartner_id
+		INNER JOIN c_expenseconcepts x ON s.c_creditcardsettlement_id = x.c_creditcardsettlement_id
 		INNER JOIN c_cardsettlementconcepts c ON c.c_cardsettlementconcepts_id = x.c_cardsettlementconcepts_id
 	WHERE
 		COALESCE(s.settlementno, '') <> ''
 		AND (($P{AD_Org_ID}::integer IS NULL) OR (s.ad_org_id::integer = $P{AD_Org_ID}::integer))
-		AND (($P{Card_Type}::character(2) IS NULL) OR (s.creditcardtype::character(2) = $P{Card_Type}::character(2)))
+		AND (($P{C_BPartner_ID}::integer IS NULL) OR (s.c_bpartner_id::integer = $P{C_BPartner_ID}::integer))
 		AND (($P{Doc_Status}::character(2) IS NULL) OR (s.docstatus::character(2) = $P{Doc_Status}::character(2)))
 		AND (($P{Date}::date IS NULL) OR (s.paymentdate::date >= $P{Date}::date))
 		AND (($P{Date_To}::date IS NULL) OR (s.paymentdate::date <= $P{Date_To}::date))
@@ -188,24 +211,11 @@ UNION (
 			</band>
 		</title>
 		<pageHeader>
-			<band height="102"  isSplitAllowed="true" >
+			<band height="81"  isSplitAllowed="true" >
 				<staticText>
 					<reportElement
 						x="1"
-						y="5"
-						width="121"
-						height="15"
-						key="staticText-1"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement verticalAlignment="Bottom">
-						<font/>
-					</textElement>
-				<text><![CDATA[Entidad Financiera]]></text>
-				</staticText>
-				<staticText>
-					<reportElement
-						x="1"
-						y="21"
+						y="10"
 						width="121"
 						height="15"
 						key="staticText-2"/>
@@ -218,7 +228,7 @@ UNION (
 				<staticText>
 					<reportElement
 						x="1"
-						y="53"
+						y="42"
 						width="121"
 						height="15"
 						key="staticText-3"/>
@@ -231,7 +241,7 @@ UNION (
 				<staticText>
 					<reportElement
 						x="1"
-						y="69"
+						y="58"
 						width="121"
 						height="15"
 						key="staticText-4"/>
@@ -244,7 +254,7 @@ UNION (
 				<staticText>
 					<reportElement
 						x="1"
-						y="37"
+						y="26"
 						width="121"
 						height="15"
 						key="staticText-5"/>
@@ -257,7 +267,7 @@ UNION (
 				<staticText>
 					<reportElement
 						x="122"
-						y="53"
+						y="42"
 						width="11"
 						height="15"
 						key="staticText-6"/>
@@ -270,7 +280,7 @@ UNION (
 				<staticText>
 					<reportElement
 						x="122"
-						y="69"
+						y="58"
 						width="11"
 						height="15"
 						key="staticText-7"/>
@@ -283,20 +293,7 @@ UNION (
 				<staticText>
 					<reportElement
 						x="122"
-						y="5"
-						width="11"
-						height="15"
-						key="staticText-8"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement textAlignment="Center" verticalAlignment="Bottom">
-						<font/>
-					</textElement>
-				<text><![CDATA[=]]></text>
-				</staticText>
-				<staticText>
-					<reportElement
-						x="122"
-						y="21"
+						y="10"
 						width="11"
 						height="15"
 						key="staticText-9"/>
@@ -309,7 +306,7 @@ UNION (
 				<staticText>
 					<reportElement
 						x="122"
-						y="37"
+						y="26"
 						width="11"
 						height="15"
 						key="staticText-10"/>
@@ -322,21 +319,7 @@ UNION (
 				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
 						x="133"
-						y="5"
-						width="700"
-						height="15"
-						forecolor="#5D5D5D"
-						key="textField-1"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement verticalAlignment="Bottom">
-						<font/>
-					</textElement>
-				<textFieldExpression   class="java.lang.String"><![CDATA[$P{Entidad_Financiera}]]></textFieldExpression>
-				</textField>
-				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-						x="133"
-						y="21"
+						y="10"
 						width="700"
 						height="15"
 						forecolor="#5D5D5D"
@@ -350,7 +333,7 @@ UNION (
 				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
 						x="133"
-						y="37"
+						y="26"
 						width="700"
 						height="15"
 						forecolor="#5D5D5D"
@@ -364,7 +347,7 @@ UNION (
 				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
 						x="133"
-						y="53"
+						y="42"
 						width="700"
 						height="15"
 						forecolor="#5D5D5D"
@@ -378,7 +361,7 @@ UNION (
 				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
 						x="133"
-						y="69"
+						y="58"
 						width="700"
 						height="15"
 						forecolor="#5D5D5D"
@@ -461,7 +444,7 @@ UNION (
 					<textElement textAlignment="Center" verticalAlignment="Middle">
 						<font size="9"/>
 					</textElement>
-				<text><![CDATA[Importe]]></text>
+				<text><![CDATA[Imp. Bruto]]></text>
 				</staticText>
 				<staticText>
 					<reportElement
@@ -476,7 +459,7 @@ UNION (
 					<textElement textAlignment="Center" verticalAlignment="Middle">
 						<font size="9"/>
 					</textElement>
-				<text><![CDATA[Imp. Bruto]]></text>
+				<text><![CDATA[Imp. Acreditado]]></text>
 				</staticText>
 				<staticText>
 					<reportElement
@@ -596,29 +579,6 @@ UNION (
 						</cellContents>
 						</crosstabRowHeader>
 					</rowGroup>
-					<rowGroup name="done" width="100">
-						<bucket>
-							<bucketExpression class="java.math.BigDecimal"><![CDATA[$F{done}]]></bucketExpression>
-						</bucket>
-						<crosstabRowHeader>
-						<cellContents mode="Transparent">
-					<box topBorder="None" topBorderColor="#000000" leftBorder="1Point" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="1Point" bottomBorderColor="#000000"/>
-				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-						x="0"
-						y="0"
-						width="100"
-						height="16"
-						key="textField"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" leftPadding="2" rightBorder="None" rightBorderColor="#000000" rightPadding="2" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement textAlignment="Right" verticalAlignment="Middle">
-						<font size="9"/>
-					</textElement>
-				<textFieldExpression   class="java.math.BigDecimal"><![CDATA[$V{done}]]></textFieldExpression>
-				</textField>
-						</cellContents>
-						</crosstabRowHeader>
-					</rowGroup>
 					<rowGroup name="netamount" width="100">
 						<bucket>
 							<bucketExpression class="java.math.BigDecimal"><![CDATA[$F{netamount}]]></bucketExpression>
@@ -638,6 +598,29 @@ UNION (
 						<font size="9"/>
 					</textElement>
 				<textFieldExpression   class="java.math.BigDecimal"><![CDATA[$V{netamount}]]></textFieldExpression>
+				</textField>
+						</cellContents>
+						</crosstabRowHeader>
+					</rowGroup>
+					<rowGroup name="done" width="100">
+						<bucket>
+							<bucketExpression class="java.math.BigDecimal"><![CDATA[$F{done}]]></bucketExpression>
+						</bucket>
+						<crosstabRowHeader>
+						<cellContents mode="Transparent">
+					<box topBorder="None" topBorderColor="#000000" leftBorder="1Point" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="1Point" bottomBorderColor="#000000"/>
+				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
+					<reportElement
+						x="0"
+						y="0"
+						width="100"
+						height="16"
+						key="textField"/>
+					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" leftPadding="2" rightBorder="None" rightBorderColor="#000000" rightPadding="2" bottomBorder="None" bottomBorderColor="#000000"/>
+					<textElement textAlignment="Right" verticalAlignment="Middle">
+						<font size="9"/>
+					</textElement>
+				<textFieldExpression   class="java.math.BigDecimal"><![CDATA[$V{done}]]></textFieldExpression>
 				</textField>
 						</cellContents>
 						</crosstabRowHeader>
@@ -691,26 +674,6 @@ UNION (
 				</textField>
 						</cellContents>
 						</crosstabColumnHeader>
-						<crosstabTotalColumnHeader>
-						<cellContents mode="Transparent">
-					<box topBorder="1Point" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="1Point" rightBorderColor="#000000" bottomBorder="1Point" bottomBorderColor="#000000"/>
-				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-						mode="Opaque"
-						x="0"
-						y="0"
-						width="100"
-						height="32"
-						backcolor="#C1C1C1"
-						key="textField-23"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" leftPadding="2" rightBorder="None" rightBorderColor="#000000" rightPadding="2" bottomBorder="Thin" bottomBorderColor="#000000"/>
-					<textElement textAlignment="Center" verticalAlignment="Middle" rotation="None" lineSpacing="Single">
-						<font fontName="SansSerif" pdfFontName="" size="9" isBold="false" isItalic="false" isUnderline="false" pdfEncoding ="Cp1252" isStrikeThrough="false" />
-					</textElement>
-				<textFieldExpression   class="java.lang.String"><![CDATA["Total"]]></textFieldExpression>
-				</textField>
-						</cellContents>
-						</crosstabTotalColumnHeader>
 					</columnGroup>
 
 					<measure name="typeamount_Sum" class="java.math.BigDecimal" calculation="Sum">
@@ -725,7 +688,9 @@ UNION (
 						y="0"
 						width="70"
 						height="16"
-						key="textField"/>
+						key="textField">
+							<printWhenExpression><![CDATA[new Boolean($V{typeamount_Sum}!=null)]]></printWhenExpression>
+						</reportElement>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" leftPadding="2" rightBorder="None" rightBorderColor="#000000" rightPadding="2" bottomBorder="None" bottomBorderColor="#000000"/>
 					<textElement textAlignment="Right" verticalAlignment="Middle">
 						<font size="9"/>
@@ -734,22 +699,9 @@ UNION (
 				</textField>
 						</cellContents>
 					</crosstabCell>
-					<crosstabCell width="100" height="16" columnTotalGroup="typename">
+					<crosstabCell width="0" height="16" columnTotalGroup="typename">
 						<cellContents mode="Transparent">
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="1Point" rightBorderColor="#000000" bottomBorder="1Point" bottomBorderColor="#000000"/>
-				<textField isStretchWithOverflow="false" pattern="¤ #,##0.00" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-						x="0"
-						y="0"
-						width="100"
-						height="16"
-						key="textField"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" leftPadding="2" rightBorder="None" rightBorderColor="#000000" rightPadding="2" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement textAlignment="Right">
-						<font/>
-					</textElement>
-				<textFieldExpression   class="java.math.BigDecimal"><![CDATA[$V{typeamount_Sum}]]></textFieldExpression>
-				</textField>
+					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
 					</crosstabCell>
 					<crosstabCell width="70" height="16" rowTotalGroup="settlementno">
@@ -761,7 +713,9 @@ UNION (
 						y="0"
 						width="70"
 						height="16"
-						key="textField"/>
+						key="textField">
+							<printWhenExpression><![CDATA[new Boolean($V{typeamount_Sum}!=null)]]></printWhenExpression>
+						</reportElement>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" leftPadding="2" rightBorder="None" rightBorderColor="#000000" rightPadding="2" bottomBorder="None" bottomBorderColor="#000000"/>
 					<textElement textAlignment="Right" verticalAlignment="Middle">
 						<font pdfFontName="Helvetica-Bold" size="9" isBold="true"/>
@@ -770,22 +724,9 @@ UNION (
 				</textField>
 						</cellContents>
 					</crosstabCell>
-					<crosstabCell width="100" height="16" rowTotalGroup="settlementno" columnTotalGroup="typename">
+					<crosstabCell width="0" height="16" rowTotalGroup="settlementno" columnTotalGroup="typename">
 						<cellContents mode="Transparent">
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="1Point" rightBorderColor="#000000" bottomBorder="1Point" bottomBorderColor="#000000"/>
-				<textField isStretchWithOverflow="false" pattern="¤ #,##0.00" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-						x="0"
-						y="0"
-						width="100"
-						height="16"
-						key="textField"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" leftPadding="2" rightBorder="None" rightBorderColor="#000000" rightPadding="2" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement textAlignment="Right" verticalAlignment="Middle">
-						<font pdfFontName="Helvetica-Bold" size="9" isBold="true"/>
-					</textElement>
-				<textFieldExpression   class="java.math.BigDecimal"><![CDATA[$V{typeamount_Sum}]]></textFieldExpression>
-				</textField>
+					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
 					</crosstabCell>
 					<crosstabCell width="70" height="0" rowTotalGroup="creditcard">
@@ -793,7 +734,7 @@ UNION (
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
 					</crosstabCell>
-					<crosstabCell width="100" height="0" rowTotalGroup="creditcard" columnTotalGroup="typename">
+					<crosstabCell width="0" height="0" rowTotalGroup="creditcard" columnTotalGroup="typename">
 						<cellContents mode="Transparent">
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
@@ -803,7 +744,7 @@ UNION (
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
 					</crosstabCell>
-					<crosstabCell width="100" height="0" rowTotalGroup="amount" columnTotalGroup="typename">
+					<crosstabCell width="0" height="0" rowTotalGroup="amount" columnTotalGroup="typename">
 						<cellContents mode="Transparent">
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
@@ -813,7 +754,7 @@ UNION (
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
 					</crosstabCell>
-					<crosstabCell width="100" height="0" rowTotalGroup="done" columnTotalGroup="typename">
+					<crosstabCell width="0" height="0" rowTotalGroup="done" columnTotalGroup="typename">
 						<cellContents mode="Transparent">
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
@@ -823,7 +764,7 @@ UNION (
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
 					</crosstabCell>
-					<crosstabCell width="100" height="0" rowTotalGroup="netamount" columnTotalGroup="typename">
+					<crosstabCell width="0" height="0" rowTotalGroup="netamount" columnTotalGroup="typename">
 						<cellContents mode="Transparent">
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
@@ -833,7 +774,7 @@ UNION (
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
 					</crosstabCell>
-					<crosstabCell width="100" height="0" rowTotalGroup="date" columnTotalGroup="typename">
+					<crosstabCell width="0" height="0" rowTotalGroup="date" columnTotalGroup="typename">
 						<cellContents mode="Transparent">
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 						</cellContents>
