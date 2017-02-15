@@ -1,21 +1,32 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.sql.Timestamp;
-import java.util.Properties;
-import org.openXpertya.util.Env;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_CouponsSettlements
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2017-01-27 15:51:59.134 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2017-02-15 17:10:34.041 */
 public class X_C_CouponsSettlements extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_CouponsSettlements (Properties ctx, int C_CouponsSettlements_ID, String trxName)
 {
 super (ctx, C_CouponsSettlements_ID, trxName);
+/** if (C_CouponsSettlements_ID == 0)
+{
+setC_CouponsSettlements_ID (0);
+setC_CreditCardCouponFilter_ID (0);
+setC_CreditCardSettlement_ID (0);	// @SQL=SELECT C_CreditCardSettlement_ID FROM C_CreditCardCouponFilter WHERE C_CreditCardCouponFilter_ID=@C_CreditCardCouponFilter_ID@
+setC_Currency_ID (0);
+setC_Payment_ID (0);
+setInclude (false);
+setIsReconciled (false);
+setM_EntidadFinanciera_ID (0);
+setM_EntidadFinancieraPlan_ID (0);
+}
+ */
 }
 /** Load Constructor */
 public X_C_CouponsSettlements (Properties ctx, ResultSet rs, String trxName)
@@ -41,22 +52,6 @@ public String toString()
 {
 StringBuffer sb = new StringBuffer ("X_C_CouponsSettlements[").append(getID()).append("]");
 return sb.toString();
-}
-/** Set Allocation Number */
-public void setAllocationNumber (String AllocationNumber)
-{
-if (AllocationNumber == null) throw new IllegalArgumentException ("AllocationNumber is mandatory");
-if (AllocationNumber.length() > 30)
-{
-log.warning("Length > 30 - truncated");
-AllocationNumber = AllocationNumber.substring(0,30);
-}
-set_Value ("AllocationNumber", AllocationNumber);
-}
-/** Get Allocation Number */
-public String getAllocationNumber() 
-{
-return (String)get_Value("AllocationNumber");
 }
 /** Set Amount.
 Amount in a defined currency */
@@ -138,6 +133,7 @@ public String getCouponNo()
 {
 return (String)get_Value("CouponNo");
 }
+public static final int C_PAYMENT_ID_AD_Reference_ID = MReference.getReferenceID("C_Payment");
 /** Set Payment.
 Payment identifier */
 public void setC_Payment_ID (int C_Payment_ID)
@@ -176,6 +172,24 @@ set_Value ("Include", new Boolean(Include));
 public boolean isInclude() 
 {
 Object oo = get_Value("Include");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
+/** Set Reconciled.
+Payment is reconciled with bank statement */
+public void setIsReconciled (boolean IsReconciled)
+{
+set_Value ("IsReconciled", new Boolean(IsReconciled));
+}
+/** Get Reconciled.
+Payment is reconciled with bank statement */
+public boolean isReconciled() 
+{
+Object oo = get_Value("IsReconciled");
 if (oo != null) 
 {
  if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
