@@ -3,25 +3,17 @@ package org.openXpertya.model;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.util.Properties;
-
 import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por C_ExternalService
- *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2013-09-26 11:58:22.814 */
+ *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke
+ *  @version  - 2017-02-15 17:12:42.596 */
 public class X_C_ExternalService extends org.openXpertya.model.PO
 {
+private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_ExternalService (Properties ctx, int C_ExternalService_ID, String trxName)
 {
 super (ctx, C_ExternalService_ID, trxName);
-/** if (C_ExternalService_ID == 0)
-{
-setC_ExternalService_ID (0);
-setName (null);
-setURL (null);
-setValue (null);
-}
- */
 }
 /** Load Constructor */
 public X_C_ExternalService (Properties ctx, ResultSet rs, String trxName)

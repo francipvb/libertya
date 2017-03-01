@@ -7,7 +7,7 @@ import org.openXpertya.util.Env;
 import org.openXpertya.util.KeyNamePair;
 /** Modelo Generado por M_EntidadFinanciera
  *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2017-02-03 17:24:32.31 */
+ *  @version  - 2017-02-21 15:55:23.984 */
 public class X_M_EntidadFinanciera extends org.openXpertya.model.PO
 {
 private static final long serialVersionUID = 1L;
@@ -166,6 +166,23 @@ public String getCreditCardType()
 {
 return (String)get_Value("CreditCardType");
 }
+public static final int C_REGION_ID_AD_Reference_ID = MReference.getReferenceID("C_Region");
+/** Set Region.
+Identifies a geographical Region */
+public void setC_Region_ID (int C_Region_ID)
+{
+if (C_Region_ID <= 0) set_Value ("C_Region_ID", null);
+ else 
+set_Value ("C_Region_ID", new Integer(C_Region_ID));
+}
+/** Get Region.
+Identifies a geographical Region */
+public int getC_Region_ID() 
+{
+Integer ii = (Integer)get_Value("C_Region_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
 /** Set Establishment Number */
 public void setEstablishmentNumber (String EstablishmentNumber)
 {
@@ -190,7 +207,7 @@ public static final String FINANCINGSERVICE_VISA = "VI";
 public static final String FINANCINGSERVICE_NARANJA = "NA";
 /** FIRSTDATA = FD */
 public static final String FINANCINGSERVICE_FIRSTDATA = "FD";
-/** Set FinancingService */
+/** Set Financing Service */
 public void setFinancingService (String FinancingService)
 {
 if (FinancingService == null || FinancingService.equals("AM") || FinancingService.equals("VI") || FinancingService.equals("NA") || FinancingService.equals("FD"));
@@ -202,7 +219,7 @@ FinancingService = FinancingService.substring(0,2);
 }
 set_Value ("FinancingService", FinancingService);
 }
-/** Get FinancingService */
+/** Get Financing Service */
 public String getFinancingService() 
 {
 return (String)get_Value("FinancingService");
