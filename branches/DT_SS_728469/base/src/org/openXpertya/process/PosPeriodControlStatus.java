@@ -11,7 +11,6 @@ import org.openXpertya.model.MPeriodControl;
 import org.openXpertya.model.X_C_PosPeriodControl;
 import org.openXpertya.util.CacheMgt;
 import org.openXpertya.util.DB;
-import org.openXpertya.util.ErrorUsuarioOXP;
 import org.openXpertya.util.Msg;
 
 public class PosPeriodControlStatus extends SvrProcess {
@@ -116,9 +115,10 @@ public class PosPeriodControlStatus extends SvrProcess {
 		sql.append("dt.* ");
 		sql.append("FROM c_doctype dt ");
 		sql.append("WHERE docbasetype = ? ");
+		sql.append("AND ad_client_id = ? ");
 		
 		if (pos > 0) {
-			sql.append("  AND POSITION(TRIM(BOTH FROM to_char(?, '0000')) IN NAME) > 0; ");
+			sql.append("  AND POSITION(TRIM(BOTH FROM to_char(?, '0000')) IN doctypekey) > 0; ");
 		}
 		
 		PreparedStatement ps = null;
@@ -128,8 +128,9 @@ public class PosPeriodControlStatus extends SvrProcess {
 			
 			//Parámetros
 			ps.setString(1, docBaseType);
+			ps.setInt(2, getAD_Client_ID());
 			if (pos > 0)
-				ps.setInt(2, pos);
+				ps.setInt(3, pos);
 			
 			rs = ps.executeQuery();
 			while (rs.next()) {

@@ -11,7 +11,7 @@ import org.openXpertya.util.*;
 public class X_C_PeriodControl extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
-public X_C_PeriodControl (Properties ctx, int C_PeriodControl_ID, String trxName)
+public X_C_PeriodControl (Properties ctx, int C_PeriodControl_ID, String trxName) 
 {
 super (ctx, C_PeriodControl_ID, trxName);
 /** if (C_PeriodControl_ID == 0)

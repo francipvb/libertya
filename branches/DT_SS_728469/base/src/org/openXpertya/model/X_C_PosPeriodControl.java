@@ -1,5 +1,5 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
-package org.openXpertya.model;
+package org.openXpertya.model; 
 import java.util.logging.Level;
  import java.util.*;
 import java.sql.*;
