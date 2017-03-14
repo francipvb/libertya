@@ -51,6 +51,7 @@ import org.openXpertya.util.MeasurableTask;
 import org.openXpertya.util.Msg;
 import org.openXpertya.util.StringUtil;
 import org.openXpertya.util.TimeStatsLogger;
+import org.openXpertya.util.TimeUtil;
 import org.openXpertya.util.Util;
 
 /**
@@ -154,6 +155,9 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 	/** Boolean que determina si se está ejecutando una anulación. */
 	private boolean voidProcess = false;
 
+	/** Boolean que determina si se debe controlar el último número impreso fiscalmente */
+	private boolean skipLastFiscalDocumentNoValidation = false;
+	
 	/**
 	 * Descripción de Método
 	 * 
@@ -1139,7 +1143,8 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		}
 
 		if (getC_BPartner_Location_ID() == 0) {
-			log.log(Level.SEVERE, "Has no To Address: " + bp);
+			//log.log(Level.SEVERE, "Has no To Address: " + bp);
+			log.saveError("Error", Msg.getMsg(getCtx(), "NoBPartnerLocationError"));
 		}
 
 		// Set Contact
@@ -2179,7 +2184,8 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 
 			// Fecha del CAI > que fecha de facturacion
 			if (getDateCAI() != null
-					&& getDateInvoiced().compareTo(getDateCAI()) > 0) {
+					&& getDateInvoiced().compareTo(getDateCAI()) > 0 
+					&& !TimeUtil.isSameDay(getDateInvoiced(), getDateCAI())){
 				log.saveError("InvoicedDateAfterCAIDate", "");
 				return false;
 			}
@@ -3073,7 +3079,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		// Std Period open?
 
 		if (!MPeriod.isOpen(getCtx(), getDateAcct(), dt.getDocBaseType(), dt)) {
-			m_processMsg = "@PeriodClosed@"; 
+			m_processMsg = "@PeriodClosed@";
 
 			return DocAction.STATUS_Invalid;
 		}
@@ -3655,7 +3661,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 			try {
 				if (authorizationChainManager
 						.loadAuthorizationChain(reactiveInvoice())) {
-					m_processMsg = Msg.getMsg(getCtx(), "ExistsAuthorizationChainLink");
+					m_processMsg = Msg.getMsg(getCtx(), "AlreadyExistsAuthorizationChainLink");
 					//this.setProcessed(true);
 					return DOCSTATUS_WaitingConfirmation;
 				}
@@ -5119,7 +5125,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 			// Valida que si el documento es manual y el tipo de documento se
 			// imprime fiscalmente entonces no sobrepase el último nro de
 			// comprobante impreso fiscalmente
-			if (requireFiscalPrint() && isManualDocumentNo()) {
+			if (!isSkipLastFiscalDocumentNoValidation() && requireFiscalPrint() && isManualDocumentNo()) {
 				// FIXME Se comenta por ahora porque no se usa el último
 				// comprobante
 				// impreso por una cuestión de performance
@@ -6254,6 +6260,14 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 
 	public void setVoidProcess(boolean voidProcess) {
 		this.voidProcess = voidProcess;
+	}
+
+	public boolean isSkipLastFiscalDocumentNoValidation() {
+		return skipLastFiscalDocumentNoValidation;
+	}
+
+	public void setSkipLastFiscalDocumentNoValidation(boolean skipLastFiscalDocumentNoValidation) {
+		this.skipLastFiscalDocumentNoValidation = skipLastFiscalDocumentNoValidation;
 	}
 
 } // MInvoice

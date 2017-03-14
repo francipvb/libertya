@@ -1,20 +1,26 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.Env;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_CommissionConcepts
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2017-01-30 10:34:25.463 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2017-01-30 16:10:51.684 */
 public class X_C_CommissionConcepts extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_CommissionConcepts (Properties ctx, int C_CommissionConcepts_ID, String trxName)
 {
 super (ctx, C_CommissionConcepts_ID, trxName);
+/** if (C_CommissionConcepts_ID == 0)
+{
+setC_CardSettlementConcepts_ID (0);
+setC_CommissionConcepts_ID (0);
+setC_CreditCardSettlement_ID (0);
+}
+ */
 }
 /** Load Constructor */
 public X_C_CommissionConcepts (Properties ctx, ResultSet rs, String trxName)
@@ -55,7 +61,7 @@ BigDecimal bd = (BigDecimal)get_Value("Amount");
 if (bd == null) return Env.ZERO;
 return bd;
 }
-public static final int C_CARDSETTLEMENTCONCEPTS_ID_AD_Reference_ID = MReference.getReferenceID("C_CardSettlementConceptsCommision");
+public static final int C_CARDSETTLEMENTCONCEPTS_ID_AD_Reference_ID = MReference.getReferenceID("C_CardSettlementConcepts");
 /** Set Card Settlement Concept */
 public void setC_CardSettlementConcepts_ID (int C_CardSettlementConcepts_ID)
 {
@@ -80,7 +86,6 @@ Integer ii = (Integer)get_Value("C_CommissionConcepts_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
-public static final int C_CREDITCARDSETTLEMENT_ID_AD_Reference_ID = MReference.getReferenceID("C_CreditCardSettlement_");
 /** Set Credit Card Settlement */
 public void setC_CreditCardSettlement_ID (int C_CreditCardSettlement_ID)
 {

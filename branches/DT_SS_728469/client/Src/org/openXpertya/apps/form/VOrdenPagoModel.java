@@ -1048,7 +1048,7 @@ public class VOrdenPagoModel {
 
 	// Main
 	public Timestamp m_fechaFacturas = null;
-	protected Timestamp m_fechaTrx = new Timestamp(new java.util.Date().getTime());
+	protected Timestamp m_fechaTrx = Env.getTimestamp();
 	public boolean m_allInvoices = true;
 	public int C_BPartner_ID = 0;
 	public int AD_Org_ID = 0;
@@ -2382,7 +2382,7 @@ public class VOrdenPagoModel {
 		// Por ahora no hace nada aquí
 	}
 
-	public void mostrarInforme(ASyncProcess asyncProc) {
+	public void mostrarInforme(ASyncProcess asyncProc, boolean printRetenciones) {
 
 		if (m_newlyCreatedC_AllocationHeader_ID <= 0)
 			return;
@@ -2417,10 +2417,17 @@ public class VOrdenPagoModel {
 			ip.setParameter("C_AllocationHdr_ID",
 					String.valueOf(m_newlyCreatedC_AllocationHeader_ID));
 			if (!ip.save()) {
-				log.log(Level.SEVERE, "Error at mostrarInforme: ip.save()");
+				log.log(Level.SEVERE, CLogger.retrieveErrorAsString());
 				return;
 			}
 
+			ip = new MPInstancePara(instance, 20);
+			ip.setParameter("PrintRetentions", printRetenciones ? "Y" : "N");
+			if (!ip.save()) {
+				log.log(Level.SEVERE, CLogger.retrieveErrorAsString());
+				return;
+			}
+			
 			ProcessCtl worker = new ProcessCtl(asyncProc, pi, null);
 			worker.start();
 		}
@@ -3708,10 +3715,15 @@ public class VOrdenPagoModel {
 	}
 
 	public boolean isAllowAdvancedPayment() {
+		boolean allowOPA = isAllowAdvanced();
 		if (BPartner != null) {
-			return BPartner.isAllowAdvancedPaymentReceipts();
+			allowOPA = allowOPA && BPartner.isAllowAdvancedPaymentReceipts();
 		} 
-		return true;
+		return allowOPA;
+	}
+	
+	public boolean isAllowAdvanced(){
+		return getRole().isAllowOPA();
 	}
 	
 	public boolean getPartialPayment() {

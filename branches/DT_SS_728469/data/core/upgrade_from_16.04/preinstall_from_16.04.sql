@@ -5086,3 +5086,996 @@ FROM
 	LEFT JOIN libertya.c_allocationhdr ah
 		ON al.c_allocationhdr_id = ah.c_allocationhdr_id;
 ALTER TABLE c_paymentcoupon_v OWNER TO libertya;
+
+--20170127-1430 Nuevas columnas para obtener cadenas de autorización al importar facturas
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('i_invoice','authorizationchainvalue','character varying(40)'));
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('i_invoice','m_authorizationchain_id','integer'));
+
+--20170130-1600 Merge de Revisiones 1758 y 1760
+ALTER TABLE libertya.c_creditcardcouponfilter
+   ALTER COLUMN m_entidadfinanciera_id DROP NOT NULL;
+
+ALTER TABLE libertya.c_creditcardcouponfilter
+   ALTER COLUMN m_entidadfinancieraplan_id DROP NOT NULL;
+
+ALTER TABLE libertya.c_ivasettlements
+  DROP CONSTRAINT ivasettlementstaxcategory;
+
+ALTER TABLE libertya.c_ivasettlements RENAME c_taxcategory_id  TO c_tax_id;
+
+ALTER TABLE libertya.c_ivasettlements
+  ADD CONSTRAINT ivasettlementstax FOREIGN KEY (c_tax_id) REFERENCES libertya.c_tax (c_tax_id) ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE libertya.c_couponssettlements
+   ALTER COLUMN c_payment_id DROP NOT NULL;
+
+ALTER TABLE libertya.c_perceptionssettlement
+  DROP CONSTRAINT perceptionssettlementtaxcategory;
+
+ALTER TABLE libertya.c_perceptionssettlement RENAME c_taxcategory_id  TO c_tax_id;
+
+ALTER TABLE libertya.c_perceptionssettlement
+  ADD CONSTRAINT perceptionstax FOREIGN KEY (c_tax_id) REFERENCES libertya.c_tax (c_tax_id) ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_couponssettlements
+  DROP COLUMN allocationnumber;
+
+ALTER TABLE c_couponssettlements
+  ADD COLUMN allocationnumber character varying(30);
+
+ALTER TABLE libertya.c_commissionconcepts
+  DROP COLUMN concepttype;
+
+ALTER TABLE libertya.c_commissionconcepts
+  ADD COLUMN c_cardsettlementconcepts_id integer NOT NULL;
+
+ALTER TABLE libertya.c_commissionconcepts
+  ADD CONSTRAINT commisioncardsettlementconcepts FOREIGN KEY (c_cardsettlementconcepts_id) REFERENCES libertya.c_cardsettlementconcepts (c_cardsettlementconcepts_id) ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE libertya.c_expenseconcepts
+  DROP COLUMN concepttype;
+
+ALTER TABLE libertya.c_expenseconcepts
+  ADD COLUMN c_cardsettlementconcepts_id integer NOT NULL;
+
+ALTER TABLE libertya.c_expenseconcepts
+  ADD CONSTRAINT dkcardsettlementconcepts FOREIGN KEY (c_cardsettlementconcepts_id) REFERENCES libertya.c_cardsettlementconcepts (c_cardsettlementconcepts_id) ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+--20170202-1415 Mejoras de performance al Reporte de Compras
+CREATE OR REPLACE FUNCTION get_bpartner_product_po(productID integer)
+  RETURNS integer AS
+  --Obtiene el proveedor actual del artículo parámetro
+$BODY$
+DECLARE
+  bpid integer := 0;
+BEGIN
+  -- Busco el proveedor activo ordenado por currentvendor y fecha de actualización en caso que ninguno esté marcado como proveedor actual
+  SELECT INTO bpid c_bpartner_id
+  FROM m_product_po po
+  WHERE po.m_product_id = productID AND po.isactive = 'Y'
+  ORDER BY po.iscurrentvendor desc, po.updated desc
+  LIMIT 1;
+
+  IF(bpid is null)
+  THEN bpid = 0;
+  END IF;
+
+  RETURN bpid;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION get_bpartner_product_po(integer)
+  OWNER TO libertya;
+
+--20170203-1445 Mejoras de performance a los reportes que utilizan la vista v_product_movements
+CREATE TYPE v_product_movements_type AS (tablename character varying(40), ad_client_id integer, ad_org_id integer,
+orgvalue character varying(40), orgname character varying(60),
+doc_id integer, documentno character varying(30), docstatus character(2),
+description character varying(255), datetrx timestamp, m_product_id integer,
+qty numeric(22,4), "type" character varying(40), aditionaltype character varying(60),
+c_charge_id integer, chargename character varying(60), productname character varying(255),
+productvalue character varying(40), m_warehouse_id integer, warehousevalue character varying(40),
+warehousename character varying(60), m_warehouseto_id integer, warehousetovalue character varying(40),
+warehousetoname character varying(60), c_bpartner_id integer, bpartnervalue character varying(40),
+bpartnername character varying(60), m_product_category_id integer, productcategoryvalue character varying(40),
+productcategoryname character varying(60), m_product_gamas_id integer, productgamasvalue character varying(100),
+productgamasname character varying(60), m_product_lines_id integer, productlinesvalue character varying(40),
+productlinesname character varying(60), order_documentno character varying(30));
+
+CREATE OR REPLACE FUNCTION v_product_movements_filtered(orgID integer, 
+	datefrom timestamp without time zone, 
+	dateto timestamp without time zone, 
+	chargeID integer, 
+	productLinesID integer)
+  RETURNS SETOF v_product_movements_type AS
+$BODY$
+declare
+  consulta varchar;
+  
+  whereclausegeneric varchar;
+  whereclauseorg varchar;
+  wheredatefromdatetrx varchar;
+  wheredatetodatetrx varchar;
+  wheredatefrommovementdate varchar;
+  wheredatetomovementdate varchar;
+  whereclausecharge varchar;
+  whereclauseproductlines varchar;
+
+  joinchargeop varchar;
+  joincharge varchar;
+  joinchargeline varchar;
+  joinproductlines varchar;
+  joinproductlinesop varchar;
+  
+  transferquery varchar;
+  productchangequery varchar;
+  inoutquery varchar;
+  splittingquery varchar;
+  inventoryquery varchar;
+  movementquery varchar;
+  
+  adocument v_product_movements_type;
+   
+BEGIN
+  whereclausegeneric = ' WHERE (1 = 1) ';
+  -- Condiciones y joins
+  whereclauseorg = '';
+  whereclausecharge = '';
+  whereclauseproductlines = '';
+  wheredatefromdatetrx = '';
+  wheredatetodatetrx = '';
+  wheredatefrommovementdate = '';
+  wheredatetomovementdate = '';
+
+  joinchargeop = ' LEFT ';
+  joinproductlinesop = ' LEFT ';
+  
+  IF(orgID is not null and orgID > 0) 
+  THEN whereclauseorg = ' AND d.ad_org_id = ' || orgID || ' ';
+  END IF;
+
+  IF(datefrom is not null) 
+  THEN 
+	wheredatefromdatetrx = ' AND ''' || datefrom || '''::date <= d.datetrx::date ';
+	wheredatefrommovementdate = ' AND ''' || datefrom || '''::date <= d.movementdate::date ';
+  END IF;
+
+  IF(dateto is not null) 
+  THEN 
+	wheredatetodatetrx = ' AND ''' || dateto || '''::date >= d.datetrx::date ';
+	wheredatetomovementdate = ' AND ''' || dateto || '''::date >= d.movementdate::date ';
+  END IF;
+
+  IF(chargeID is not null and chargeID > 0) 
+  THEN 
+	whereclausecharge = ' AND c.c_charge_id = ' || chargeID || ' ';
+	joinchargeop = ' INNER ';
+  END IF;
+  
+  IF(productLinesID is not null and productLinesID > 0) 
+  THEN 
+	whereclauseproductlines = ' AND pl.m_product_lines_id = ' || productLinesID || ' ';
+	joinproductlinesop = ' INNER ';
+  END IF;
+
+  -- Joins
+  joincharge = joinchargeop || ' JOIN c_charge c ON c.c_charge_id = d.c_charge_id ';
+  joinchargeline = joinchargeop || ' JOIN c_charge c ON c.c_charge_id = l.c_charge_id ';
+  
+  joinproductlines = ' INNER JOIN m_product p ON p.m_product_id = l.m_product_id
+			INNER JOIN m_product_category pc ON pc.m_product_category_id = p.m_product_category_id '
+			|| joinproductlinesop || ' JOIN m_product_gamas pg ON pg.m_product_gamas_id = pc.m_product_gamas_id '
+			|| joinproductlinesop || ' JOIN m_product_lines pl ON pl.m_product_lines_id = pg.m_product_lines_id ';
+  
+  -- Transferencias
+  transferquery = ' ( SELECT ''M_Transfer'' AS tablename, d.ad_client_id, d.ad_org_id, d.m_transfer_id AS doc_id, 
+			d.documentno, d.docstatus, d.description, d.datetrx, 
+			p.m_product_id, p.value as productvalue, p.name as productname,
+			l.qty, d.transfertype AS type, d.movementtype AS aditionaltype, 
+			c.c_charge_id, c.name as chargename, d.m_warehouse_id, 
+			d.m_warehouseto_id, bp.c_bpartner_id, bp.value as bpartnervalue, bp.name as bpartnername, 
+			pc.m_product_category_id, pc.value AS productcategoryvalue, pc.name AS productcategoryname, 
+			COALESCE(pg.m_product_gamas_id, 0) AS m_product_gamas_id, 
+			COALESCE(pg.value, ''SD''::character varying) AS productgamasvalue, 
+			COALESCE(pg.name, ''SIN DESCRIPCION''::character varying) AS productgamasname, 
+			COALESCE(pl.m_product_lines_id, 0) AS m_product_lines_id, 
+			COALESCE(pl.value, ''SD''::character varying) AS productlinesvalue, 
+			COALESCE(pl.name, ''SIN DESCRIPCION''::character varying) AS productlinesname, 
+			NULL::character varying(30) AS order_documentno
+		 FROM m_transfer d
+		 JOIN m_transferline l ON l.m_transfer_id = d.m_transfer_id 
+		 JOIN c_bpartner bp ON bp.c_bpartner_id = d.c_bpartner_id ' 
+		 || joincharge 
+		 || joinproductlines 
+		 || whereclausegeneric  
+		 || whereclauseorg 
+		 || wheredatefromdatetrx 
+		 || wheredatetodatetrx 
+		 || whereclausecharge  
+		 || whereclauseproductlines || 
+		 ' ) ';
+		 
+  -- Cambio de Artículo
+  productchangequery = ' ( SELECT ''M_ProductChange'' AS tablename, d.ad_client_id, d.ad_org_id, d.m_productchange_id AS doc_id, 
+			d.documentno, d.docstatus, d.description, d.datetrx, 
+			p.m_product_id, p.value as productvalue, p.name as productname,
+			l.qtyinternaluse * (-1)::numeric AS qty, NULL::unknown AS type, NULL::unknown AS aditionaltype, 
+			c.c_charge_id, c.name as chargename, d.m_warehouse_id, NULL::unknown AS m_warehouseto_id, 
+			NULL::unknown AS c_bpartner_id, NULL::unknown as bpartnervalue, NULL::unknown as bpartnername, 
+			pc.m_product_category_id, pc.value AS productcategoryvalue, pc.name AS productcategoryname, 
+			COALESCE(pg.m_product_gamas_id, 0) AS m_product_gamas_id, 
+			COALESCE(pg.value, ''SD''::character varying) AS productgamasvalue, 
+			COALESCE(pg.name, ''SIN DESCRIPCION''::character varying) AS productgamasname, 
+			COALESCE(pl.m_product_lines_id, 0) AS m_product_lines_id, 
+			COALESCE(pl.value, ''SD''::character varying) AS productlinesvalue, 
+			COALESCE(pl.name, ''SIN DESCRIPCION''::character varying) AS productlinesname, 
+			NULL::character varying(30) AS order_documentno 
+		FROM m_productchange d
+		JOIN m_inventoryline l ON l.m_inventory_id = d.m_inventory_id '
+		|| joinchargeline
+		|| joinproductlines 
+		|| whereclausegeneric 
+		|| whereclauseorg 
+		|| wheredatefromdatetrx
+		|| wheredatetodatetrx
+		|| whereclausecharge 
+		|| whereclauseproductlines ||
+		' ) ';
+
+  -- Remitos
+  inoutquery = '';
+  IF(chargeID is null or chargeID <= 0) 
+  THEN 
+  inoutquery = ' UNION ALL  
+		( SELECT ''M_InOut'' AS tablename, d.ad_client_id, d.ad_org_id, d.m_inout_id AS doc_id, d.documentno, 
+			d.docstatus, d.description, d.movementdate AS datetrx, 
+			p.m_product_id, p.value as productvalue, p.name as productname, l.movementqty AS qty, 
+			dt.name AS type, NULL::unknown AS aditionaltype, NULL::unknown AS c_charge_id, 
+			NULL::unknown as chargename, d.m_warehouse_id, NULL::unknown AS m_warehouseto_id, 
+			bp.c_bpartner_id, bp.value as bpartnervalue, bp.name as bpartnername, 
+			pc.m_product_category_id, pc.value AS productcategoryvalue, pc.name AS productcategoryname, 
+			COALESCE(pg.m_product_gamas_id, 0) AS m_product_gamas_id, 
+			COALESCE(pg.value, ''SD''::character varying) AS productgamasvalue, 
+			COALESCE(pg.name, ''SIN DESCRIPCION''::character varying) AS productgamasname, 
+			COALESCE(pl.m_product_lines_id, 0) AS m_product_lines_id, 
+			COALESCE(pl.value, ''SD''::character varying) AS productlinesvalue, 
+			COALESCE(pl.name, ''SIN DESCRIPCION''::character varying) AS productlinesname, 
+			o.documentno AS order_documentno
+		FROM m_inout d 
+		JOIN m_inoutline l ON l.m_inout_id = d.m_inout_id
+                JOIN c_doctype dt ON dt.c_doctype_id = d.c_doctype_id 
+                JOIN c_bpartner bp ON bp.c_bpartner_id = d.c_bpartner_id 
+                LEFT JOIN c_order o ON o.c_order_id = d.c_order_id ' 
+                || joinproductlines 
+		|| whereclausegeneric 
+		|| whereclauseorg 
+		|| wheredatefrommovementdate
+		|| wheredatetomovementdate
+		|| whereclauseproductlines || 
+                ' ) ';
+  END IF;
+
+  --Fraccionamientos
+  splittingquery = ' ( SELECT ''M_Splitting'' AS tablename, d.ad_client_id, d.ad_org_id, d.m_splitting_id AS doc_id, 
+			d.documentno, d.docstatus, d.comments AS description, d.datetrx, 
+			p.m_product_id, p.value as productvalue, p.name as productname,
+			l.qtyinternaluse * (-1)::numeric AS qty, NULL::unknown AS type, NULL::unknown AS aditionaltype, 
+			l.c_charge_id, c.name as chargename, d.m_warehouse_id, NULL::unknown AS m_warehouseto_id, 
+			NULL::unknown AS c_bpartner_id, NULL::unknown as bpartnervalue, NULL::unknown as bpartnername, 
+			pc.m_product_category_id, pc.value AS productcategoryvalue, pc.name AS productcategoryname, 
+			COALESCE(pg.m_product_gamas_id, 0) AS m_product_gamas_id, 
+			COALESCE(pg.value, ''SD''::character varying) AS productgamasvalue, 
+			COALESCE(pg.name, ''SIN DESCRIPCION''::character varying) AS productgamasname, 
+			COALESCE(pl.m_product_lines_id, 0) AS m_product_lines_id, 
+			COALESCE(pl.value, ''SD''::character varying) AS productlinesvalue, 
+			COALESCE(pl.name, ''SIN DESCRIPCION''::character varying) AS productlinesname, 
+			NULL::character varying(30) AS order_documentno 
+                FROM m_splitting d 
+                JOIN m_inventoryline l ON l.m_inventory_id = d.m_inventory_id '
+                || joinchargeline 
+		|| joinproductlines 
+		|| whereclausegeneric 
+		|| whereclauseorg 
+		|| wheredatefromdatetrx
+		|| wheredatetodatetrx
+		|| whereclausecharge 
+		|| whereclauseproductlines ||  
+                   ' ) ';
+
+  -- Inventario
+  inventoryquery = ' ( SELECT ''M_Inventory'' AS tablename, d.ad_client_id, d.ad_org_id, d.m_inventory_id AS doc_id, 
+			d.documentno, d.docstatus, d.description, d.movementdate AS datetrx, 
+			p.m_product_id, p.value as productvalue, p.name as productname,
+			l.qtycount AS qty, dt.name AS type, d.inventorykind AS aditionaltype, 
+			d.c_charge_id, c.name as chargename, d.m_warehouse_id, NULL::unknown AS m_warehouseto_id, 
+			NULL::unknown AS c_bpartner_id, NULL::unknown as bpartnervalue, NULL::unknown as bpartnername, 
+			pc.m_product_category_id, pc.value AS productcategoryvalue, pc.name AS productcategoryname, 
+			COALESCE(pg.m_product_gamas_id, 0) AS m_product_gamas_id, 
+			COALESCE(pg.value, ''SD''::character varying) AS productgamasvalue, 
+			COALESCE(pg.name, ''SIN DESCRIPCION''::character varying) AS productgamasname, 
+			COALESCE(pl.m_product_lines_id, 0) AS m_product_lines_id, 
+			COALESCE(pl.value, ''SD''::character varying) AS productlinesvalue, 
+			COALESCE(pl.name, ''SIN DESCRIPCION''::character varying) AS productlinesname, 
+			NULL::character varying(30) AS order_documentno 
+                FROM m_inventory d
+                JOIN m_inventoryline l ON d.m_inventory_id = l.m_inventory_id
+                JOIN c_doctype dt ON dt.c_doctype_id = d.c_doctype_id ' 
+                || joincharge 
+		|| joinproductlines 
+		|| whereclausegeneric 
+		|| whereclauseorg 
+		|| wheredatefrommovementdate
+		|| wheredatetomovementdate
+		|| whereclausecharge 
+		|| whereclauseproductlines ||
+                ' 	AND NOT (EXISTS ( SELECT m_transfer.m_inventory_id
+					FROM m_transfer
+					WHERE m_transfer.m_inventory_id = d.m_inventory_id)) 
+			AND NOT (EXISTS ( SELECT m_productchange.m_inventory_id 
+						FROM m_productchange
+						WHERE m_productchange.m_inventory_id = d.m_inventory_id 
+							OR m_productchange.void_inventory_id = d.m_inventory_id)) 
+			AND NOT (EXISTS ( SELECT s.m_inventory_id 
+						FROM m_splitting s
+						WHERE s.m_inventory_id = d.m_inventory_id 
+							OR s.void_inventory_id = d.m_inventory_id)) 
+		) ';
+
+  -- Movimientos de mercadería
+  movementquery = '';
+  IF(chargeID is null or chargeID <= 0) 
+  THEN 
+  movementquery = ' UNION ALL 
+		( SELECT ''M_Movement'' AS tablename, d.ad_client_id, d.ad_org_id, d.m_movement_id AS doc_id, 
+			d.documentno, d.docstatus, d.description, d.movementdate AS datetrx, 
+			p.m_product_id, p.value as productvalue, p.name as productname,
+			l.movementqty AS qty, dt.name AS type, NULL::unknown AS aditionaltype, 
+			NULL::unknown AS c_charge_id, NULL::unknown as chargename, 
+			w.m_warehouse_id, wt.m_warehouse_id AS m_warehouseto_id, 
+			NULL::unknown AS c_bpartner_id, NULL::unknown as bpartnervalue, NULL::unknown as bpartnername, 
+			pc.m_product_category_id, pc.value AS productcategoryvalue, pc.name AS productcategoryname, 
+			COALESCE(pg.m_product_gamas_id, 0) AS m_product_gamas_id, 
+			COALESCE(pg.value, ''SD''::character varying) AS productgamasvalue, 
+			COALESCE(pg.name, ''SIN DESCRIPCION''::character varying) AS productgamasname, 
+			COALESCE(pl.m_product_lines_id, 0) AS m_product_lines_id, 
+			COALESCE(pl.value, ''SD''::character varying) AS productlinesvalue, 
+			COALESCE(pl.name, ''SIN DESCRIPCION''::character varying) AS productlinesname, 
+			NULL::character varying(30) AS order_documentno 
+                FROM m_movement d
+                JOIN m_movementline l ON l.m_movement_id = d.m_movement_id
+                JOIN m_locator lo ON lo.m_locator_id = l.m_locator_id
+                JOIN m_warehouse w ON w.m_warehouse_id = lo.m_warehouse_id
+                JOIN m_locator lot ON lot.m_locator_id = l.m_locatorto_id
+                JOIN m_warehouse wt ON wt.m_warehouse_id = lot.m_warehouse_id
+                JOIN c_doctype dt ON dt.c_doctype_id = d.c_doctype_id ' 
+                || joinproductlines 
+		|| whereclausegeneric 
+		|| whereclauseorg 
+		|| wheredatefrommovementdate
+		|| wheredatetomovementdate 
+		|| whereclauseproductlines || 
+		' ) ';
+  END IF;
+  
+  -- Armar la consulta
+  consulta = ' SELECT l.tablename, l.ad_client_id, l.ad_org_id, o.value AS orgvalue, o.name AS orgname, 
+			l.doc_id, l.documentno, l.docstatus, l.description, l.datetrx, l.m_product_id, l.qty, l.type, 
+			l.aditionaltype, l.c_charge_id, l.chargename, productname, productvalue, 
+			w.m_warehouse_id, w.value AS warehousevalue, w.name AS warehousename, 
+			wt.m_warehouse_id AS m_warehouseto_id, wt.value AS warehousetovalue, wt.name AS warehousetoname, 
+			l.c_bpartner_id, l.bpartnervalue, l.bpartnername, 
+			l.m_product_category_id, l.productcategoryvalue, l.productcategoryname, 
+			l.m_product_gamas_id, l.productgamasvalue, l.productgamasname, 
+			l.m_product_lines_id, l.productlinesvalue, l.productlinesname, 
+			l.order_documentno
+
+   FROM ( '
+   || transferquery ||
+   ' UNION ALL '
+   || productchangequery
+   || inoutquery || 
+   ' UNION ALL ' 
+   || splittingquery || 
+   ' UNION ALL ' 
+   || inventoryquery
+   || movementquery || 
+   ' ) l 
+   JOIN ad_org o ON o.ad_org_id = l.ad_org_id 
+   JOIN m_warehouse w ON w.m_warehouse_id = l.m_warehouse_id 
+   LEFT JOIN m_warehouse wt ON wt.m_warehouse_id = l.m_warehouseto_id ; ';
+
+--raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE;
+ALTER FUNCTION v_product_movements_filtered(integer, 
+	timestamp without time zone, 
+	timestamp without time zone, 
+	integer, 
+	integer)
+  OWNER TO libertya;
+
+drop view v_product_movements;
+
+create or replace view v_product_movements as 
+select * 
+from v_product_movements_filtered(-1,null,null,-1,-1);
+
+--20170209-1214 Merge de Revisión 1778
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  -
+--  - - - Trigger que setea Estado Auditoría "Pendiente de Cierre" por    - - - -
+--  - - - a los pagos con tarjetas									      - - - -
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  -
+
+CREATE OR REPLACE FUNCTION setDefaultAuditStatus()
+  RETURNS trigger AS
+$BODY$
+BEGIN
+IF NEW.tendertype = 'C' THEN
+	NEW.auditstatus = 'CP';
+END IF;
+RETURN NEW;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION setDefaultAuditStatus()
+  OWNER TO libertya;
+
+
+
+CREATE TRIGGER "setDefaultAuditStatusTrg" BEFORE INSERT
+   ON c_payment FOR EACH ROW
+   EXECUTE PROCEDURE libertya.setdefaultauditstatus();
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  -
+--  - - - Indice para referencia a pagos desde los cupones en liquidación - - - -
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  -
+
+CREATE INDEX paymentindex
+	ON libertya.c_couponssettlements (c_payment_id);
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  -
+--  - - - - - Se agrega referencia a C_payment para las liquidaciones - - - - - -
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  -
+
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('c_creditcardsettlement','c_payment_id','integer'));
+
+ALTER TABLE c_creditcardsettlement
+  ADD CONSTRAINT fkpayment FOREIGN KEY (c_payment_id)
+  REFERENCES c_payment (c_payment_id)
+  ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- - - - Se modifican todas las claves foráneas de las tablas de la ventana de -
+-- - - - liquidacion de tarjetas de crédito, a fin de permitir la eliminación  -
+-- - - - en cascada. - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ALTER TABLE libertya.c_ivasettlements
+  DROP CONSTRAINT ivasettlementscreditcardsettlement;
+
+ALTER TABLE libertya.c_ivasettlements
+  ADD CONSTRAINT fkcreditcardsettlement FOREIGN KEY (c_creditcardsettlement_id) 
+  REFERENCES libertya.c_creditcardsettlement (c_creditcardsettlement_id)
+  ON UPDATE NO ACTION ON DELETE CASCADE;
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ALTER TABLE libertya.c_commissionconcepts
+  DROP CONSTRAINT fkcreditcardsettlement;
+
+ALTER TABLE libertya.c_commissionconcepts
+  ADD CONSTRAINT fkcreditcardsettlement FOREIGN KEY (c_creditcardsettlement_id) 
+  REFERENCES libertya.c_creditcardsettlement (c_creditcardsettlement_id)
+  ON UPDATE NO ACTION ON DELETE CASCADE;
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ALTER TABLE libertya.c_withholdingsettlement
+  DROP CONSTRAINT fkcreditcardsettlement;
+
+ALTER TABLE libertya.c_withholdingsettlement
+  ADD CONSTRAINT fkcreditcardsettlement FOREIGN KEY (c_creditcardsettlement_id) 
+  REFERENCES libertya.c_creditcardsettlement (c_creditcardsettlement_id)
+  ON UPDATE NO ACTION ON DELETE CASCADE;
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ALTER TABLE libertya.c_perceptionssettlement
+  DROP CONSTRAINT perceptionssettlementcreditcardsettlement;
+
+ALTER TABLE libertya.c_perceptionssettlement
+  ADD CONSTRAINT fkcreditcardsettlement FOREIGN KEY (c_creditcardsettlement_id) 
+  REFERENCES libertya.c_creditcardsettlement (c_creditcardsettlement_id)
+  ON UPDATE NO ACTION ON DELETE CASCADE;
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ALTER TABLE libertya.c_expenseconcepts
+  DROP CONSTRAINT fkcreditcardsettlement;
+
+ALTER TABLE libertya.c_expenseconcepts
+  ADD CONSTRAINT fkcreditcardsettlement FOREIGN KEY (c_creditcardsettlement_id) 
+  REFERENCES libertya.c_creditcardsettlement (c_creditcardsettlement_id)
+  ON UPDATE NO ACTION ON DELETE CASCADE;
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ALTER TABLE libertya.c_creditcardcouponfilter
+  DROP CONSTRAINT fkcreditcardsettlement;
+
+ALTER TABLE libertya.c_creditcardcouponfilter
+  ADD CONSTRAINT fkcreditcardsettlement FOREIGN KEY (c_creditcardsettlement_id) 
+  REFERENCES libertya.c_creditcardsettlement (c_creditcardsettlement_id)
+  ON UPDATE NO ACTION ON DELETE CASCADE;
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ALTER TABLE libertya.c_couponssettlements
+  DROP CONSTRAINT fkcreditcardcouponfilter;
+
+ALTER TABLE libertya.c_couponssettlements
+  ADD CONSTRAINT fkcreditcardcouponfilter FOREIGN KEY (c_creditcardcouponfilter_id)
+  REFERENCES libertya.c_creditcardcouponfilter (c_creditcardcouponfilter_id)
+  ON UPDATE NO ACTION ON DELETE CASCADE;
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- - - - Se agrega un campo a la entidad financiera, para indicar el servicio  -
+-- - - - financiero (Visa, Amex, FirstData, etc) - - - - - - - - - - - - - - - -
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('m_entidadfinanciera','financingservice','character(2)'));
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- - - - Se agrega un campo "Conciliado" al cupón dentro de la liquidación - - -
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('c_couponssettlements','isreconciled','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+  
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  -
+-- - - - Se agrega un campo a la vista, para asignarlo a un boton, se quitaron  -
+-- - - - otros que no se utilizaban, permitiendo quitar joins, y se mejoró la - -
+-- - - - condición de match - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  -
+
+DROP VIEW libertya.c_paymentcoupon_v;
+
+CREATE OR REPLACE VIEW libertya.c_paymentcoupon_v AS 
+	SELECT
+		p.c_payment_id,
+		p.ad_client_id,
+		p.ad_org_id,
+		p.created,
+		p.createdby,
+		p.updated,
+		p.updatedby,
+		'Y'::character(1) AS isactive,
+		efp.m_entidadfinanciera_id,
+		p.m_entidadfinancieraplan_id,
+		ccs.settlementno,
+		p.c_invoice_id,
+		p.creditcardnumber,
+		p.couponnumber,
+		p.c_bpartner_id,
+		p.datetrx,
+		p.couponbatchnumber,
+		p.payamt,
+		p.c_currency_id,
+		p.docstatus,
+		cs.isreconciled,
+		efp.cuotaspago AS totalallocations,
+		ccs.paymentdate AS settlementdate,
+		p.auditstatus,
+		''::character(1) AS reject
+	FROM
+		libertya.c_payment p
+		LEFT JOIN libertya.m_entidadfinancieraplan efp
+			ON p.m_entidadfinancieraplan_id = efp.m_entidadfinancieraplan_id
+		LEFT JOIN libertya.c_couponssettlements cs
+			ON p.c_payment_id = cs.c_payment_id
+		LEFT JOIN libertya.c_creditcardsettlement ccs
+			ON cs.c_creditcardsettlement_id = ccs.c_creditcardsettlement_id
+	WHERE
+		p.tendertype = 'C';
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- - - Se cambia la referencia a Entidad Financiera, por Entidad Comercial - -
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ALTER TABLE libertya.c_creditcardsettlement
+  DROP CONSTRAINT fkentidadfinanciera;
+
+ALTER TABLE libertya.c_creditcardsettlement
+  DROP COLUMN m_entidadfinanciera_id;
+
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('c_creditcardsettlement','c_bpartner_id','integer NOT NULL'));
+
+ALTER TABLE libertya.c_creditcardsettlement
+  ADD CONSTRAINT fkbpartner FOREIGN KEY (c_bpartner_id)
+  REFERENCES libertya.c_bpartner (c_bpartner_id)
+  ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- - - - Se agrega a los filtros de la liquidación, la entidad comercial - - -
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('c_creditcardcouponfilter','c_bpartner_id','integer'));
+
+ALTER TABLE libertya.c_creditcardcouponfilter
+  ADD CONSTRAINT fkbpartner FOREIGN KEY (c_bpartner_id)
+  REFERENCES libertya.c_bpartner (c_bpartner_id)
+  ON UPDATE NO ACTION ON DELETE NO ACTION;
+  
+--20170210-1620 Nueva tabla para registrar los datos CAI de cada entidad comercial
+CREATE TABLE c_bpartner_cai
+(
+  c_bpartner_cai_id integer NOT NULL,
+  ad_client_id integer NOT NULL,
+  ad_org_id integer NOT NULL,
+  isactive character(1) NOT NULL DEFAULT 'Y'::bpchar,
+  created timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  createdby integer NOT NULL,
+  updated timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  updatedby integer NOT NULL,
+  c_bpartner_id integer NOT NULL,
+  cai character varying(14) NOT NULL,
+  datecai timestamp without time zone NOT NULL,
+  posnumber integer NOT NULL,
+  CONSTRAINT c_bpartner_cai_key PRIMARY KEY (c_bpartner_cai_id),
+  CONSTRAINT c_bpartner_cai_bpartner FOREIGN KEY (c_bpartner_id)
+  REFERENCES c_bpartner (c_bpartner_id) MATCH SIMPLE
+  ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT c_bpartner_cai_client FOREIGN KEY (ad_client_id)
+  REFERENCES ad_client (ad_client_id) MATCH SIMPLE
+  ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT c_bpartner_cai_org FOREIGN KEY (ad_org_id)
+  REFERENCES ad_org (ad_org_id) MATCH SIMPLE
+  ON UPDATE NO ACTION ON DELETE NO ACTION
+)
+WITH (
+  OIDS=FALSE
+);
+ALTER TABLE c_bpartner_cai
+  OWNER TO libertya;
+  
+--20170301-1015 Merge de Revisión 1797
+ALTER TABLE c_couponssettlements DROP COLUMN allocationnumber;
+
+--20170301-1300 Merge de Revisión 1798
+CREATE TABLE c_externalserviceattributes
+(
+  c_externalserviceattributes_id integer NOT NULL,
+  ad_client_id integer NOT NULL,
+  ad_org_id integer NOT NULL,
+  isactive character(1) NOT NULL DEFAULT 'Y'::bpchar,
+  created timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  createdby integer NOT NULL,
+  updated timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  updatedby integer NOT NULL,
+  c_externalservice_id integer,
+  value character varying(128) NOT NULL,
+  name character varying(128),
+  description character varying(255),
+  CONSTRAINT externalserviceattributes_key PRIMARY KEY (c_externalserviceattributes_id),
+  CONSTRAINT externalserviceattributesclient FOREIGN KEY (ad_client_id)
+    REFERENCES libertya.ad_client (ad_client_id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT externalserviceattributesorg FOREIGN KEY (ad_org_id)
+    REFERENCES libertya.ad_org (ad_org_id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT externalserviceattributesexternalservice FOREIGN KEY (c_externalservice_id)
+    REFERENCES libertya.c_externalservice (c_externalservice_id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE CASCADE
+);
+ALTER TABLE c_externalserviceattributes
+  OWNER TO libertya;
+
+CREATE SEQUENCE libertya.seq_c_externalserviceattributes
+  INCREMENT 1
+  MINVALUE 1
+  MAXVALUE 9223372036854775807
+  START 1000001
+  CACHE 1;
+  
+CREATE SEQUENCE libertya.seq_i_firstdatatraileranddetail
+  INCREMENT 1
+  MINVALUE 1
+  MAXVALUE 9223372036854775807
+  START 1000001
+  CACHE 1;
+
+CREATE TABLE i_firstdatatraileranddetail
+(
+  i_firstdatatraileranddetail_id integer NOT NULL DEFAULT nextval('libertya.seq_i_firstdatatraileranddetail'::regclass),
+  ad_client_id integer NOT NULL,
+  ad_org_id integer NOT NULL,
+  isactive character(1) NOT NULL DEFAULT 'Y'::bpchar,
+  created timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  createdby integer NOT NULL,
+  updated timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  updatedby integer NOT NULL,
+  i_errormsg character varying(2000),
+  i_isimported character(1) NOT NULL DEFAULT 'N'::bpchar,
+  processing character(1),
+  processed character(1) DEFAULT 'N'::bpchar,
+  
+  id character varying(32),
+  archivo_id character varying(32),
+  tipo_registro character varying(32),
+  nombre_archivo character varying(32),
+  comercio_centralizador character varying(32),
+  moneda character varying(32),
+  grupo_presentacion character varying(32),
+  plazo_pago character varying(32),
+  tipo_plazo_pago character varying(32),
+  fecha_presentacion character varying(32),
+  fecha_vencimiento_clearing character varying(32),
+  producto character varying(32),
+  comercio_participante character varying(32),
+  entidad_pagadora character varying(32),
+  sucursal_pagadora character varying(32),
+  numero_liquidacion character varying(32),
+  total_importe_total character varying(32),
+  total_importe_total_signo character varying(32),
+  total_importe_sin_dto character varying(32),
+  total_importe_sin_dto_signo character varying(32),
+  total_importe_final character varying(32),
+  total_importe_final_signo character varying(32),
+  aranceles_cto_fin character varying(32),
+  aranceles_cto_fin_signo character varying(32),
+  retenciones_fiscales character varying(32),
+  retenciones_fiscales_signo character varying(32),
+  otros_debitos character varying(32),
+  otros_debitos_signo character varying(32),
+  otros_creditos character varying(32),
+  otros_creditos_signo character varying(32),
+  neto_comercios character varying(32),
+  neto_comercios_signo character varying(32),
+  total_registros_detalle character varying(32),
+  monto_pend_cuotas character varying(32),
+  monto_pend_cuotas_signo character varying(32),
+  subtipo_registro character varying(32),
+  iva_aranceles_ri character varying(32),
+  iva_aranceles_ri_signo character varying(32),
+  impuesto_deb_cred character varying(32),
+  impuesto_deb_cred_signo character varying(32),
+  iva_dto_pago_anticipado character varying(32),
+  iva_dto_pago_anticipado_signo character varying(32),
+  ret_iva_ventas character varying(32),
+  ret_iva_ventas_signo character varying(32),
+  percepc_iva_r3337 character varying(32),
+  percepc_iva_r3337_signo character varying(32),
+  ret_imp_ganancias character varying(32),
+  ret_imp_ganancias_signo character varying(32),
+  ret_imp_ingresos_brutos character varying(32),
+  ret_imp_ingresos_brutos_signo character varying(32),
+  percep_ingr_brutos character varying(32),
+  percep_ingr_brutos_signo character varying(32),
+  iva_servicios character varying(32),
+  iva_servicios_signo character varying(32),
+  categoria_iva character varying(32),
+  imp_sintereses_ley_25063 character varying(32),
+  imp_sintereses_ley_25063_signo character varying(32),
+  arancel character varying(32),
+  arancel_signo character varying(32),
+  costo_financiero character varying(32),
+  costo_financiero_signo character varying(32),
+  revisado character varying(32),
+  hash_modelo character varying(32),
+  provincia_ing_brutos character varying(32),
+  fecha_operacion character varying(32),
+  codigo_movimiento character varying(32),
+  codigo_origen character varying(32),
+  caja_nro_cinta_posnet character varying(32),
+  caratula_terminal_posnet character varying(32),
+  resumen_lote_posnet character varying(32),
+  cupon_cupon_posnet character varying(32),
+  cuotas_plan character varying(32),
+  cuota_vigente character varying(32),
+  porc_desc character varying(32),
+  marca_error character varying(32),
+  tipo_plan_cuotas character varying(32),
+  nro_tarjeta character varying(32),
+  motivo_rechazo_1 character varying(32),
+  motivo_rechazo_2 character varying(32),
+  motivo_rechazo_3 character varying(32),
+  motivo_rechazo_4 character varying(32),
+  fecha_present_original character varying(32),
+  motivo_reversion character varying(32),
+  tipo_operacion character varying(32),
+  marca_campana character varying(32),
+  codigo_cargo_pago character varying(32),
+  entidad_emisora character varying(32),
+  importe_arancel character varying(32),
+  importe_arancel_signo character varying(32),
+  iva_arancel character varying(32),
+  iva_arancel_signo character varying(32),
+  promocion_cuotas_alfa character varying(32),
+  tna character varying(32),
+  importe_costo_financiero character varying(32),
+  importe_costo_financiero_signo character varying(32),
+  iva_costo_financiero character varying(32),
+  iva_costo_financiero_signo character varying(32),
+  porcentaje_tasa_directa character varying(32),
+  importe_costo_tasa_dta character varying(32),
+  importe_costo_tasa_dta_signo character varying(32),
+  iva_costo_tasa_dta character varying(32),
+  iva_costo_tasa_dta_signo character varying(32),
+  nro_autoriz character varying(32),
+  alicuota_iva_fo character varying(32),
+  marca_cashback character varying(32),
+  importe_total character varying(32),
+  importe_total_signo character varying(32),
+
+  CONSTRAINT firstdatatraileranddetail_key PRIMARY KEY (i_firstdatatraileranddetail_id),
+  CONSTRAINT firstdatatraileranddetailclient FOREIGN KEY (ad_client_id)
+    REFERENCES libertya.ad_client (ad_client_id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT firstdatatraileranddetailorg FOREIGN KEY (ad_org_id)
+    REFERENCES libertya.ad_org (ad_org_id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION
+);
+ALTER TABLE i_firstdatatraileranddetail
+  OWNER TO libertya;
+
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('m_entidadfinanciera','c_region_id','integer'));
+
+ALTER TABLE m_entidadfinanciera
+  ADD CONSTRAINT entidadfinancieraregion FOREIGN KEY (c_region_id) 
+  REFERENCES c_region (c_region_id)
+  ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+----------------------------------------------------------------------
+---------- Modificación de tablas y/o vistas
+----------------------------------------------------------------------
+
+INSERT INTO c_externalservice (c_externalservice_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, name, description, ad_componentobjectuid, value, url, username, password, timeout, port) VALUES (nextval('seq_c_externalservice'), 1010016, 0, 'Y', '2017-02-14 10:20:18.511889', 1010717, '2017-02-15 16:56:17.362804', 1010717, 'Central Pos - Visa', 'Configuración de Conexión con la API de Central Pos', null, 'Central Pos - Visa', 'https://liquidacion.centralpos.com/api/v1/visa/pagos', 'gonzalom@hipertehuelche.com', '123456', 10000, 0);
+INSERT INTO c_externalservice (c_externalservice_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, name, description, ad_componentobjectuid, value, url, username, password, timeout, port) VALUES (nextval('seq_c_externalservice'), 1010016, 0, 'Y', '2017-02-14 14:18:06.438737', 1010717, '2017-02-20 10:53:31.014661', 1010717, 'Central Pos - Amex', 'Configuración de Conexión con la API de Central Pos', null, 'Central Pos - Amex', 'https://liquidacion.centralpos.com/api/v1/amex/pagos', 'gonzalom@hipertehuelche.com', '123456', 10000, 0);
+INSERT INTO c_externalservice (c_externalservice_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, name, description, ad_componentobjectuid, value, url, username, password, timeout, port) VALUES (nextval('seq_c_externalservice'), 1010016, 0, 'Y', '2017-02-14 14:26:18.081836', 1010717, '2017-02-20 10:53:40.372518', 1010717, 'Central Pos - Naranja', 'Configuración de Conexión con la API de Central Pos', null, 'Central Pos - Naranja', 'https://liquidacion.centralpos.com/api/v1/naranja/cupones', 'gonzalom@hipertehuelche.com', '123456', 10000, 0);
+INSERT INTO c_externalservice (c_externalservice_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, name, description, ad_componentobjectuid, value, url, username, password, timeout, port) VALUES (nextval('seq_c_externalservice'), 1010016, 0, 'Y', '2017-02-14 14:27:42.255858', 1010717, '2017-02-20 10:53:45.245823', 1010717, 'Central Pos - FirstData', 'Configuración de Conexión con la API de Central Pos', null, 'Central Pos - FirstData', 'https://liquidacion.centralpos.com/api/v1/firstdata/trailer-participantes', 'gonzalom@hipertehuelche.com', '123456', 10000, 0);
+
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 14:51:59.6775', 1010717, '2017-02-15 12:23:48.530876', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), '100', 'Elementos por Página', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 14:53:01.801653', 1010717, '2017-02-15 12:23:55.227087', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), 'https://liquidacion.centralpos.com/api/v1/auth/login', 'URL Login', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 14:52:05.279296', 1010717, '2017-02-15 12:24:05.296348', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Amex' limit 1), '100', 'Elementos por Página', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 14:58:43.465863', 1010717, '2017-02-15 12:24:13.101356', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Amex' limit 1), 'https://liquidacion.centralpos.com/api/v1/auth/login', 'URL Login', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 17:04:30.44652', 1010717, '2017-02-15 12:24:20.553311', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Amex' limit 1), 'https://liquidacion.centralpos.com/api/v1/amex/impuestos', 'URL Impuestos', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 14:52:10.577212', 1010717, '2017-02-15 12:24:32.467882', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Naranja' limit 1), '100', 'Elementos por Página', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 14:59:17.752203', 1010717, '2017-02-15 12:24:42.211211', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Naranja' limit 1), 'https://liquidacion.centralpos.com/api/v1/auth/login', 'URL Login', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 17:06:40.636472', 1010717, '2017-02-15 12:24:52.204501', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Naranja' limit 1), 'https://liquidacion.centralpos.com/api/v1/naranja/headers', 'URL Headers', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 14:52:16.544699', 1010717, '2017-02-15 12:25:13.287727', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - FirstData' limit 1), '100', 'Elementos por Página', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 14:59:26.766437', 1010717, '2017-02-15 12:25:20.703193', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - FirstData' limit 1), 'https://liquidacion.centralpos.com/api/v1/auth/login', 'URL Login', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:41:32.164247', 1010717, '2017-02-16 15:42:09.344558', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'IVA', 'Percepción');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:41:12.725329', 1010717, '2017-02-16 15:42:34.032986', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'IVA 10.5', 'Categ. de Impuesto');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:41:24.398294', 1010717, '2017-02-16 15:42:36.058575', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'IVA 21', 'Categ. de Impuesto');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:41:07.910172', 1010717, '2017-02-16 15:46:11.382262', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'Importe Arancel', 'Comisión');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:41:01.37173', 1010717, '2017-02-16 15:46:25.153487', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'Cargo adic por op internacionales', 'Otros Conceptos');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:40:56.216762', 1010717, '2017-02-16 15:46:46.799924', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'Cargo adic por planes cuotas', 'Otros Conceptos');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:40:54.100695', 1010717, '2017-02-16 15:47:05.200153', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'Costo plan acelerado cuotas', 'Otros Conceptos');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:40:45.952298', 1010717, '2017-02-16 15:47:07.431846', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'Dto por ventas de campañas', 'Otros Conceptos');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:40:39.909383', 1010717, '2017-02-16 15:47:24.577121', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'Ret Ganancias', 'Retención');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:40:34.865921', 1010717, '2017-02-16 15:47:26.711228', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'Ret IVA', 'Retención');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 15:40:26.51381', 1010717, '2017-02-16 15:47:28.335794', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Visa' limit 1), NULL, 'Ret IIBB', 'Retención');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:15:35.227653', 1010717, '2017-02-16 17:15:35.228817', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Amex' limit 1), NULL, 'Imp total desc aceleracion', 'Otros Conceptos');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:16:11.296722', 1010717, '2017-02-16 17:16:11.297652', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Amex' limit 1), NULL, 'Importe Descuento', 'Comisión');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:18:41.655438', 1010717, '2017-02-16 17:18:41.656098', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Amex' limit 1), NULL, 'Retencion Ganancias', 'Retención');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:18:26.644715', 1010717, '2017-02-16 17:18:44.159658', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Amex' limit 1), NULL, 'Retencion IVA', 'Retención');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:19:45.104485', 1010717, '2017-02-16 17:19:45.106767', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Amex' limit 1), NULL, 'Percepcion IVA', 'Percepción');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:20:59.278118', 1010717, '2017-02-16 17:20:59.279115', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Naranja' limit 1), NULL, 'Retencion IVA', 'Retención');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:21:16.807992', 1010717, '2017-02-16 17:21:16.808615', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Naranja' limit 1), NULL, 'Retencion IIBB', 'Retención');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:21:30.22005', 1010717, '2017-02-16 17:21:30.220799', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Naranja' limit 1), NULL, 'Retencion Ganancias', 'Retención');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:24:56.857436', 1010717, '2017-02-16 17:24:56.858368', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Naranja' limit 1), NULL, 'Comisiones - Conceptos fact a descontar mes pago', 'Comisión');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:25:09.43474', 1010717, '2017-02-16 17:25:09.435451', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Naranja' limit 1), NULL, 'Gastos - Conceptos fact a descontar mes pago', 'Otros Conceptos');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:25:35.827578', 1010717, '2017-02-16 17:25:35.828324', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Naranja' limit 1), NULL, 'IVA 21', 'Categoría de Impuesto');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:31:19.739017', 1010717, '2017-02-16 17:31:19.739868', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - FirstData' limit 1), NULL, 'Ret Ganancias e Ing Brutos', 'Retención');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:31:38.470488', 1010717, '2017-02-16 17:31:38.471302', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - FirstData' limit 1), NULL, 'Percepcion IVA', 'Percepción');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:31:58.540236', 1010717, '2017-02-16 17:31:58.540961', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - FirstData' limit 1), NULL, 'Arancel', 'Otros Conceptos');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-16 17:32:25.964729', 1010717, '2017-02-16 17:32:25.965447', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - FirstData' limit 1), NULL, 'Costo Financiero', 'Comisión');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-20 11:12:16.069595', 1010717, '2017-02-20 11:12:16.070473', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Amex' limit 1), NULL, 'IVA 21', 'Categoría de Impuesto');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-20 11:12:38.653004', 1010717, '2017-02-20 11:12:38.653779', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - FirstData' limit 1), NULL, 'IVA 21', 'Categoría de Impuesto');
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-20 17:35:42.901619', 1010717, '2017-02-21 09:56:27.553305', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - FirstData' limit 1), 'https://liquidacion.centralpos.com/api/v1/firstdata/liquidacion-participantes', 'URL detalle liq', NULL);
+INSERT INTO c_externalserviceattributes (c_externalserviceattributes_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_externalservice_id, name, value, description) VALUES (nextval('seq_c_externalserviceattributes'), 1010016, 0, 'Y', '2017-02-14 17:12:57.074976', 1010717, '2017-02-21 11:59:46.305476', 1010717, (select c_externalservice_id from c_externalservice where value = 'Central Pos - Naranja' limit 1), 'https://liquidacion.centralpos.com/api/v1/naranja/conceptos-facturados-meses', 'URL Conceptos', NULL);
+
+--20170303-1015 Nueva configuración por perfil que restringe creación de OPA
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('ad_role','isallowopa','character(1) NOT NULL DEFAULT ''Y''::bpchar'));
+
+--20170303-1245 Incorporación de nueva columna cuenta bancaria al detalle de los allocations
+DROP VIEW c_allocation_detail_v;
+
+CREATE OR REPLACE VIEW c_allocation_detail_v AS 
+ SELECT ah.c_allocationhdr_id AS c_allocation_detail_v_id, ah.c_allocationhdr_id, ah.ad_client_id, ah.ad_org_id, ah.isactive, ah.created, ah.createdby, ah.updated, ah.updatedby, ah.datetrx AS fecha, i.documentno AS factura, COALESCE(i.c_currency_id, p.c_currency_id, cl.c_currency_id, credit.c_currency_id) AS c_currency_id, i.grandtotal AS montofactura, 
+        CASE
+            WHEN p.documentno IS NOT NULL THEN p.documentno
+            ELSE 
+            CASE
+                WHEN al.c_invoice_credit_id IS NOT NULL THEN ((dt.printname::text || ' :'::text) || credit.documentno::text)::character varying
+                ELSE NULL::character varying
+            END
+        END AS pagonro, 
+        CASE
+            WHEN al.c_invoice_credit_id IS NOT NULL THEN 'N'::bpchar
+            WHEN p.tendertype IS NOT NULL THEN p.tendertype
+            WHEN p.tendertype IS NULL THEN 'CA'::bpchar
+            ELSE NULL::bpchar
+        END AS tipo, 
+        CASE
+            WHEN cl.c_cashline_id IS NOT NULL THEN 'Y'::text
+            WHEN cl.c_cashline_id IS NULL THEN 'N'::text
+            ELSE NULL::text
+        END AS cash, COALESCE(currencyconvert(al.amount + al.discountamt + al.writeoffamt, ah.c_currency_id, i.c_currency_id, NULL::timestamp with time zone, NULL::integer, ah.ad_client_id, ah.ad_org_id), 0::numeric(20,2)) AS montosaldado, abs(COALESCE(p.payamt, cl.amount, credit.grandtotal, 0::numeric(20,2))) AS payamt, al.c_allocationline_id, i.c_invoice_id, 
+        CASE
+            WHEN p.documentno IS NOT NULL THEN p.documentno
+            ELSE 
+            CASE
+                WHEN al.c_invoice_credit_id IS NOT NULL THEN ((dt.printname::text || ' :'::text) || credit.documentno::text)::character varying
+                WHEN al.c_cashline_id IS NOT NULL THEN cl.description
+                ELSE NULL::character varying
+            END
+        END AS paydescription, 
+        CASE
+            WHEN al.c_payment_id IS NOT NULL THEN pppm.name
+            WHEN al.c_cashline_id IS NOT NULL THEN cppm.name
+            WHEN al.c_invoice_credit_id IS NOT NULL THEN dt.name
+            ELSE NULL::character varying
+        END AS payment_medium_name, COALESCE(p.c_currency_id, cl.c_currency_id, credit.c_currency_id) AS pay_currency_id,
+        p.c_bankaccount_id
+   FROM c_allocationhdr ah
+   JOIN c_allocationline al ON ah.c_allocationhdr_id = al.c_allocationhdr_id
+   LEFT JOIN c_invoice i ON al.c_invoice_id = i.c_invoice_id
+   LEFT JOIN c_payment p ON al.c_payment_id = p.c_payment_id
+   LEFT JOIN c_cashline cl ON al.c_cashline_id = cl.c_cashline_id
+   LEFT JOIN c_invoice credit ON al.c_invoice_credit_id = credit.c_invoice_id
+   LEFT JOIN c_doctype dt ON credit.c_doctype_id = dt.c_doctype_id
+   LEFT JOIN c_pospaymentmedium cppm ON cppm.c_pospaymentmedium_id = cl.c_pospaymentmedium_id
+   LEFT JOIN c_pospaymentmedium pppm ON pppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+  ORDER BY ah.c_allocationhdr_id, al.c_allocationline_id;
+
+ALTER TABLE c_allocation_detail_v
+  OWNER TO libertya;
+  
+--20170307-2018 Incorporación de tabla AD_Role en el changelog
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('ad_role','ad_componentversion_id','integer'));
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('ad_role','ad_componentobjectuid','character varying(100)'));
+
+update ad_role
+set ad_componentobjectuid = 'CORE-AD_Role-'||ad_role_id, ad_componentversion_id = (select ad_componentversion_id from ad_componentversion where ad_componentobjectuid = 'CORE-AD_ComponentVersion-1010064');
+
+--20170307-2315 Función que permite cargar un binario a partir de un archivo
+create or replace function bytea_import(p_path text, p_result out bytea) 
+                   language plpgsql as $$
+declare
+  l_oid oid;
+  r record;
+begin
+  p_result := '';
+  select lo_import(p_path) into l_oid;
+  for r in ( select data 
+             from pg_largeobject 
+             where loid = l_oid 
+             order by pageno ) loop
+    p_result = p_result || r.data;
+  end loop;
+  perform lo_unlink(l_oid);
+end;$$;
+alter function bytea_import(text, out bytea)
+owner to libertya;
+
+--20170308-1806 Modificación de la traducción del tipo de documento Transferencia entre cuentas
+update c_doctype_trl
+set name = 'Transferencia Entre Cuentas', printname = 'Transferencia Entre Cuentas'
+where ad_componentobjectuid in ('CORE-C_DocType_Trl-1010516-es_ES',
+'CORE-C_DocType_Trl-1010516-es_AR',
+'CORE-C_DocType_Trl-1010516-es_MX',
+'CORE-C_DocType_Trl-1010516-es_PY');
+
+--Actualización del tipo de documento transferencia saliente por transferencia entre cuentas
+update ad_clientinfo
+set c_outgoingtransfer_dt_id = (select c_doctype_id from c_doctype where ad_componentobjectuid = 'CORE-C_DocType-1010516')
+where c_outgoingtransfer_dt_id = (select c_doctype_id from c_doctype where ad_componentobjectuid = 'CORE-C_DocType-1010515');
+
+update c_payment
+set c_doctype_id = (select c_doctype_id from c_doctype where ad_componentobjectuid = 'CORE-C_DocType-1010516')
+where c_doctype_id = (select c_doctype_id from c_doctype where ad_componentobjectuid = 'CORE-C_DocType-1010515');
+
+--20170310-1700 Incorporación de flag isprinted a la importación de facturas que permiteindicar facturas ya impresas fiscalmente
+UPDATE ad_system SET dummy = (SELECT addcolumnifnotexists('i_invoice','isprinted','character(1) NOT NULL DEFAULT ''N''::bpchar'));

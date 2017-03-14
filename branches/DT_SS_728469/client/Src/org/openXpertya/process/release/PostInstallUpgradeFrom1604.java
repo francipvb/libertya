@@ -138,6 +138,26 @@ public class PostInstallUpgradeFrom1604 extends PluginPostInstallProcess {
 	protected final static String SETTLEMENT_LIST_JASPER_REPORT_UID = "RPRT2CORE-AD_JasperReport-1010180-20170125125715";
 	protected final static String SETTLEMENT_LIST_JASPER_REPORT_FILENAME = "SettlementList.jasper";
 	
+	/** UID del informe Reporte de Compras*/
+	protected final static String REPORTE_DE_COMPRAS_REPORT_UID = "CORE-AD_Process-1010342";
+	protected final static String REPORTE_DE_COMPRAS_REPORT_FILENAME = "ReporteDeCompras.jrxml";
+	
+	/** UID del informe de Movimientos Valorizados */
+	protected final static String VALUED_MOVEMENTS_JASPER_REPORT_UID = "CORE-AD_JasperReport-1010102";
+	protected final static String VALUED_MOVEMENTS_JASPER_REPORT_FILENAME = "ValuedMovements.jasper";
+	
+	/** UID del informe de Movimientos Valorizados Detallado */
+	protected final static String VALUED_MOVEMENTS_DETAIL_JASPER_REPORT_UID = "CORE-AD_JasperReport-1010117";
+	protected final static String VALUED_MOVEMENTS_DETAIL_JASPER_REPORT_FILENAME = "ValuedMovementsDetail.jasper";
+	
+	/** UID del Reporte de Facturas Autorizadas al Pago */
+	protected final static String AUTHORIZED_INVOICE_TO_PAY_REPORT_UID = "CORE-AD_Process-1010421";
+	protected final static String AUTHORIZED_INVOICE_TO_PAY_REPORT_FILENAME = "ReportAuthorizedInvoiceToPay.jrxml";
+	
+	/** UID del Listado de Liquidaciones Detallado */
+	protected final static String SETTLEMENT_LIST_DETAILED_JASPER_REPORT_UID = "RPRT2CORE-AD_Process-1010526-20170210194428";
+	protected final static String SETTLEMENT_LIST_DETAILED_REPORT_FILENAME = "SettlementListDetailed.jrxml";
+	
 	@Override
 	protected String doIt() throws Exception {
 		super.doIt();
@@ -540,6 +560,61 @@ public class PostInstallUpgradeFrom1604 extends PluginPostInstallProcess {
 							.readBinaryFromJar(
 									jarFileURL,
 									getBinaryFileURL(SETTLEMENT_LIST_JASPER_REPORT_FILENAME)));
+		
+		// Reporte de Compras
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				REPORTE_DE_COMPRAS_REPORT_UID,
+				REPORTE_DE_COMPRAS_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(REPORTE_DE_COMPRAS_REPORT_FILENAME)));
+		
+		// Reporte de Movimientos Valorizados
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					VALUED_MOVEMENTS_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(VALUED_MOVEMENTS_JASPER_REPORT_FILENAME)));
+		
+		// Reporte de Movimientos Valorizados Detallado
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					VALUED_MOVEMENTS_DETAIL_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(VALUED_MOVEMENTS_DETAIL_JASPER_REPORT_FILENAME)));
+		
+		// Reporte de Facturas Autorizadas al Pago
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				AUTHORIZED_INVOICE_TO_PAY_REPORT_UID,
+				AUTHORIZED_INVOICE_TO_PAY_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(AUTHORIZED_INVOICE_TO_PAY_REPORT_FILENAME)));
+		
+		// Listado de Liquidaciones Detallado
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				SETTLEMENT_LIST_DETAILED_JASPER_REPORT_UID,
+				SETTLEMENT_LIST_DETAILED_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(SETTLEMENT_LIST_DETAILED_REPORT_FILENAME)));
 		
 		return " ";
 	}

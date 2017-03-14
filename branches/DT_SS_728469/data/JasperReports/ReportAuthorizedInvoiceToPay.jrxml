@@ -608,7 +608,7 @@ WHERE (CASE WHEN $P{StatusAuthorization} = 'P' THEN Autorizada='N' ELSE Autoriza
 					<textElement textAlignment="Left">
 						<font size="6"/>
 					</textElement>
-				<textFieldExpression   class="java.lang.String"><![CDATA[$F{autorizada}]]></textFieldExpression>
+				<textFieldExpression   class="java.lang.String"><![CDATA[$F{autorizada}.equals("Y")?"Si":"No"]]></textFieldExpression>
 				</textField>
 				<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement

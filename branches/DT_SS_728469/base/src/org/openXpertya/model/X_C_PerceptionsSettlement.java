@@ -1,20 +1,27 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.Env;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_PerceptionsSettlement
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2017-01-30 10:34:27.652 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2017-01-30 16:11:37.234 */
 public class X_C_PerceptionsSettlement extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_PerceptionsSettlement (Properties ctx, int C_PerceptionsSettlement_ID, String trxName)
 {
 super (ctx, C_PerceptionsSettlement_ID, trxName);
+/** if (C_PerceptionsSettlement_ID == 0)
+{
+setC_CreditCardSettlement_ID (0);
+setC_PerceptionsSettlement_ID (0);
+setC_Tax_ID (0);
+setInternalNo (null);
+}
+ */
 }
 /** Load Constructor */
 public X_C_PerceptionsSettlement (Properties ctx, ResultSet rs, String trxName)

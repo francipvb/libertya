@@ -1,19 +1,25 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_ExternalServiceAttributes
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke
- *  @version  - 2017-02-21 09:51:46.6 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2017-03-01 12:32:39.589 */
 public class X_C_ExternalServiceAttributes extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_ExternalServiceAttributes (Properties ctx, int C_ExternalServiceAttributes_ID, String trxName)
 {
 super (ctx, C_ExternalServiceAttributes_ID, trxName);
+/** if (C_ExternalServiceAttributes_ID == 0)
+{
+setC_Externalserviceattributes_ID (0);
+setValue (null);
+}
+ */
 }
 /** Load Constructor */
 public X_C_ExternalServiceAttributes (Properties ctx, ResultSet rs, String trxName)

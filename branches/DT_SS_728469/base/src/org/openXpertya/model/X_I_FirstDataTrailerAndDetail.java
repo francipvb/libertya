@@ -1,19 +1,25 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por I_FirstDataTrailerAndDetail
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2017-02-21 15:55:22.395 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2017-03-01 12:33:46.831 */
 public class X_I_FirstDataTrailerAndDetail extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_I_FirstDataTrailerAndDetail (Properties ctx, int I_FirstDataTrailerAndDetail_ID, String trxName)
 {
 super (ctx, I_FirstDataTrailerAndDetail_ID, trxName);
+/** if (I_FirstDataTrailerAndDetail_ID == 0)
+{
+setI_Firstdatatraileranddetail_ID (0);
+setI_IsImported (false);
+}
+ */
 }
 /** Load Constructor */
 public X_I_FirstDataTrailerAndDetail (Properties ctx, ResultSet rs, String trxName)

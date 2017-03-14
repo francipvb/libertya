@@ -10,7 +10,6 @@ import org.openXpertya.model.X_C_CreditCardSettlement;
 import org.openXpertya.model.X_C_Payment;
 import org.openXpertya.model.X_M_EntidadFinanciera;
 import org.openXpertya.model.X_M_EntidadFinancieraPlan;
-
 /**
  * Data Source para reporte de control de tarjetas.
  * @author Kevin Feuerschvenger - Sur Software S.H.

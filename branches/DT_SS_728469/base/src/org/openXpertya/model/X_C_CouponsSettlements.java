@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_CouponsSettlements
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2017-02-15 17:10:34.041 */
+ *  @version  - 2017-03-01 10:18:24.288 */
 public class X_C_CouponsSettlements extends org.openXpertya.model.PO
 {
 /** Constructor estándar */

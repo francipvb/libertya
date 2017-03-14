@@ -512,7 +512,7 @@ public class MField implements Serializable,Evaluatee {
 
         // Record is Processed ***
 
-        if( checkContextForReadOnlyLogic && Env.getContext( m_vo.ctx,m_vo.WindowNo,"Processed" ).equals( "Y" )) {
+        if( checkContextForReadOnlyLogic && Env.getContext( m_vo.ctx,m_vo.WindowNo,"Processed" ).equals( "Y" ) && !m_vo.isProcess) {
             return false;
         }
 
@@ -525,7 +525,7 @@ public class MField implements Serializable,Evaluatee {
         // Record is not Active
 
         String isActive = Env.getContext( m_vo.ctx,m_vo.WindowNo,"IsActive" );
-        if( checkContextForReadOnlyLogic && !Util.isEmpty(isActive) && isActive.equals( "N" )) {
+        if( checkContextForReadOnlyLogic && !Util.isEmpty(isActive) && isActive.equals( "N" ) && !m_vo.isProcess) {
             return false;
         }
 
@@ -1652,7 +1652,7 @@ public class MField implements Serializable,Evaluatee {
      * @return
      */
 
-    public static MField[] createFields( Properties ctx,int WindowNo,int TabNo,int AD_Tab_ID ) {
+    public static MField[] createFields( Properties ctx,int WindowNo,int TabNo,int AD_Tab_ID, boolean find ) {
         ArrayList         listVO       = new ArrayList();
         int               AD_Window_ID = 0;
         boolean           readOnly     = false;
@@ -1667,7 +1667,8 @@ public class MField implements Serializable,Evaluatee {
 
             while( rs.next()) {
                 MFieldVO vo = MFieldVO.create( ctx,WindowNo,TabNo,AD_Window_ID,readOnly,rs );
-
+                if (find)
+                	vo.IsMandatory = false;
                 listVO.add( vo );
             }
 
@@ -1698,6 +1699,10 @@ public class MField implements Serializable,Evaluatee {
 
         return retValue;
     }    // createFields
+    
+    public static MField[] createFields( Properties ctx,int WindowNo,int TabNo,int AD_Tab_ID ){
+    	return createFields(ctx, WindowNo, TabNo, AD_Tab_ID, false);
+    }
     
     /**
      * @return el nombre de la columna de la referencia, 
