@@ -59,7 +59,7 @@ public class LaunchListOfCouponsTotalizedByState extends JasperReportLaunch {
 		sql.append("WHERE ");
 		sql.append("	AD_Org_ID = ?");
 
-		return DB.getSQLValueString("", sql.toString(), getAD_Org_ID());
+		return DB.getSQLValueString(get_TrxName(), sql.toString(), getAD_Org_ID());
 	}
 
 	private String getBPartner() {
@@ -72,7 +72,7 @@ public class LaunchListOfCouponsTotalizedByState extends JasperReportLaunch {
 		sql.append("WHERE ");
 		sql.append("	C_BPartner_ID = ?");
 
-		return DB.getSQLValueString("", sql.toString(), getC_BPartner_ID());
+		return DB.getSQLValueString(get_TrxName(), sql.toString(), getC_BPartner_ID());
 	}
 
 	private String getAuditStateName() {
@@ -92,7 +92,7 @@ public class LaunchListOfCouponsTotalizedByState extends JasperReportLaunch {
 		sql.append("	AND l.value = ? ");
 		sql.append("	AND ad_language = ? ");
 
-		return DB.getSQLValueString("", sql.toString(), getAuditState(), Env.getAD_Language(getCtx()));
+		return DB.getSQLValueString(get_TrxName(), sql.toString(), getAuditState(), Env.getAD_Language(getCtx()));
 	}
 
 	// GETTERS:
