@@ -63,23 +63,27 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 
 	@Override
 	protected boolean beforeSave(boolean newRecord) {
+		int found = 0;
 
 		// Validación de unicidad mediante Entidad Comercial y número de liquidación.
-		StringBuffer sql = new StringBuffer();
-
-		sql.append("SELECT ");
-		sql.append("	COUNT(C_CreditCardSettlement_ID) ");
-		sql.append("FROM ");
-		sql.append("	" + Table_Name + " ");
-		sql.append("WHERE ");
-		sql.append("	C_BPartner_ID = ? ");
-		sql.append("	AND SettlementNo = ? ");
-
-		int found = DB.getSQLValue(get_TrxName(), sql.toString(), getC_BPartner_ID(), getSettlementNo());
-
-		if (found != 0) {
-			log.saveError("SaveError", Msg.getMsg(getCtx(), "CreditCardSettlementDuplicated"));
+		if (newRecord) {
+			StringBuffer sql = new StringBuffer();
+	
+			sql.append("SELECT ");
+			sql.append("	COUNT(C_CreditCardSettlement_ID) ");
+			sql.append("FROM ");
+			sql.append("	" + Table_Name + " ");
+			sql.append("WHERE ");
+			sql.append("	C_BPartner_ID = ? ");
+			sql.append("	AND SettlementNo = ? ");
+	
+			found = DB.getSQLValue(get_TrxName(), sql.toString(), getC_BPartner_ID(), getSettlementNo());
+	
+			if (found != 0) {
+				log.saveError("SaveError", Msg.getMsg(getCtx(), "CreditCardSettlementDuplicated"));
+			}
 		}
+		
 		return found == 0;
 	}
 
