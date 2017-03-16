@@ -63,28 +63,28 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 
 	@Override
 	protected boolean beforeSave(boolean newRecord) {
+		int found = 0;
 
-		// Validación de diferencias.
-		// El importe bruto debe ser igual al importe acreditado mas todos los descuentos.
-
-		// Importe bruto
-		BigDecimal amt1 = getAmount();
-		amt1.setScale(2, BigDecimal.ROUND_HALF_UP);
-
-		// Importe acreditado
-		BigDecimal amt2 = getNetAmount();
-		amt2 = amt2.add(getIVAAmount());
-		amt2 = amt2.add(getPerception());
-		amt2 = amt2.add(getWithholding());
-		amt2 = amt2.add(getCommissionAmount());
-		amt2 = amt2.add(getExpenses());
-		amt2.setScale(2, BigDecimal.ROUND_HALF_UP);
-
-		boolean validSettlement = amt1.equals(amt2);
-		if (!validSettlement) {
-			log.saveError("SaveError", Msg.translate(getCtx(), "CreditCardSettlementAmountsMismatch"));
+		// Validación de unicidad mediante Entidad Comercial y número de liquidación.
+		if (newRecord) {
+			StringBuffer sql = new StringBuffer();
+	
+			sql.append("SELECT ");
+			sql.append("	COUNT(C_CreditCardSettlement_ID) ");
+			sql.append("FROM ");
+			sql.append("	" + Table_Name + " ");
+			sql.append("WHERE ");
+			sql.append("	C_BPartner_ID = ? ");
+			sql.append("	AND SettlementNo = ? ");
+	
+			found = DB.getSQLValue(get_TrxName(), sql.toString(), getC_BPartner_ID(), getSettlementNo());
+	
+			if (found != 0) {
+				log.saveError("SaveError", Msg.getMsg(getCtx(), "CreditCardSettlementDuplicated"));
+			}
 		}
-		return validSettlement;
+		
+		return found == 0;
 	}
 
 	/**
