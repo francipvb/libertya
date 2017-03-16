@@ -61,6 +61,32 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 		return true;
 	}
 
+	@Override
+	protected boolean beforeSave(boolean newRecord) {
+
+		// Validación de diferencias.
+		// El importe bruto debe ser igual al importe acreditado mas todos los descuentos.
+
+		// Importe bruto
+		BigDecimal amt1 = getAmount();
+		amt1.setScale(2, BigDecimal.ROUND_HALF_UP);
+
+		// Importe acreditado
+		BigDecimal amt2 = getNetAmount();
+		amt2 = amt2.add(getIVAAmount());
+		amt2 = amt2.add(getPerception());
+		amt2 = amt2.add(getWithholding());
+		amt2 = amt2.add(getCommissionAmount());
+		amt2 = amt2.add(getExpenses());
+		amt2.setScale(2, BigDecimal.ROUND_HALF_UP);
+
+		boolean validSettlement = amt1.equals(amt2);
+		if (!validSettlement) {
+			log.saveError("SaveError", Msg.translate(getCtx(), "CreditCardSettlementAmountsMismatch"));
+		}
+		return validSettlement;
+	}
+
 	/**
 	 * Para una entidad comercial de tipo "tarjeta" (Las que están asociadas a alguna
 	 * E. Financiera), recupera la cuenta de banco de la E.Financiera más reciente 
@@ -226,7 +252,22 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 				children.setAD_Org_ID(getAD_Org_ID());
 				children.setC_CreditCardSettlement_ID(getC_CreditCardSettlement_ID());
 				children.setC_RetencionType_ID(rs.getInt(1));
-				children.setC_Region_ID(0);
+
+				// Carga región por defecto
+				StringBuffer rsql = new StringBuffer();
+
+				rsql.append("SELECT ");
+				rsql.append("	C_Region_ID ");
+				rsql.append("FROM ");
+				rsql.append("	" + MRegion.Table_Name + " ");
+				rsql.append("WHERE ");
+				rsql.append("	isActive = 'Y' ");
+				rsql.append("	AND isDefault = 'Y' ");
+				rsql.append("	AND C_Country_ID = " + getCtx().getProperty("#C_Country_ID"));
+
+				int C_Region_ID = DB.getSQLValue(get_TrxName(), rsql.toString());
+
+				children.setC_Region_ID(C_Region_ID);
 				children.setAmount(BigDecimal.ZERO);
 
 				if (!children.save()) {
