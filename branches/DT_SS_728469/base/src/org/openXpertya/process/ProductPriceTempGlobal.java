@@ -23,6 +23,8 @@ public class ProductPriceTempGlobal extends SvrProcess {
 	private String priceListType;	
 	/** Tarifa parámetro */
 	private Integer priceListID;
+	/** Regla de Precios a aplicar */
+	private Integer discountSchemaID;
 	
 	@Override
 	protected void prepare() {
@@ -37,7 +39,9 @@ public class ProductPriceTempGlobal extends SvrProcess {
 	            setPriceListType((String)para[i].getParameter());
 	        } else if( name.equals( "M_PriceList_ID" )) {
 	            setPriceListID(para[i].getParameterAsInt());
-	        }
+	        } else if( name.equals( "M_DiscountSchema_ID" )) {
+	            setDiscountSchemaID(para[i].getParameterAsInt());
+	        } 
 	    }
 	}
 
@@ -48,10 +52,10 @@ public class ProductPriceTempGlobal extends SvrProcess {
 		StringBuffer sql = new StringBuffer(" SELECT plv.* " +
 											" FROM m_pricelist_version plv " +
 											" INNER JOIN m_pricelist pl ON pl.m_pricelist_id = plv.m_pricelist_id ");
-		sql.append(" WHERE plv.ad_client_id = ? ");
+		sql.append(" WHERE plv.ad_client_id = ? AND plv.isactive = 'Y' AND pl.isactive = 'Y' AND plv.M_PriceList_Version_Base_ID is not null ");
 		List<Object> params = new ArrayList<Object>();
 		params.add(Env.getAD_Client_ID(getCtx()));
-		if(getOrgID() != null){
+		if(!Util.isEmpty(getOrgID(), true)){
 			sql.append(" AND plv.ad_org_id = ? ");
 			params.add(getOrgID());
 		}
@@ -81,7 +85,8 @@ public class ProductPriceTempGlobal extends SvrProcess {
 						rs.getInt("AD_Client_ID"), rs.getInt("AD_Org_ID"),
 						rs.getInt("M_PriceList_Version_ID"),
 						rs.getInt("M_PriceList_Version_Base_ID"),
-						rs.getInt("M_DiscountSchema_ID"), get_TrxName());
+						Util.isEmpty(getDiscountSchemaID(), true)?rs.getInt("M_DiscountSchema_ID"):getDiscountSchemaID(), 
+						get_TrxName());
 				generatedPriceListVersions.add(ppTemp.doIt());
 				Trx.getTrx(get_TrxName()).commit();
 			}
@@ -136,6 +141,14 @@ public class ProductPriceTempGlobal extends SvrProcess {
 
 	public void setPriceListID(Integer priceListID) {
 		this.priceListID = priceListID;
+	}
+
+	public Integer getDiscountSchemaID() {
+		return discountSchemaID;
+	}
+
+	public void setDiscountSchemaID(Integer discountSchemaID) {
+		this.discountSchemaID = discountSchemaID;
 	}
 
 }

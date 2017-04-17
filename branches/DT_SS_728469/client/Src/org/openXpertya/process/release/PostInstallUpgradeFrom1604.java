@@ -158,6 +158,21 @@ public class PostInstallUpgradeFrom1604 extends PluginPostInstallProcess {
 	protected final static String SETTLEMENT_LIST_DETAILED_JASPER_REPORT_UID = "RPRT2CORE-AD_Process-1010526-20170210194428";
 	protected final static String SETTLEMENT_LIST_DETAILED_REPORT_FILENAME = "SettlementListDetailed.jrxml";
 	
+	/** UID del informe de Seguimiento de Folletos */
+	protected final static String BROCHURE_REPORT_UID = "CORE-AD_JasperReport-1010129";
+	protected final static String BROCHURE_REPORT_FILENAME = "BrochureReport.jasper";
+	
+	/** UID de Impresión de FE */
+	protected final static String FE_REPORT_UID = "CORE-AD_JasperReport-1010118";
+	protected final static String FE_REPORT_FILENAME = "rpt_Factura_Electronica.jasper";
+	
+	protected final static String FE_SUBREPORT_REPORT_UID = "CORE-AD_JasperReport-1010130";
+	protected final static String FE_SUBREPORT_REPORT_FILENAME = "rpt_Factura_Electronica_Percepciones.jasper";
+	
+	/** UID de la impresión de Lista de Pago Electrónico */
+	protected final static String BANK_LIST_PRINT_JASPER_REPORT_UID = "CORE-AD_Process-1010549";
+	protected final static String BANK_LIST_PRINT_REPORT_FILENAME = "BankListPrint.jrxml";
+	
 	@Override
 	protected String doIt() throws Exception {
 		super.doIt();
@@ -615,6 +630,49 @@ public class PostInstallUpgradeFrom1604 extends PluginPostInstallProcess {
 						.readBinaryFromJar(
 								jarFileURL,
 								getBinaryFileURL(SETTLEMENT_LIST_DETAILED_REPORT_FILENAME)));
+		
+		// Seguimiento de Folletos
+		MJasperReport
+				.updateBinaryData(
+						get_TrxName(),
+						getCtx(),
+						BROCHURE_REPORT_UID,
+						JarHelper
+								.readBinaryFromJar(
+										jarFileURL,
+										getBinaryFileURL(BROCHURE_REPORT_FILENAME)));
+		
+		// Impresión de FE
+		MJasperReport
+				.updateBinaryData(
+						get_TrxName(),
+						getCtx(),
+						FE_REPORT_UID,
+						JarHelper
+								.readBinaryFromJar(
+										jarFileURL,
+										getBinaryFileURL(FE_REPORT_FILENAME)));
+		
+		MJasperReport
+				.updateBinaryData(
+						get_TrxName(),
+						getCtx(),
+						FE_SUBREPORT_REPORT_UID,
+						JarHelper
+								.readBinaryFromJar(
+										jarFileURL,
+										getBinaryFileURL(FE_SUBREPORT_REPORT_FILENAME)));
+		
+		// Impresión de Lista de Pago Electrónico
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				BANK_LIST_PRINT_JASPER_REPORT_UID,
+				BANK_LIST_PRINT_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(BANK_LIST_PRINT_REPORT_FILENAME)));
 		
 		return " ";
 	}

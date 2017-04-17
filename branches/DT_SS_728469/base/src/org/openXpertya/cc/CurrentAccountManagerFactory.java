@@ -24,10 +24,11 @@ public class CurrentAccountManagerFactory {
 	 *         los parámetro de la configuración del control de cuenta corriente
 	 *         centralizado
 	 */
-	public static CurrentAccountManager getManager(boolean isSOTrx){
+	public static CurrentAccountManager getManager(CurrentAccountDocument document){
 		if(manager == null){
-			manager = createLocalManager(isSOTrx);
+			manager = createLocalManager(document);
 		}
+		updateSkipCurrentAccount(document);
 		return manager;
 	}
 	
@@ -35,8 +36,22 @@ public class CurrentAccountManagerFactory {
 	 * Obtengo un manager de cuenta corriente con estrategias locales
 	 * @return un manager con configuraciones locales
 	 */
-	public static CurrentAccountManager createLocalManager(boolean isSOTrx){
-		return new CurrentAccountLocalManager();
+	public static CurrentAccountManager createLocalManager(CurrentAccountDocument document){
+		CurrentAccountManager cam = new CurrentAccountLocalManager();
+		cam.setSkipCurrentAccount(document.isSkipCurrentAccount());
+		if(document.isSkipCurrentAccount()){
+			cam.setBalanceStrategy(new BalanceLocalStrategySkipped()); 
+		}
+		return cam;
+	}
+	
+	public static void updateSkipCurrentAccount(CurrentAccountDocument document){
+		CurrentAccountBalanceStrategy balanceStrategy = new BalanceLocalStrategy();
+		manager.setSkipCurrentAccount(document.isSkipCurrentAccount());
+		if(document.isSkipCurrentAccount()){
+			manager.setBalanceStrategy(new BalanceLocalStrategySkipped()); 
+		}
+		manager.setBalanceStrategy(balanceStrategy);
 	}
 	
 	/**

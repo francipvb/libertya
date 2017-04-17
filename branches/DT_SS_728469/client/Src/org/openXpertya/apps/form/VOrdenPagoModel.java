@@ -1401,6 +1401,10 @@ public class VOrdenPagoModel {
 		
 		sql.append(" AND i.paymentRule = '").append(getPaymentRule()).append("' ");
 
+		// Cadenas de autorización
+		sql.append(" AND (i.authorizationchainstatus is null OR i.authorizationchainstatus = '")
+				.append(MInvoice.AUTHORIZATIONCHAINSTATUS_Authorized).append("') ");
+		
 		sql.append("  ORDER BY org.name ASC, i.c_invoice_id, i.DocumentNo ASC, DueDate ASC ) as openInvoices ");
 		sql.append(" GROUP BY c_invoice_id, orgname, documentno, currencyIso, grandTotal, openTotal, c_invoicepayschedule_id, isexchange, C_Currency_ID, paymentrule ");
 		sql.append(" HAVING sum(opentotal) > 0.0 ");
@@ -3050,7 +3054,7 @@ public class VOrdenPagoModel {
 		MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), getTrxName());
 		// Obtengo el manager actual
 		CurrentAccountManager manager = CurrentAccountManagerFactory
-				.getManager(isSOTrx());
+				.getManager(poGenerator.getAllocationHdr());
 		// Realizo las tareas adicionales necesarias
 		// Payments
 		for (MPayment pay : mpayments.values()) {
@@ -3129,7 +3133,7 @@ public class VOrdenPagoModel {
 		MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), getTrxName());
 		// Obtengo el manager actual
 		CurrentAccountManager manager = CurrentAccountManagerFactory
-				.getManager(isSOTrx());
+				.getManager(poGenerator.getAllocationHdr());
 		// Actualizo el crédito
 		CallResult result = new CallResult();
 		try {

@@ -31,6 +31,7 @@ import java.util.Properties;
 import java.util.logging.Level;
 
 import org.openXpertya.cc.CurrentAccountBalanceStrategy;
+import org.openXpertya.cc.CurrentAccountDocument;
 import org.openXpertya.cc.CurrentAccountManager;
 import org.openXpertya.cc.CurrentAccountManagerFactory;
 import org.openXpertya.model.DiscountCalculator.ICreditDocument;
@@ -62,7 +63,7 @@ import org.openXpertya.util.Util;
  * @author Equipo de Desarrollo de openXpertya
  */
 
-public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
+public class MInvoice extends X_C_Invoice implements DocAction,Authorization, CurrentAccountDocument {
 
 	/**
 	 * 
@@ -108,6 +109,9 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 	 * automáticas
 	 */
 	private boolean skipAutomaticCreditAllocCreation = false;
+	
+	/** Bypass para no setear cadena de autorización */
+	private boolean skipAuthorizationChain = false;
 
 	/**
 	 * Tipos de documento excluídos en la creación de nota de crédito automática
@@ -2306,7 +2310,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		}
 		
 		// Compras
-		if (!isSOTrx()){
+		if (!isSOTrx() && !isSkipAuthorizationChain()){
 			//Se determina la cadena de autorización para la factura de proveedor
 			setM_AuthorizationChain_ID(DB.getSQLValue(get_TrxName(), 
 					"SELECT audt.M_AuthorizationChain_ID FROM M_AuthorizationChainDocumentType audt "
@@ -2322,7 +2326,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 				log.saveError("RepeatInvoice", getRepeatInvoiceMsg());
 				return false;
 			}
-		}
+		} 
 		
 		return true;
 	} // beforeSave
@@ -3157,7 +3161,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 				&& getPaymentRule().equals(MInvoice.PAYMENTRULE_OnCredit)) {
 			// Obtengo el manager actual
 			CurrentAccountManager manager = CurrentAccountManagerFactory
-					.getManager(isSOTrx());
+					.getManager(this);
 			// Seteo el estado actual del cliente y lo obtengo
 			CallResult result = new CallResult();
 			try {
@@ -3287,6 +3291,14 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 				return DocAction.STATUS_Invalid;
 			}
 			
+		}
+		
+		// Fecha del CAI > que fecha de facturacion
+		if (getDateCAI() != null
+				&& getDateInvoiced().compareTo(getDateCAI()) > 0 
+				&& !TimeUtil.isSameDay(getDateInvoiced(), getDateCAI())){
+			setProcessMsg("@InvoicedDateAfterCAIDate@");
+			return DocAction.STATUS_Invalid;
 		}
 		
 		return DocAction.STATUS_InProgress;
@@ -3596,7 +3608,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 						get_TrxName());
 				// Obtengo el manager actual
 				CurrentAccountManager manager = CurrentAccountManagerFactory
-						.getManager(isSOTrx());
+						.getManager(this);
 				// Actualizo el balance
 				CallResult result = new CallResult();
 				try {
@@ -3654,16 +3666,16 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 
 	public String completeIt() {
 
-		if (!Util.isEmpty(this.getM_AuthorizationChain_ID(), true)) {
+		if (!Util.isEmpty(this.getM_AuthorizationChain_ID(), true) && !isSkipAuthorizationChain()) {
 			AuthorizationChainManager authorizationChainManager = new AuthorizationChainManager(
 					this, getCtx(), get_TrxName());
 
 			try {
-				if (authorizationChainManager
-						.loadAuthorizationChain(reactiveInvoice())) {
+				String notAuthorizeDocStatus = authorizationChainManager.loadAuthorizationChain(reactiveInvoice());
+				if (notAuthorizeDocStatus != null && !DOCSTATUS_Completed.equals(notAuthorizeDocStatus)) {
 					m_processMsg = Msg.getMsg(getCtx(), "AlreadyExistsAuthorizationChainLink");
-					//this.setProcessed(true);
-					return DOCSTATUS_WaitingConfirmation;
+					setProcessed(true);
+					return notAuthorizeDocStatus;
 				}
 			} catch (Exception e) {
 				m_processMsg = e.getMessage();
@@ -3951,7 +3963,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 				&& getPaymentRule().equals(PAYMENTRULE_OnCredit)) {
 			// Obtengo el manager actual
 			CurrentAccountManager manager = CurrentAccountManagerFactory
-					.getManager(isSOTrx());
+					.getManager(this);
 			// Verificar el crédito con la factura y pedido asociado
 			CallResult result = new CallResult();
 			try {
@@ -4293,7 +4305,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		// Obtengo el manager actual
 		if (isUpdateBPBalance()) {
 			CurrentAccountManager manager = CurrentAccountManagerFactory
-					.getManager(isSOTrx());
+					.getManager(this);
 			// Actualizo el balance
 			CallResult result = new CallResult();
 			try {
@@ -4596,7 +4608,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 
 			return false;
 		}
-
+		
 		// Not Processed
 
 		if (DOCSTATUS_Drafted.equals(getDocStatus())
@@ -4641,6 +4653,9 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 			addDescription(Msg.getMsg(getCtx(), "Voided"));
 			setIsPaid(true);
 			setC_Payment_ID(0);
+			setM_AuthorizationChain_ID(0);
+			setAuthorizationChainStatus(null);
+			setSkipAuthorizationChain(true);		
 		} else {
 			return reverseCorrectIt();
 		}
@@ -4766,6 +4781,17 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		// a la reversal.
 		reversal.copyDocActionStatusListeners(this);
 
+		reversal.setSkipAuthorizationChain(true);
+		setSkipAuthorizationChain(true);		
+		
+		if (getAuthorizationChainStatus() != null
+				&& !getAuthorizationChainStatus().equals(AUTHORIZATIONCHAINSTATUS_Authorized)) {
+			setM_AuthorizationChain_ID(0);
+			setAuthorizationChainStatus(null);
+			reversal.setM_AuthorizationChain_ID(0);
+			reversal.setAuthorizationChainStatus(null);
+		}
+		
 		// Seteo la bandera que indica si se trata de una anulación.
 		reversal.setVoidProcess(voidProcess);
 
@@ -4925,7 +4951,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 			MBPartner bp = new MBPartner(getCtx(), getC_BPartner_ID(),
 					get_TrxName());
 			CurrentAccountManager manager = CurrentAccountManagerFactory
-					.getManager(isSOTrx());
+					.getManager(this);
 			// Actualizo el balance
 			CallResult result = new CallResult();
 			try {
@@ -4971,7 +4997,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 		 * <-----------------
 		 */
 		//
-
+		
 		m_processMsg = info.toString();
 		reversal.setC_Payment_ID(0);
 		reversal.setIsPaid(true);
@@ -6268,6 +6294,19 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization {
 
 	public void setSkipLastFiscalDocumentNoValidation(boolean skipLastFiscalDocumentNoValidation) {
 		this.skipLastFiscalDocumentNoValidation = skipLastFiscalDocumentNoValidation;
+	}
+
+	@Override
+	public boolean isSkipCurrentAccount() {
+		return MDocType.get(getCtx(), getC_DocTypeTarget_ID()).isSkipCurrentAccounts();
+	}
+
+	public boolean isSkipAuthorizationChain() {
+		return skipAuthorizationChain;
+	}
+
+	public void setSkipAuthorizationChain(boolean skipAuthorizationChain) {
+		this.skipAuthorizationChain = skipAuthorizationChain;
 	}
 
 } // MInvoice

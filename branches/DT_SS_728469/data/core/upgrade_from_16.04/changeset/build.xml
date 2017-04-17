@@ -316,6 +316,7 @@
 	<mkdir dir="lib2" />
 	<delete file="nuevoOXP/org/openXpertya/model/MAcctSchema.class" failonerror="no" />
 	<delete file="nuevoOXP/org/openXpertya/model/MAcctSchemaElement.class" failonerror="no" />
+	<delete file="nuevoOXP/org/openXpertya/model/MAccount.class" failonerror="no" />
 	<jar jarfile="lib2/OXP.jar" index="yes">
 	      	<fileset dir="nuevoOXP"/>
 	      	<manifest>
@@ -571,7 +572,7 @@
 	<echo message="AppsDeployment= ${DEPLOY_APPS_OXP}"/>
   	
 	<copy file="${basedir}/lib/OXPRoot.ear" todir="${DEPLOY_APPS_OXP}"/>
-	<copy file="${basedir}/lib/OXPApps.ear" todir="${DEPLOY_APPS_OXP}"/>
+	<!-- <copy file="${basedir}/lib/OXPApps.ear" todir="${DEPLOY_APPS_OXP}"/> -->
 	
 	<!-- Incluir OXP.jar especial y OXPSLib.jar en LYWeb (si es que existe) para independencia del contexto. Archivo default: webui.war -->
 	<war destfile="${basedir}/lib/webui.war" update="true" >

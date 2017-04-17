@@ -26,6 +26,7 @@ import java.util.Properties;
 import java.util.Vector;
 import java.util.logging.Level;
 
+import org.openXpertya.cc.CurrentAccountDocument;
 import org.openXpertya.cc.CurrentAccountManager;
 import org.openXpertya.cc.CurrentAccountManagerFactory;
 import org.openXpertya.reflection.CallResult;
@@ -43,7 +44,7 @@ import org.openXpertya.util.Util;
  * @author     Equipo de Desarrollo de openXpertya    
  */
 
-public class MBPartner extends X_C_BPartner {
+public class MBPartner extends X_C_BPartner implements CurrentAccountDocument {
 
 	public static final int IIBB_CONVENIO_MULTILATERAL_MINIMO = 901;
 	public static final int IIBB_CONVENIO_MULTILATERAL_MAXIMO = 924;
@@ -885,7 +886,7 @@ public class MBPartner extends X_C_BPartner {
     public void setTotalOpenBalance() {
     	// Obtengo el managaer actual
 		CurrentAccountManager manager = CurrentAccountManagerFactory
-				.getManager(isCASOTrx());
+				.getManager(this);
 		CallResult result = new CallResult();
 		try{
 			result = manager.updateBalance(getCtx(), new MOrg(
@@ -927,7 +928,7 @@ public class MBPartner extends X_C_BPartner {
     public void setSOCreditStatus() {
     	// Obtengo el managaer actual
 		CurrentAccountManager manager = CurrentAccountManagerFactory
-				.getManager(isCASOTrx());
+				.getManager(this);
     	// Seteo el estado actual del cliente y lo obtengo
 		CallResult result = new CallResult();
 		try{
@@ -1352,7 +1353,7 @@ public class MBPartner extends X_C_BPartner {
 				return false;
 			}
 			// Le consulto al manager actual
-			CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(isCustomer());
+			CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(this);
 			MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), get_TrxName());
 			CallResult result = new CallResult();
 			try{
@@ -1413,6 +1414,13 @@ public class MBPartner extends X_C_BPartner {
 		// Marcar convenio multilateral
 		if(!Util.isEmpty(getIIBB(), true)){
 			setIsConvenioMultilateral(isConvenioMultilateral(getIIBB()));
+		}
+		
+		// La configuración de lote de pagos debe estar completa
+		if ((!Util.isEmpty(getBatch_Payment_Rule(), true) && Util.isEmpty(getC_BankAccount_ID(), true))
+				|| (Util.isEmpty(getBatch_Payment_Rule(), true) && !Util.isEmpty(getC_BankAccount_ID(), true))) {
+			log.saveError("SaveError", Msg.getMsg(getCtx(), "NotValidBatchPaymentVendorConfiguration"));
+			return false;
 		}
 		
 		return true;
@@ -1477,6 +1485,16 @@ public class MBPartner extends X_C_BPartner {
 
 	public void setCASOTrx(boolean isCASOTrx) {
 		this.isCASOTrx = isCASOTrx;
+	}
+
+	@Override
+	public boolean isSOTrx() {
+		return isCASOTrx() || isCustomer();
+	}
+
+	@Override
+	public boolean isSkipCurrentAccount() {
+		return false;
 	}
 	
 

@@ -173,13 +173,20 @@ public class CalloutInvoice extends CalloutEngine {
 
                 if( !rs.wasNull()) {
                     mTab.setValue( "M_PriceList_ID",ii );
-                } else {    // get default PriceList
+                } 
+                
+                /* Se comenta ya que el campo puede tener un valor por defecto 
+                 * en el campo de tarifa y estar como sólo lectura, 
+                 * este código modifica la tarifa
+                 * *******************************************************
+                else {    // get default PriceList
                     int i = Env.getContextAsInt( ctx,"#M_PriceList_ID" );
 
                     if( i != 0 ) {
                         mTab.setValue( "M_PriceList_ID",new Integer( i ));
                     }
                 }
+                ********************************************************/
 
                 // PaymentRule
 
@@ -602,14 +609,19 @@ public class CalloutInvoice extends CalloutEngine {
         //
 
         int C_Tax_ID = 0;
+        boolean isSOTrx = Env.getContext(ctx, WindowNo, "IsSOTrx").equals("Y");
         // Si los Comprobantes fiscales están activos se busca la tasa de impuesto a partir de la categoría de IVA debe estar condicionado 
         if (CalloutInvoiceExt.ComprobantesFiscalesActivos()) {
         	int C_BPartner_ID = Env.getContextAsInt( ctx,WindowNo,"C_BPartner_ID" );
-            C_Tax_ID = DB.getSQLValue( null,"SELECT C_Tax_ID FROM C_Categoria_Iva ci INNER JOIN C_BPartner bp ON (ci.C_Categoria_Iva_ID = bp.C_Categoria_Iva_ID) WHERE bp.C_BPartner_ID = ?",C_BPartner_ID );
+			MTax tax = CalloutInvoiceExt.getTax(ctx, isSOTrx, C_BPartner_ID, null);
+			if(tax != null){
+				C_Tax_ID = tax.getID();
+			}
         }
         
         if( C_Tax_ID == 0 ) {
-        	C_Tax_ID = Tax.get( ctx,M_Product_ID,C_Charge_ID,billDate,shipDate,AD_Org_ID,M_Warehouse_ID,billC_BPartner_Location_ID,shipC_BPartner_Location_ID,Env.getContext( ctx,WindowNo,"IsSOTrx" ).equals( "Y" ));
+			C_Tax_ID = Tax.get(ctx, M_Product_ID, C_Charge_ID, billDate, shipDate, AD_Org_ID, M_Warehouse_ID,
+					billC_BPartner_Location_ID, shipC_BPartner_Location_ID, isSOTrx);
         }
 
         log.info( "Tax ID=" + C_Tax_ID );

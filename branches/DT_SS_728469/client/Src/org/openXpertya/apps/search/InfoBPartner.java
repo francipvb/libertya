@@ -37,6 +37,7 @@ import org.openXpertya.minigrid.IDColumn;
 import org.openXpertya.model.CalloutInvoiceExt;
 import org.openXpertya.model.MQuery;
 import org.openXpertya.model.MRole;
+import org.openXpertya.model.MWindowVO;
 import org.openXpertya.plugin.common.PluginUtils;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
@@ -53,6 +54,9 @@ import org.openXpertya.util.Msg;
 
 public class InfoBPartner extends Info {
 
+	private static final String ONLY_CUSTOMER_PREFERENCE_NAME = "OnlyCustomer";
+	private static final String ONLY_VENDOR_PREFERENCE_NAME = "OnlyVendor";
+	
     /**
      * Constructor de la clase ...
      *
@@ -73,8 +77,17 @@ public class InfoBPartner extends Info {
         setTitle( Msg.getMsg( Env.getCtx(),"InfoBPartner" ));
         m_isSOTrx = isSOTrx;
 
-        //
-
+        Integer windowID = MWindowVO.windows.get(WindowNo);
+		String preferenceOC = windowID != null?Env.getPreference(Env.getCtx(), windowID, ONLY_CUSTOMER_PREFERENCE_NAME, false):null;
+        String preferenceOV = windowID != null?Env.getPreference(Env.getCtx(), windowID, ONLY_VENDOR_PREFERENCE_NAME, false):null;
+        
+        if(preferenceOC != null && preferenceOC.equals("Y")){
+        	m_isSOTrx = true;
+        }
+        if(preferenceOV != null && preferenceOV.equals("Y")){
+        	m_isSOTrx = false;
+        }
+        
         statInit();
         initInfo( value,whereClause );
 
