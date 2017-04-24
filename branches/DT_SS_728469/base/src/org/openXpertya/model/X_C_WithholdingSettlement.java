@@ -1,20 +1,26 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.Env;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_WithholdingSettlement
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke 
- *  @version  - 2017-01-30 10:34:29.436 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2017-04-18 14:27:23.644 */
 public class X_C_WithholdingSettlement extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_WithholdingSettlement (Properties ctx, int C_WithholdingSettlement_ID, String trxName)
 {
 super (ctx, C_WithholdingSettlement_ID, trxName);
+/** if (C_WithholdingSettlement_ID == 0)
+{
+setC_CreditCardSettlement_ID (0);
+setC_RetencionSchema_ID (0);
+setC_WithholdingSettlement_ID (0);
+}
+ */
 }
 /** Load Constructor */
 public X_C_WithholdingSettlement (Properties ctx, ResultSet rs, String trxName)
@@ -83,15 +89,15 @@ Integer ii = (Integer)get_Value("C_Region_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
-/** Set Retencion Type */
-public void setC_RetencionType_ID (int C_RetencionType_ID)
+/** Set Retencion Schema */
+public void setC_RetencionSchema_ID (int C_RetencionSchema_ID)
 {
-set_Value ("C_RetencionType_ID", new Integer(C_RetencionType_ID));
+set_Value ("C_RetencionSchema_ID", new Integer(C_RetencionSchema_ID));
 }
-/** Get Retencion Type */
-public int getC_RetencionType_ID() 
+/** Get Retencion Schema */
+public int getC_RetencionSchema_ID() 
 {
-Integer ii = (Integer)get_Value("C_RetencionType_ID");
+Integer ii = (Integer)get_Value("C_RetencionSchema_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
