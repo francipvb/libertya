@@ -82,6 +82,13 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 			if (found != 0) {
 				log.saveError("SaveError", Msg.getMsg(getCtx(), "CreditCardSettlementDuplicated"));
 			}
+			
+		}
+		
+		//Validación para que el número de liquidación solo pueda ser numérico
+		if (!getSettlementNo().matches("\\^?\\d*\\^?")) {
+			log.saveError("SaveError", Msg.getMsg(getCtx(), "SettlementNumberMustBeNumeric"));
+			found = 1;
 		}
 		
 		return found == 0;
@@ -792,7 +799,7 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 		copy.setIsReconciled(isReconciled());
 		copy.setPosted(isPosted());
 		copy.setC_Currency_ID(getC_Currency_ID());
-		copy.setSettlementNo(getSettlementNo());
+		copy.setSettlementNo(getSettlementNo()+"^");
 		copy.setIVAAmount(negativeValue(getIVAAmount()));
 		copy.setCommissionAmount(negativeValue(getCommissionAmount()));
 		copy.setC_Payment_ID(getC_Payment_ID());
