@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_CouponsSettlements
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2017-03-01 10:18:24.288 */
+ *  @version  - 2017-05-03 16:53:35.016 */
 public class X_C_CouponsSettlements extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -52,6 +52,23 @@ public String toString()
 {
 StringBuffer sb = new StringBuffer ("X_C_CouponsSettlements[").append(getID()).append("]");
 return sb.toString();
+}
+/** Set Account Name.
+Name on Credit Card or Account holder */
+public void setA_Name (String A_Name)
+{
+if (A_Name != null && A_Name.length() > 60)
+{
+log.warning("Length > 60 - truncated");
+A_Name = A_Name.substring(0,60);
+}
+set_Value ("A_Name", A_Name);
+}
+/** Get Account Name.
+Name on Credit Card or Account holder */
+public String getA_Name() 
+{
+return (String)get_Value("A_Name");
 }
 /** Set Amount.
 Amount in a defined currency */
@@ -118,21 +135,6 @@ Integer ii = (Integer)get_Value("C_Currency_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
-/** Set CouponNo */
-public void setCouponNo (String CouponNo)
-{
-if (CouponNo != null && CouponNo.length() > 24)
-{
-log.warning("Length > 24 - truncated");
-CouponNo = CouponNo.substring(0,24);
-}
-set_Value ("CouponNo", CouponNo);
-}
-/** Get CouponNo */
-public String getCouponNo() 
-{
-return (String)get_Value("CouponNo");
-}
 public static final int C_PAYMENT_ID_AD_Reference_ID = MReference.getReferenceID("C_Payment");
 /** Set Payment.
 Payment identifier */
@@ -147,6 +149,21 @@ public int getC_Payment_ID()
 Integer ii = (Integer)get_Value("C_Payment_ID");
 if (ii == null) return 0;
 return ii.intValue();
+}
+/** Set CouponNo */
+public void setCouponNo (String CouponNo)
+{
+if (CouponNo != null && CouponNo.length() > 24)
+{
+log.warning("Length > 24 - truncated");
+CouponNo = CouponNo.substring(0,24);
+}
+set_Value ("CouponNo", CouponNo);
+}
+/** Get CouponNo */
+public String getCouponNo() 
+{
+return (String)get_Value("CouponNo");
 }
 /** Set Credit Card Number */
 public void setCreditCardNo (String CreditCardNo)
