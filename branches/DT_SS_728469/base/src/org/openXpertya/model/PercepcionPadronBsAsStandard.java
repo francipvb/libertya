@@ -1,6 +1,7 @@
 package org.openXpertya.model;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 
 import org.openXpertya.util.Env;
 
@@ -19,8 +20,9 @@ public class PercepcionPadronBsAsStandard extends PercepcionStandard {
 	@Override
 	public BigDecimal getPercepcionPercToApply() {
 		// Buscarlo por el cuit
+		Timestamp documentTrxDate = new Timestamp(getPercepcionData().getDocument().getDate().getTime());
 		BigDecimal perc = MBPartnerPadronBsAs.getBPartnerPerc("percepcion",
-				getPercepcionData().getBpartner().getTaxID(), Env.getDate(),
+				getPercepcionData().getBpartner().getTaxID(), documentTrxDate,
 				MBPartnerPadronBsAs.PADRONTYPE_PadrónBsAs, null);
 		if(perc == null){
 			perc = super.getPercepcionPercToApply();
@@ -31,8 +33,9 @@ public class PercepcionPadronBsAsStandard extends PercepcionStandard {
 	@Override
 	public BigDecimal getMinimumNetAmount() {
 		// Buscarlo por el cuit
+		Timestamp documentTrxDate = new Timestamp(getPercepcionData().getDocument().getDate().getTime());
 		BigDecimal perc = MBPartnerPadronBsAs.getBPartnerPerc("percepcion",
-				getPercepcionData().getBpartner().getTaxID(), Env.getDate(),
+				getPercepcionData().getBpartner().getTaxID(), documentTrxDate,
 				MBPartnerPadronBsAs.PADRONTYPE_PadrónBsAs, null);
 		if(perc == null){
 			return super.getMinimumNetAmount();

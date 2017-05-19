@@ -2327,7 +2327,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				return false;
 			}
 		} 
-		
+
 		return true;
 	} // beforeSave
 
@@ -2676,7 +2676,8 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 
 		if (is_ValueChanged("AD_Org_ID") || is_ValueChanged("C_BPartner_ID")
 				|| is_ValueChanged("ApplyPercepcion")
-				|| is_ValueChanged("C_Invoice_Orig_ID")) {
+				|| is_ValueChanged("C_Invoice_Orig_ID")
+				|| is_ValueChanged("DateInvoiced")) {
 			try {
 
 				recalculatePercepciones();
