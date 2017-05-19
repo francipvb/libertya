@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1330,8 +1331,9 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		BigDecimal porcentaje = BigDecimal.ZERO;
 		for (int i = 0; i < padronTypes.size()
 				&& Util.isEmpty(porcentaje, true); i++) {
+			Timestamp allocTrxDate = new Timestamp(getDateTrx() != null ? getDateTrx().getTime(): (new Date()).getTime());
 			porcentaje = MBPartnerPadronBsAs.getBPartnerPerc("retencion",
-					getBPartner().getTaxID(), Env.getDate(), padronTypes.get(i),
+					getBPartner().getTaxID(), allocTrxDate, padronTypes.get(i),
 					getTrxName());
 		}
 		// Si no lo encuentra, entonces el valor por defecto parámetro
