@@ -1,10 +1,15 @@
 package org.openXpertya.model;
 
+import java.math.BigDecimal;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.Util;
 
 public class MBankListLine extends X_C_BankListLine {
 	private static final long serialVersionUID = 1L;
@@ -67,6 +72,8 @@ public class MBankListLine extends X_C_BankListLine {
 		if( !success ) {
             return success;
         }
+		// Actualizar el total de pagos electrónicos de la OP
+		updateElectronicPaymentTotal();
 		// Actualiza el total de la lista
 		updateBankListTotal();
 		return success;
@@ -81,12 +88,119 @@ public class MBankListLine extends X_C_BankListLine {
 		return success;
 	}
 	
+	private Map<Integer, BigDecimal> getBeforePaymentsAllocatedAmount(){
+		Map<Integer, BigDecimal> paysAmt = new HashMap<Integer, BigDecimal>();
+		String sqlBeforeAllocations = "select p.c_payment_id, "
+				+ "		sum(CASE WHEN allocationtype = 'OPA' THEN p.payamt ELSE 0 END) as payamt, "
+				+ "		sum(alo.amount) as allocatedamt "
+				+ "from (select distinct bll.c_banklist_id, c_payment_id "
+				+ "		from c_banklistline bll"
+				+ "		inner join c_allocationline al on al.c_allocationhdr_id = bll.c_allocationhdr_id "
+				+ "		where al.c_allocationhdr_id = ?) as bp "
+				+ "inner join c_banklist bl on bl.c_banklist_id = bp.c_banklist_id "
+				+ "inner join c_payment p on p.c_payment_id = bp.c_payment_id "
+				+ "inner join c_allocationline alo on (alo.c_payment_id = p.c_payment_id and alo.c_allocationhdr_id <> ?) "
+				+ "inner join c_allocationhdr aho on aho.c_allocationhdr_id = alo.c_allocationhdr_id "
+				+ "inner join c_banklist bbl on bbl.c_banklist_id = aho.c_banklist_id "
+				+ "where aho.c_banklist_id is not null "
+				+ "		AND aho.c_banklist_id <> ? "
+				+ "		AND aho.docstatus IN ('CO','CL') "
+				+ "		AND bbl.datetrx::date <= bl.datetrx::date "
+				+ "group by p.c_payment_id";
+		
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		try {
+			ps = DB.prepareStatement(sqlBeforeAllocations, get_TrxName(), true);
+			ps.setInt(1, getC_AllocationHdr_ID());
+			ps.setInt(2, getC_AllocationHdr_ID());
+			ps.setInt(3, getC_BankList_ID());
+			rs = ps.executeQuery();
+			BigDecimal amt;
+			while(rs.next()){
+				amt = rs.getBigDecimal("payamt");
+				paysAmt.put(rs.getInt("c_payment_id"),
+						amt.compareTo(BigDecimal.ZERO) > 0 ? amt : rs.getBigDecimal("allocatedamt"));
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				if(ps != null)ps.close();
+				if(rs != null)rs.close();
+			} catch (Exception e2) {
+				e2.printStackTrace();
+			}
+		}
+		return paysAmt;
+	}
+	
+	private Map<Integer, BigDecimal> getCurrentPaymentsAllocatedAmount(){
+		Map<Integer, BigDecimal> paysAmt = new HashMap<Integer, BigDecimal>();
+		String sqlCurrentPayments = "SELECT p.c_payment_id, sum(abs((CASE WHEN allocationtype = 'OPA' THEN payamt ELSE allocatedamt END))) as amt "
+				+ "FROM (SELECT ah.allocationtype, p.c_payment_id, p.payamt, sum(al.amount) as allocatedamt "
+				+ "		FROM c_allocationhdr ah"
+				+ "		INNER JOIN c_allocationline al ON ah.c_allocationhdr_id = al.c_allocationhdr_id"
+				+ "		INNER JOIN c_payment p ON p.c_payment_id = al.c_payment_id"
+				+ "		WHERE ah.c_allocationhdr_id = ? "
+				+ "		GROUP BY ah.allocationtype, p.c_payment_id, p.payamt) as p "
+				+ "group by p.c_payment_id";
+		
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		try {
+			ps = DB.prepareStatement(sqlCurrentPayments, get_TrxName());
+			ps.setInt(1, getC_AllocationHdr_ID());
+			rs = ps.executeQuery();
+			while(rs.next()){
+				paysAmt.put(rs.getInt("c_payment_id"), rs.getBigDecimal("amt"));
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				if(ps != null)ps.close();
+				if(rs != null)rs.close();
+			} catch (Exception e2) {
+				e2.printStackTrace();
+			}
+		}
+		return paysAmt;
+	}
+	
+	/**
+	 * Actualiza el total de pago electrónico en base al total de pagos de la OP
+	 */
+	private void updateElectronicPaymentTotal(){
+		Map<Integer, BigDecimal> paysAllocatedBefore = getBeforePaymentsAllocatedAmount();
+		Map<Integer, BigDecimal> paysCurrentAllocated = getCurrentPaymentsAllocatedAmount();
+		BigDecimal electronicTotalAmt = BigDecimal.ZERO;
+		BigDecimal currentAmt;
+		for (Integer pay : paysCurrentAllocated.keySet()) {
+			currentAmt = paysCurrentAllocated.get(pay);
+			if(!Util.isEmpty(paysAllocatedBefore.get(pay), true)){
+				if(paysAllocatedBefore.get(pay).compareTo(currentAmt) >= 0){
+					currentAmt = BigDecimal.ZERO;
+				}
+				else{
+					currentAmt = currentAmt.subtract(paysAllocatedBefore.get(pay));
+				}
+			}
+			electronicTotalAmt = electronicTotalAmt.add(currentAmt);
+		}
+		
+		int no = DB.executeUpdate("UPDATE " + Table_Name + " SET electronicpaymenttotal = " + electronicTotalAmt
+				+ " WHERE c_banklistline_id = " + getID(), get_TrxName());
+		if(no != 1){
+			log.severe(" Error updating bank list ");
+		}
+	} 
+	
 	private void updateBankListTotal(){
 		String sql = "UPDATE "+MBankList.Table_Name
 					+ " SET banklisttotal = coalesce("
-					+ "(SELECT sum(grandtotal) "
+					+ "(SELECT sum(electronicpaymenttotal) "
 					+ "FROM "+Table_Name+" bll "
-					+ "INNER JOIN "+X_C_AllocationHdr.Table_Name+" ah on ah.c_allocationhdr_id = bll.c_allocationhdr_id "
 					+ "WHERE bll.C_BankList_ID = "+getC_BankList_ID()+"),0) "
 					+ "WHERE C_BankList_ID = "+getC_BankList_ID();
 		

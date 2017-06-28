@@ -1,19 +1,27 @@
 /** Modelo Generado - NO CAMBIAR MANUALMENTE - Disytel */
 package org.openXpertya.model;
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.Properties;
-import org.openXpertya.util.KeyNamePair;
+import java.util.logging.Level;
+ import java.util.*;
+import java.sql.*;
+import java.math.*;
+import org.openXpertya.util.*;
 /** Modelo Generado por C_ExternalService
- *  @author Comunidad de Desarrollo Libertya Basado en Codigo Original Modificado, Revisado y Optimizado de: Jorg Janke
- *  @version  - 2017-02-15 17:12:42.596 */
+ *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
+ *  @version  - 2017-05-08 21:01:19.848 */
 public class X_C_ExternalService extends org.openXpertya.model.PO
 {
-private static final long serialVersionUID = 1L;
 /** Constructor estándar */
 public X_C_ExternalService (Properties ctx, int C_ExternalService_ID, String trxName)
 {
 super (ctx, C_ExternalService_ID, trxName);
+/** if (C_ExternalService_ID == 0)
+{
+setC_ExternalService_ID (0);
+setName (null);
+setURL (null);
+setValue (null);
+}
+ */
 }
 /** Load Constructor */
 public X_C_ExternalService (Properties ctx, ResultSet rs, String trxName)
@@ -54,6 +62,20 @@ set_Value ("AD_ComponentObjectUID", AD_ComponentObjectUID);
 public String getAD_ComponentObjectUID() 
 {
 return (String)get_Value("AD_ComponentObjectUID");
+}
+/** Set Component Version Identifier */
+public void setAD_ComponentVersion_ID (int AD_ComponentVersion_ID)
+{
+if (AD_ComponentVersion_ID <= 0) set_Value ("AD_ComponentVersion_ID", null);
+ else 
+set_Value ("AD_ComponentVersion_ID", new Integer(AD_ComponentVersion_ID));
+}
+/** Get Component Version Identifier */
+public int getAD_ComponentVersion_ID() 
+{
+Integer ii = (Integer)get_Value("AD_ComponentVersion_ID");
+if (ii == null) return 0;
+return ii.intValue();
 }
 /** Set External Service */
 public void setC_ExternalService_ID (int C_ExternalService_ID)

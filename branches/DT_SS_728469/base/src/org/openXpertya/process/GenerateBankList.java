@@ -67,7 +67,7 @@ public class GenerateBankList extends AbstractSvrProcess {
 		sql.append("	AND p.isreceipt = 'N' ");
 		sql.append("	AND p.docstatus IN ('CO','CL') ");
 		sql.append("	AND ah.docstatus IN ('CO','CL') ");
-		sql.append("	AND ah.allocationtype = 'OP' ");
+		sql.append("	AND ah.allocationtype IN ('OP','OPA') ");
 		sql.append("	AND p.c_bankaccount_id = ? ");
 		sql.append("    AND ah.c_banklist_id IS NULL ");
 		sql.append("	AND to_number(replace(replace(ah.documentno, ?, ''), ?, ''), ?) <= ");
@@ -116,6 +116,9 @@ public class GenerateBankList extends AbstractSvrProcess {
 			// Actualizar la OP en la lista del banco y los nros de secuencia
 			bankList.setDailySeqNo(new BigDecimal(MBankList.getSeqNo(getCtx(), bankList.getC_DocType_ID(), bankList.getDateTrx(), get_TrxName()) + 1));
 			bankList.setTotalSeqNo(new BigDecimal(MBankList.getSeqNo(getCtx(), bankList.getC_DocType_ID(), null, get_TrxName()) + 1));
+			if(!bankList.save()){
+				throw new Exception(CLogger.retrieveErrorAsString());
+			}
 		} catch (Exception e) {
 			throw e;
 		} finally {

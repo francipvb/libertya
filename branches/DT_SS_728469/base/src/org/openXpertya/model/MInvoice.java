@@ -2179,21 +2179,6 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				}
 			}
 
-			// Fecha del CAI
-			if (getCAI() != null && !getCAI().equals("")
-					&& getDateCAI() == null) {
-				log.saveError("InvalidCAIDate", "");
-				return false;
-			}
-
-			// Fecha del CAI > que fecha de facturacion
-			if (getDateCAI() != null
-					&& getDateInvoiced().compareTo(getDateCAI()) > 0 
-					&& !TimeUtil.isSameDay(getDateInvoiced(), getDateCAI())){
-				log.saveError("InvoicedDateAfterCAIDate", "");
-				return false;
-			}
-
 			// Punto de Venta y Numero de comprobante - Validacion de rango.
 			// Dado que los rangos que se pueden configurar en los metadatos
 			// de la columna no producen error (solo agregando una nota al log),
@@ -2215,7 +2200,28 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 								1, 99999999 }));
 				return false;
 			}
+			
+			// Validar CAI Obligatorio
+			if(partner.isMandatoryCAI() && Util.isEmpty(getCAI())){
+				log.saveError("MandatoryCAIValidationMsg", "");
+				return false;
+			}
+			
+			// Fecha del CAI
+			if (getCAI() != null && !getCAI().equals("")
+					&& getDateCAI() == null) {
+				log.saveError("InvalidCAIDate", "");
+				return false;
+			}
 
+			// Fecha del CAI > que fecha de facturacion
+			if (getDateCAI() != null
+					&& getDateInvoiced().compareTo(getDateCAI()) > 0 
+					&& !TimeUtil.isSameDay(getDateInvoiced(), getDateCAI())){
+				log.saveError("InvoicedDateAfterCAIDate", "");
+				return false;
+			}
+			
 		}
 
 		// Si es un débito, se aplican las percepciones
@@ -2310,7 +2316,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		}
 		
 		// Compras
-		if (!isSOTrx() && !isSkipAuthorizationChain()){
+		if (!isSkipAuthorizationChain()){
 			//Se determina la cadena de autorización para la factura de proveedor
 			setM_AuthorizationChain_ID(DB.getSQLValue(get_TrxName(), 
 					"SELECT audt.M_AuthorizationChain_ID FROM M_AuthorizationChainDocumentType audt "
@@ -2327,7 +2333,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				return false;
 			}
 		} 
-
+		
 		return true;
 	} // beforeSave
 
@@ -2676,8 +2682,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 
 		if (is_ValueChanged("AD_Org_ID") || is_ValueChanged("C_BPartner_ID")
 				|| is_ValueChanged("ApplyPercepcion")
-				|| is_ValueChanged("C_Invoice_Orig_ID")
-				|| is_ValueChanged("DateInvoiced")) {
+				|| is_ValueChanged("C_Invoice_Orig_ID")) {
 			try {
 
 				recalculatePercepciones();

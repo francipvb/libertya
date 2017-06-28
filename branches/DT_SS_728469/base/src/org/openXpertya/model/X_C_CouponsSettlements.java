@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_CouponsSettlements
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2017-05-04 13:53:20.493 */
+ *  @version  - 2017-05-19 11:53:14.956 */
 public class X_C_CouponsSettlements extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -54,6 +54,20 @@ public String toString()
 StringBuffer sb = new StringBuffer ("X_C_CouponsSettlements[").append(getID()).append("]");
 return sb.toString();
 }
+/** Set Amount.
+Amount in a defined currency */
+public void setAmount (BigDecimal Amount)
+{
+set_Value ("Amount", Amount);
+}
+/** Get Amount.
+Amount in a defined currency */
+public BigDecimal getAmount() 
+{
+BigDecimal bd = (BigDecimal)get_Value("Amount");
+if (bd == null) return Env.ZERO;
+return bd;
+}
 /** Set Account Name.
 Name on Credit Card or Account holder */
 public void setA_Name (String A_Name)
@@ -70,20 +84,6 @@ Name on Credit Card or Account holder */
 public String getA_Name() 
 {
 return (String)get_Value("A_Name");
-}
-/** Set Amount.
-Amount in a defined currency */
-public void setAmount (BigDecimal Amount)
-{
-set_Value ("Amount", Amount);
-}
-/** Get Amount.
-Amount in a defined currency */
-public BigDecimal getAmount() 
-{
-BigDecimal bd = (BigDecimal)get_Value("Amount");
-if (bd == null) return Env.ZERO;
-return bd;
 }
 /** Set Coupons Settlements ID */
 public void setC_CouponsSettlements_ID (int C_CouponsSettlements_ID)
@@ -136,21 +136,6 @@ Integer ii = (Integer)get_Value("C_Currency_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
-public static final int C_PAYMENT_ID_AD_Reference_ID = MReference.getReferenceID("C_Payment");
-/** Set Payment.
-Payment identifier */
-public void setC_Payment_ID (int C_Payment_ID)
-{
-set_Value ("C_Payment_ID", new Integer(C_Payment_ID));
-}
-/** Get Payment.
-Payment identifier */
-public int getC_Payment_ID() 
-{
-Integer ii = (Integer)get_Value("C_Payment_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
 /** Set CouponNo */
 public void setCouponNo (String CouponNo)
 {
@@ -165,6 +150,21 @@ set_Value ("CouponNo", CouponNo);
 public String getCouponNo() 
 {
 return (String)get_Value("CouponNo");
+}
+public static final int C_PAYMENT_ID_AD_Reference_ID = MReference.getReferenceID("C_Payment");
+/** Set Payment.
+Payment identifier */
+public void setC_Payment_ID (int C_Payment_ID)
+{
+set_Value ("C_Payment_ID", new Integer(C_Payment_ID));
+}
+/** Get Payment.
+Payment identifier */
+public int getC_Payment_ID() 
+{
+Integer ii = (Integer)get_Value("C_Payment_ID");
+if (ii == null) return 0;
+return ii.intValue();
 }
 /** Set Credit Card Number */
 public void setCreditCardNo (String CreditCardNo)

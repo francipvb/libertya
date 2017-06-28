@@ -16,7 +16,6 @@ import org.openXpertya.model.MAllocationLine;
 import org.openXpertya.model.MBPartner;
 import org.openXpertya.model.MBPartnerLocation;
 import org.openXpertya.model.MClient;
-import org.openXpertya.model.MClientInfo;
 import org.openXpertya.model.MInvoice;
 import org.openXpertya.model.MLocation;
 import org.openXpertya.model.MOrder;
@@ -243,9 +242,7 @@ public class LaunchOrdenPago extends SvrProcess {
 						op.getAD_Org_ID());
 		Timestamp opDate = op.getDateTrx();
 		String opNumber = op.getDocumentNo();
-		String bPartner = DB.getSQLValueString(get_TrxName(),
-				"SELECT Name FROM C_BPartner WHERE C_BPartner_ID = ?",
-				op.getC_BPartner_ID());
+		MBPartner bp = new MBPartner(getCtx(), op.getC_BPartner_ID(), get_TrxName());
 		// Monto de notas de crédito
 		BigDecimal ncAmount = getCreditsAmount(op);
 		// Monto de Retenciones
@@ -261,7 +258,8 @@ public class LaunchOrdenPago extends SvrProcess {
 		jasperWrapper.addParameter("CITY_NAME", cityName);
 		jasperWrapper.addParameter("OP_DATE", opDate);
 		jasperWrapper.addParameter("OP_NUMBER", opNumber);
-		jasperWrapper.addParameter("BPARTNER", bPartner);
+		jasperWrapper.addParameter("BPARTNER", bp.getName());
+		jasperWrapper.addParameter("BPARTNER_TAXID", bp.getTaxID());
 		jasperWrapper.addParameter("OP_AMOUNT", opAmount);
 		jasperWrapper.addParameter("CREDITO_AMOUNT", ncAmount);
 		jasperWrapper.addParameter("RETENCIONES_AMOUNT", retencionesAmount);
@@ -282,8 +280,6 @@ public class LaunchOrdenPago extends SvrProcess {
 						rs.getInt("c_invoice_id"), null);
 				MClient client = JasperReportsUtil.getClient(getCtx(),
 						invoice.getAD_Client_ID());
-				MClientInfo clientInfo = JasperReportsUtil.getClientInfo(
-						getCtx(), invoice.getAD_Client_ID(), get_TrxName());
 				MBPartner bpartner = new MBPartner(getCtx(),
 						invoice.getC_BPartner_ID(), null);
 				MBPartnerLocation BPLocation = new MBPartnerLocation(getCtx(),
@@ -452,6 +448,11 @@ public class LaunchOrdenPago extends SvrProcess {
 	 * recibo recibido por parámetro.
 	 */
 	private String get_Retencion_Invoices(MAllocationHdr allocation) {
+		// Si es OPA o RCA no posee comprobantes
+		if(allocation.getAllocationType().equals(MAllocationHdr.ALLOCATIONTYPE_AdvancedCustomerReceipt) 
+				|| allocation.getAllocationType().equals(MAllocationHdr.ALLOCATIONTYPE_AdvancedPaymentOrder)){
+			return null;
+		}
 		try {
 			PreparedStatement stmt = DB
 					.prepareStatement("SELECT DISTINCT factura FROM C_Allocation_Detail_V WHERE C_AllocationHdr_ID = ? ORDER BY factura DESC");

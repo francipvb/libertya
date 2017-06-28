@@ -4,7 +4,6 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.openXpertya.util.Msg;
-
 /**
  * @author Kevin Feuerschvenger - Sur Software S.H.
  */

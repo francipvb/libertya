@@ -24,6 +24,7 @@ import java.sql.CallableStatement;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Properties;
 import java.util.logging.Level;
 
 import javax.swing.JFrame;
@@ -64,7 +65,7 @@ import org.openXpertya.wf.MWorkflow;
  * @author     Equipo de Desarrollo de openXpertya    
  */
 
-public class ProcessCtl extends Thread {
+public class ProcessCtl extends Thread implements ProcessCall {
 
 	public static final String DYNAMIC_JASPER_CLASSNAME = "org.openXpertya.JasperReport.ReportStarter";
     /**
@@ -159,6 +160,8 @@ public class ProcessCtl extends Thread {
     /** Descripción de Campos */
 
     private static CLogger log = CLogger.getCLogger( ProcessCtl.class );
+    
+    private ProcessCall processCallInstance;
 
     /**
      * Descripción de Método
@@ -187,7 +190,7 @@ public class ProcessCtl extends Thread {
 
         String SQL = "SELECT p.Name, p.ProcedureName,p.ClassName, p.AD_Process_ID,"    // 1..4
                      + " p.isReport,p.IsDirectPrint,p.AD_ReportView_ID,p.AD_Workflow_ID,"    // 5..8
-                     + " CASE WHEN p.Statistic_Count=0 THEN 0 ELSE p.Statistic_Seconds/p.Statistic_Count END, dynamicreport, JasperReport "    // 9
+                     + " CASE WHEN p.Statistic_Count=0 THEN 0 ELSE p.Statistic_Seconds/p.Statistic_Count END, p.AD_PrintFormat_ID, dynamicreport, JasperReport "    // 9
                      + "FROM AD_Process p, AD_PInstance i " + "WHERE p.AD_Process_ID=i.AD_Process_ID AND p.IsActive='Y'" + " AND i.AD_PInstance_ID=?";
 
         if( !Env.isBaseLanguage( Env.getCtx(),"AD_Process" )) {
@@ -325,7 +328,8 @@ public class ProcessCtl extends Thread {
         if( IsReport ) {
 
             // Optional Pre-Report Process
-
+        	if (m_pi.getClassName() == null) 
+        		processCallInstance = this;
             if( ProcedureName.length() > 0 ) {
                 if( !startDBProcess( ProcedureName )) {
                     unlock();
@@ -417,7 +421,7 @@ public class ProcessCtl extends Thread {
 				if (frame instanceof AWindow)
 					((AWindow)frame).setBusyTimer(m_pi.getEstSeconds());
 				else
-					m_waiting = new Waiting (frame, Msg.getMsg(Env.getCtx(), "Processing"), false, m_pi.getEstSeconds());
+					m_waiting = new Waiting (frame, Msg.getMsg(Env.getCtx(), "Processing"), false, m_pi.getEstSeconds(), this);
 				SwingUtilities.invokeLater(new Runnable()
 				{
 					public void run()
@@ -575,7 +579,7 @@ public class ProcessCtl extends Thread {
         // Run locally
 
         if( !started ) {
-            ProcessCall myObject = null;
+        	processCallInstance = null;
             boolean error = false;
             // Manejo de transacciones.
             // Si se invocó el proceso con una transacción creada, entonces no se administra
@@ -595,12 +599,17 @@ public class ProcessCtl extends Thread {
             try {
                 Class myClass = Class.forName( m_pi.getClassName());
 
-                myObject = ( ProcessCall )myClass.newInstance();
+                processCallInstance = ( ProcessCall )myClass.newInstance();
 
-                if( myObject == null ) {
+                if( processCallInstance == null ) {
                     m_pi.setSummary( "No Instance for " + m_pi.getClassName(),true );
                 } else {
-                    error = !myObject.startProcess( Env.getCtx(),m_pi,trx );
+                	if (m_waiting!=null) {
+                		m_waiting.setCancelable(processCallInstance.isCancelable());
+                	}
+                	
+                	
+                    error = !processCallInstance.startProcess( Env.getCtx(),m_pi,trx );
                 }
                 // Solo se hace commit o rollback de la transacción si es una trx
                 // controlada localmente.
@@ -702,6 +711,12 @@ public class ProcessCtl extends Thread {
     	
     };
     
+    /** Sobrecarga de metodo */
+    public static ProcessCtl process(ASyncProcess parent, int WindowNo, IProcessParameter parameter, ProcessInfo pi, Trx trx) 
+    {
+    	return process(parent, WindowNo, parameter, pi, trx, true);
+    }
+    
     /**
 	 *	Async Process - Do it all.
 	 *  <code>
@@ -719,9 +734,10 @@ public class ProcessCtl extends Thread {
 	 *  @param paraPanel Process Parameter Panel
 	 *  @param pi ProcessInfo process info
 	 *  @param trx Transaction
+	 *  @param execNow if the process should start inmediatly
 	 *  @return worker started ProcessCtl instance or null for workflow
 	 */
-	public static ProcessCtl process(ASyncProcess parent, int WindowNo, IProcessParameter parameter, ProcessInfo pi, Trx trx)
+	public static ProcessCtl process(ASyncProcess parent, int WindowNo, IProcessParameter parameter, ProcessInfo pi, Trx trx, boolean execNow)
 	{
 		log.fine("WindowNo=" + WindowNo + " - " + pi);
 
@@ -764,18 +780,25 @@ public class ProcessCtl extends Thread {
 
 		//	execute
 		ProcessCtl worker = new ProcessCtl(parent, WindowNo, pi, trx);
-		if (parent != null)
+		if (!execNow)
+			return worker;
+		return worker.execNow();
+	}	//	execute
+
+	
+	public ProcessCtl execNow() {
+		if (m_parent != null)
 		{
-			worker.start();
+			start();
 		}
 		else
 		{
 			//synchrous
-			worker.run();
+			run();
 		}
-		return worker;
-	}	//	execute
-
+		return this;
+	}
+	
 	/**************************************************************************
 	 *  Constructor
 	 *  @param parent Container & ASyncProcess
@@ -792,6 +815,28 @@ public class ProcessCtl extends Thread {
 	}   //  ProcessCtl
 	/** Windowno */
 	int windowno;
+	
+	
+	public ProcessCall getProcessCallInstance() {
+		return processCallInstance;
+	}
+
+	@Override
+	public boolean startProcess(Properties ctx, ProcessInfo pi, Trx trx) {
+		// NO SE UTILIZA
+		return false;
+	}
+
+	@Override
+	public boolean isCancelable() {
+		// Unicamente si tiene definida una instancia y si no es la impresión de un registro
+		return processCallInstance != null && m_pi.getRecord_ID() <= 0;
+	}
+
+	@Override
+	public void cancelProcess() {
+		ReportCtl.cancelReport();
+	}
 
 	
 }    // ProcessCtl

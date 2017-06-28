@@ -486,7 +486,9 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
 		sql.append("  INNER JOIN C_DocType AS dt ON (dt.C_DocType_ID=i.C_DocType_ID) ");
 		sql.append("  LEFT JOIN C_Currency cu ON (cu.C_Currency_ID=i.C_Currency_ID) ");
 		sql.append("  WHERE i.IsActive = 'Y' AND i.DocStatus IN ('CO', 'CL') ");
-		sql.append("    AND i.IsSOTRx = '" + getIsSOTrx() + "' AND GrandTotal <> 0.0 AND C_BPartner_ID = ? ");
+		//sql.append("    AND i.IsSOTRx = '" + getIsSOTrx() + "' ");
+		sql.append("    AND GrandTotal <> 0.0 ");
+		sql.append("    AND C_BPartner_ID = ? ");
 		sql.append("    AND dt.signo_issotrx = " + getSignoIsSOTrx());
 		
 		if (AD_Org_ID != 0) 
@@ -894,15 +896,15 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
 		for (Invoice f : debits) {
 			int invoiceID = f.getInvoiceID();
 			BigDecimal payAmount = f.getManualAmtOriginal().add(f.getTotalPaymentTermDiscountOriginalCurrency());
-			poGenerator.addInvoice(invoiceID, payAmount);
+			getPoGenerator().addInvoice(invoiceID, payAmount);
 		}	
 		
 		// Agrego los medios de pagos al generador	
 		for (MedioPago pago : credits) {
-			pago.addToGenerator(poGenerator);
+			pago.addToGenerator(getPoGenerator());
 		}
 		// Se crean las líneas de imputación entre las facturas y los pagos
-		poGenerator.generateLines();
+		getPoGenerator().generateLines();
 	}
 	
 	@Override

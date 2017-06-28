@@ -5747,6 +5747,36 @@ ALTER TABLE c_bpartner_cai
 --20170301-1015 Merge de Revisión 1797
 ALTER TABLE c_couponssettlements DROP COLUMN allocationnumber;
 
+--20170523-1328 PATCH necesario por potencial secuencia inexistente (postgres 8.4 no soporta IF NOT EXISTS)
+CREATE OR REPLACE FUNCTION addsequenceifnotexists (
+    sequencename character varying,
+    sequenceprops character varying)
+  RETURNS numeric AS
+$BODY$
+DECLARE
+	existe integer;
+BEGIN
+	SELECT into existe COUNT(1) 
+	FROM information_schema.sequences
+	WHERE lower(sequence_name) = lower(sequencename);
+	
+	IF (existe = 0) THEN
+		EXECUTE 'CREATE SEQUENCE ' || sequencename || ' ' || sequenceprops;
+		RETURN 1;
+	END IF;
+
+	RETURN 0;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION addsequenceifnotexists(character varying, character varying)
+  OWNER TO libertya;
+  
+update ad_system set dummy = (SELECT addsequenceifnotexists('seq_c_externalservice', 'INCREMENT 1 MINVALUE 1 MAXVALUE 9223372036854775807 START 1010001 CACHE 1'));
+--FIN PATCH
+
+
 --20170301-1300 Merge de Revisión 1798
 CREATE TABLE c_externalserviceattributes
 (
@@ -6670,3 +6700,619 @@ i.dateinvoiced,
 i.grandtotal;
 ALTER TABLE c_allocation_detail_debits_v
   OWNER TO libertya;
+
+--20170419-1015 View c_allocation_detail_debits_v modificada y nueva c_allocation_detail_credits_v
+DROP VIEW c_allocation_detail_debits_v;
+
+CREATE OR REPLACE VIEW c_allocation_detail_debits_v AS
+SELECT ah.c_allocationhdr_id AS c_allocation_detail_debits_v_id,
+ah.c_allocationhdr_id,
+ah.ad_client_id,
+ah.ad_org_id,
+ah.isactive,
+ah.created,
+ah.createdby,
+ah.updated,
+ah.updatedby,
+al.c_invoice_id,
+i.documentno,
+i.c_currency_id,
+i.numerocomprobante,
+i.puntodeventa,
+i.c_letra_comprobante_id,
+dt.doctypekey,
+dt.name as doctypename,
+i.paymentrule,
+i.c_region_delivery_id,
+i.netamount,
+i.c_paymentterm_id,
+i.dateinvoiced,
+i.grandtotal,
+sum(currencyconvert(al.amount + al.discountamt + al.writeoffamt, ah.c_currency_id, i.c_currency_id, NULL::timestamp with time zone, NULL::integer, ah.ad_client_id, ah.ad_org_id)) as montosaldado
+FROM c_allocationhdr ah
+INNER JOIN c_allocationline al ON ah.c_allocationhdr_id = al.c_allocationhdr_id
+INNER JOIN c_invoice i ON al.c_invoice_id = i.c_invoice_id
+INNER JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+GROUP BY ah.c_allocationhdr_id,
+ah.ad_client_id,
+ah.ad_org_id,
+ah.isactive,
+ah.created,
+ah.createdby,
+ah.updated,
+ah.updatedby,
+al.c_invoice_id,
+i.documentno,
+i.c_currency_id,
+i.numerocomprobante,
+i.puntodeventa,
+i.c_letra_comprobante_id,
+dt.doctypekey,
+dt.name,
+i.paymentrule,
+i.c_region_delivery_id,
+i.netamount,
+i.c_paymentterm_id,
+i.dateinvoiced,
+i.grandtotal;
+ALTER TABLE c_allocation_detail_debits_v
+  OWNER TO libertya;
+
+CREATE OR REPLACE VIEW c_allocation_detail_credits_v AS
+SELECT  c_allocation_detail_credits_v_id,
+c_allocationhdr_id,
+ad_client_id,
+ad_org_id,
+isactive,
+created,
+createdby,
+updated,
+updatedby,
+fecha,
+c_currency_id,
+tipo,
+cash,
+payamt,
+payment_medium_name,
+pay_currency_id,
+c_bankaccount_id,
+c_invoice_credit_id,
+credit_doctypekey,
+credit_doctypename,
+credit_numerocomprobante,
+credit_puntodeventa,
+credit_letra_comprobante_id,
+credit_netamount,
+c_cashline_id,
+cashname,
+c_payment_id,
+accountno,
+checkno,
+a_name,
+a_bank,
+a_cuit,
+duedate,
+dateemissioncheck,
+checkstatus,
+creditcardnumber,
+couponbatchnumber,
+couponnumber,
+m_entidadfinancieraplan_id,
+m_entidadfinanciera_id,
+posnet,
+micr,
+isreconciled,
+creditdate,
+creditdocumentno,
+SUM(COALESCE(currencyconvert(amount + discountamt + writeoffamt, c_currency_id, pay_currency_id, NULL::timestamp with time zone, NULL::integer, ad_client_id, ad_org_id), 0::numeric(20,2))) AS montosaldado
+ FROM (SELECT ah.c_allocationhdr_id AS c_allocation_detail_credits_v_id,
+ah.c_allocationhdr_id,
+ah.ad_client_id,
+ah.ad_org_id,
+ah.isactive,
+ah.created,
+ah.createdby,
+ah.updated,
+ah.updatedby,
+ah.datetrx AS fecha,
+ah.c_currency_id,
+  CASE
+  WHEN al.c_invoice_credit_id IS NOT NULL THEN 'N'::bpchar
+  WHEN p.tendertype IS NOT NULL THEN p.tendertype
+  WHEN p.tendertype IS NULL THEN 'CA'::bpchar
+  ELSE NULL::bpchar
+  END AS tipo,
+  CASE
+  WHEN cl.c_cashline_id IS NOT NULL THEN 'Y'::text
+  WHEN cl.c_cashline_id IS NULL THEN 'N'::text
+  ELSE NULL::text
+  END AS cash,
+  abs(COALESCE(p.payamt, cl.amount, credit.grandtotal, 0::numeric(20,2))) AS payamt,
+  CASE
+  WHEN al.c_payment_id IS NOT NULL THEN pppm.name
+  WHEN al.c_cashline_id IS NOT NULL THEN cppm.name
+  WHEN al.c_invoice_credit_id IS NOT NULL THEN dt.name
+  ELSE NULL::character varying
+  END AS payment_medium_name,
+  COALESCE(p.c_currency_id, cl.c_currency_id, credit.c_currency_id) AS pay_currency_id,
+  p.c_bankaccount_id,
+  al.c_invoice_credit_id,
+  dt.doctypekey as credit_doctypekey,
+  dt.name as credit_doctypename,
+  credit.numerocomprobante as credit_numerocomprobante,
+  credit.puntodeventa as credit_puntodeventa,
+  credit.c_letra_comprobante_id as credit_letra_comprobante_id,
+  credit.netamount as credit_netamount,
+  al.c_cashline_id,
+  c.name as cashname,
+  al.c_payment_id,
+  p.accountno,
+  p.checkno,
+  p.a_name,
+  p.a_bank,
+  p.a_cuit,
+  p.duedate,
+  p.dateemissioncheck,
+  p.checkstatus,
+  p.creditcardnumber,
+  p.couponbatchnumber,
+  p.couponnumber,
+  p.m_entidadfinancieraplan_id,
+  efp.m_entidadfinanciera_id,
+  p.posnet,
+  p.micr,
+  p.isreconciled,
+CASE
+  WHEN al.c_payment_id IS NOT NULL THEN p.datetrx
+  WHEN al.c_cashline_id IS NOT NULL THEN c.statementdate
+  WHEN al.c_invoice_credit_id IS NOT NULL THEN credit.dateinvoiced
+  ELSE null::timestamp
+  END AS creditdate,
+  CASE
+  WHEN al.c_payment_id IS NOT NULL THEN p.documentno
+  WHEN al.c_cashline_id IS NOT NULL THEN '# '||cl.line
+  WHEN al.c_invoice_credit_id IS NOT NULL THEN credit.documentno
+  ELSE null::character varying
+  END AS creditdocumentno,
+  al.amount,
+  al.discountamt, 
+  al.writeoffamt
+  FROM c_allocationhdr ah
+  JOIN c_allocationline al ON ah.c_allocationhdr_id = al.c_allocationhdr_id
+  LEFT JOIN c_payment p ON al.c_payment_id = p.c_payment_id
+  LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = p.m_entidadfinancieraplan_id
+  LEFT JOIN c_cashline cl ON al.c_cashline_id = cl.c_cashline_id
+  LEFT JOIN c_cash c ON c.c_cash_id = cl.c_cash_id
+  LEFT JOIN c_invoice credit ON al.c_invoice_credit_id = credit.c_invoice_id
+  LEFT JOIN c_doctype dt ON credit.c_doctypetarget_id = dt.c_doctype_id
+  LEFT JOIN c_pospaymentmedium cppm ON cppm.c_pospaymentmedium_id = cl.c_pospaymentmedium_id
+  LEFT JOIN c_pospaymentmedium pppm ON pppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id) AS c
+  GROUP BY c_allocation_detail_credits_v_id,
+c_allocationhdr_id,
+ad_client_id,
+ad_org_id,
+isactive,
+created,
+createdby,
+updated,
+updatedby,
+fecha,
+c_currency_id,
+tipo,
+cash,
+payamt,
+payment_medium_name,
+pay_currency_id,
+c_bankaccount_id,
+c_invoice_credit_id,
+credit_doctypekey,
+credit_doctypename,
+credit_numerocomprobante,
+credit_puntodeventa,
+credit_letra_comprobante_id,
+credit_netamount,
+c_cashline_id,
+cashname,
+c_payment_id,
+accountno,
+checkno,
+a_name,
+a_bank,
+a_cuit,
+duedate,
+dateemissioncheck,
+checkstatus,
+creditcardnumber,
+couponbatchnumber,
+couponnumber,
+m_entidadfinancieraplan_id,
+m_entidadfinanciera_id,
+posnet,
+micr,
+isreconciled,
+creditdate,
+creditdocumentno
+ORDER BY c_allocationhdr_id, c_payment_id, c_cashline_id, c_invoice_credit_id;
+
+ALTER TABLE c_allocation_detail_credits_v
+  OWNER TO libertya;
+
+--20170420-1400 Nueva columna en lista de banco para registrar el total de pagos electrónicos de la OP relacionada
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_banklistline','electronicpaymenttotal','numeric(20,2) NOT NULL DEFAULT 0'));
+
+--20170426-1200 Funciones para actualizar las cantidades pendientes en storage
+CREATE OR REPLACE FUNCTION update_reserved(
+    clientid integer,
+    orgid integer,
+    productid integer)
+  RETURNS void AS
+$BODY$
+/***********
+Actualiza la cantidad reservada de los depósitos de la compañía, organización y artículo parametro, 
+siempre y cuando existan los regitros en m_storage 
+y sólo sobre locators marcados como default ya que asi se realiza al procesar pedidos.
+Las cantidades reservadas se obtienen de pedidos procesados.
+*/
+BEGIN
+	update m_storage s
+	set qtyreserved = coalesce((select sum(ol.qtyordered - ol.qtydelivered) as qtypending
+					from c_orderline ol
+					inner join c_order o on o.c_order_id = ol.c_order_id
+					inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+					inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+					where ol.qtyordered <> ol.qtydelivered 
+						and o.processed = 'Y' 
+						and s.m_product_id = ol.m_product_id
+						and s.m_locator_id = l.m_locator_id
+						and o.issotrx = 'Y'),0)
+	where ad_client_id = clientid
+		and (orgid = 0 or ad_org_id = orgid)
+		and (productid = 0 or m_product_id = productid)
+		and s.m_locator_id IN (select defaultLocator 
+					from (select m_warehouse_id, max(m_locator_id) as defaultLocator
+						from m_locator l
+						where l.isdefault = 'Y' and l.isactive = 'Y'
+						GROUP by m_warehouse_id) as dl);
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION update_reserved(integer, integer, integer)
+  OWNER TO libertya;
+
+
+CREATE OR REPLACE FUNCTION update_ordered(
+    clientid integer,
+    orgid integer,
+    productid integer)
+  RETURNS void AS
+$BODY$
+/***********
+Actualiza la cantidad pendiente pedida de los depósitos de la compañía, organización y artículo parametro, 
+siempre y cuando existan los regitros en m_storage 
+y sólo sobre locators marcados como default ya que asi se realiza al procesar pedidos.
+Las cantidades pendientes se obtienen de pedidos procesados.
+*/
+BEGIN
+	update m_storage s
+	set qtyordered = coalesce((select sum(ol.qtyordered - ol.qtydelivered) as qtypending
+					from c_orderline ol
+					inner join c_order o on o.c_order_id = ol.c_order_id
+					inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+					inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+					where ol.qtyordered <> ol.qtydelivered 
+						and o.processed = 'Y' 
+						and s.m_product_id = ol.m_product_id
+						and s.m_locator_id = l.m_locator_id
+						and o.issotrx = 'N'),0)
+	where ad_client_id = clientid
+		and (orgid = 0 or ad_org_id = orgid)
+		and (productid = 0 or m_product_id = productid)
+		and s.m_locator_id IN (select defaultLocator 
+					from (select m_warehouse_id, max(m_locator_id) as defaultLocator
+						from m_locator l
+						where l.isdefault = 'Y' and l.isactive = 'Y'
+						GROUP by m_warehouse_id) as dl);
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION update_ordered(integer, integer, integer)
+  OWNER TO libertya;
+
+--20170426-1310 Nueva columna en impresión de cheques para registrar la fecha
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_CheckPrinting','datetrx','timestamp without time zone'));
+
+update C_CheckPrinting
+set datetrx = created;
+
+ALTER TABLE C_CheckPrinting ALTER COLUMN datetrx SET NOT NULL;
+
+--20170427-1015 Nueva columna para validar CAI Obligatorio
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_bpartner','ismandatorycai','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+
+--20170502-1400 Nueva columna para permitir lotes fuera de fecha, caso contrario se setea automáticamente la fecha actual 
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_DocType','allowotherbatchpaymentdate','character(1) NOT NULL DEFAULT ''Y''::bpchar'));
+
+--20170508-1035 Nuevas columnas para registrar changelog sobre las tablas C_ExternalService y C_ExternalServiceAttributes
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_ExternalService','ad_componentversion_id','integer'));
+
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_ExternalServiceAttributes','ad_componentversion_id','integer'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_ExternalServiceAttributes','ad_componentobjectuid','character varying(100)'));
+
+-- Nueva columna ID de Tipo de Documento
+DROP VIEW c_allocation_detail_debits_v;
+
+CREATE OR REPLACE VIEW c_allocation_detail_debits_v AS
+ SELECT ah.c_allocationhdr_id AS c_allocation_detail_debits_v_id, ah.c_allocationhdr_id, ah.ad_client_id, ah.ad_org_id, ah.isactive, ah.created, ah.createdby, ah.updated, ah.updatedby, al.c_invoice_id, i.documentno, i.c_currency_id, i.numerocomprobante, i.puntodeventa, i.c_letra_comprobante_id, dt.c_doctype_id, dt.doctypekey, dt.name AS doctypename, i.paymentrule, i.c_region_delivery_id, i.netamount, i.c_paymentterm_id, i.dateinvoiced, i.grandtotal, sum(currencyconvert(al.amount + al.discountamt + al.writeoffamt, ah.c_currency_id, i.c_currency_id, NULL::timestamp with time zone, NULL::integer, ah.ad_client_id, ah.ad_org_id)) AS montosaldado
+  FROM c_allocationhdr ah
+  JOIN c_allocationline al ON ah.c_allocationhdr_id = al.c_allocationhdr_id
+  JOIN c_invoice i ON al.c_invoice_id = i.c_invoice_id
+  JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+  GROUP BY ah.c_allocationhdr_id, ah.ad_client_id, ah.ad_org_id, ah.isactive, ah.created, ah.createdby, ah.updated, ah.updatedby, al.c_invoice_id, i.documentno, i.c_currency_id, i.numerocomprobante, i.puntodeventa, i.c_letra_comprobante_id, dt.c_doctype_id, dt.doctypekey, dt.name, i.paymentrule, i.c_region_delivery_id, i.netamount, i.c_paymentterm_id, i.dateinvoiced, i.grandtotal;
+
+ALTER TABLE c_allocation_detail_debits_v
+  OWNER TO libertya;
+
+-- 20170511-1526 Ampliacion de los decimales en tasas de conversion para mayor precision  
+alter table c_conversion_rate alter column multiplyrate type numeric(24,15);
+alter table c_conversion_rate alter column dividerate type numeric(24,15);
+
+--20170516-1151 Bloqueos de Secuencias de Tipo de Documento
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_DocType','lockseq','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+
+CREATE TABLE ad_sequence_lock
+(
+  ad_sequence_lock_id integer NOT NULL,
+  ad_client_id integer NOT NULL,
+  ad_org_id integer NOT NULL,
+  isactive character(1) NOT NULL DEFAULT 'Y'::bpchar,
+  created timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  createdby integer NOT NULL,
+  updated timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  updatedby integer NOT NULL,
+  ad_sequence_id integer NOT NULL,
+  c_doctype_id integer,
+  ad_table_id integer,
+  record_id numeric(18,0),
+  description character varying(255),
+  CONSTRAINT ad_sequence_lock_key PRIMARY KEY (ad_sequence_lock_id),
+  CONSTRAINT ad_sequence_lock_seq FOREIGN KEY (ad_sequence_id)
+  REFERENCES ad_sequence (ad_sequence_id) MATCH SIMPLE
+  ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT ad_sequence_lock_table FOREIGN KEY (ad_table_id)
+  REFERENCES ad_table (ad_table_id) MATCH SIMPLE
+  ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT ad_sequence_lock_doctype FOREIGN KEY (c_doctype_id)
+  REFERENCES c_doctype (c_doctype_id) MATCH SIMPLE
+  ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT ad_sequence_lock_client FOREIGN KEY (ad_client_id)
+  REFERENCES ad_client (ad_client_id) MATCH SIMPLE
+  ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT ad_sequence_lock_org FOREIGN KEY (ad_org_id)
+  REFERENCES ad_org (ad_org_id) MATCH SIMPLE
+  ON UPDATE NO ACTION ON DELETE NO ACTION
+)
+WITH (
+  OIDS=TRUE
+);
+ALTER TABLE ad_sequence_lock
+  OWNER TO libertya;
+  
+--20170517-1255 Merge de ajustes a ventana cupones de tarjetas
+DROP VIEW c_paymentcoupon_v;
+
+CREATE 
+OR REPLACE VIEW libertya.c_paymentcoupon_v AS 
+SELECT
+   p.c_payment_id,
+   p.ad_client_id,
+   p.ad_org_id,
+   p.created,
+   p.createdby,
+   p.updated,
+   p.updatedby,
+   'Y'::character(1) AS isactive,
+   efp.m_entidadfinanciera_id,
+   p.m_entidadfinancieraplan_id,
+   ccs.settlementno,
+   p.c_invoice_id,
+   p.creditcardnumber,
+   p.couponnumber,
+   p.c_bpartner_id,
+   coalesce(p.a_name, bp.name) as a_name,
+   p.datetrx,
+   p.couponbatchnumber,
+   p.payamt,
+   p.c_currency_id,
+   p.docstatus,
+   cs.isreconciled,
+   efp.cuotaspago AS totalallocations,
+   ccs.paymentdate AS settlementdate,
+   p.auditstatus,
+   ''::character(1) AS reject 
+FROM
+   c_payment p 
+   INNER JOIN
+	c_bpartner bp 
+	ON p.c_bpartner_id = bp.c_bpartner_id
+   LEFT JOIN
+      m_entidadfinancieraplan efp 
+      ON p.m_entidadfinancieraplan_id = efp.m_entidadfinancieraplan_id 
+   LEFT JOIN
+      c_couponssettlements cs 
+      ON p.c_payment_id = cs.c_payment_id 
+   LEFT JOIN
+      c_creditcardsettlement ccs 
+      ON cs.c_creditcardsettlement_id = ccs.c_creditcardsettlement_id 
+WHERE
+   p.tendertype = 'C'::bpchar;
+   
+--20170518-1120 Merge de Revisión 1841
+DROP VIEW c_paymentcoupon_v;
+
+CREATE 
+OR REPLACE VIEW libertya.c_paymentcoupon_v AS 
+SELECT
+   p.c_payment_id,
+   p.ad_client_id,
+   p.ad_org_id,
+   p.created,
+   p.createdby,
+   p.updated,
+   p.updatedby,
+   'Y'::character(1) AS isactive,
+   efp.m_entidadfinanciera_id,
+   p.m_entidadfinancieraplan_id,
+   ccs.settlementno,
+   p.c_invoice_id,
+   p.creditcardnumber,
+   p.couponnumber,
+   p.c_bpartner_id,
+   coalesce(p.a_name, bp.name) as a_name,
+   p.datetrx,
+   p.couponbatchnumber,
+   p.payamt,
+   p.c_currency_id,
+   p.docstatus,
+   cs.isreconciled,
+   efp.cuotaspago AS totalallocations,
+   ccs.paymentdate AS settlementdate,
+   p.auditstatus,
+   ''::character(1) AS reject,
+   ''::character(1) AS unreject
+FROM
+   c_payment p 
+   INNER JOIN
+	c_bpartner bp 
+	ON p.c_bpartner_id = bp.c_bpartner_id
+   LEFT JOIN
+      m_entidadfinancieraplan efp 
+      ON p.m_entidadfinancieraplan_id = efp.m_entidadfinancieraplan_id 
+   LEFT JOIN
+      c_couponssettlements cs 
+      ON p.c_payment_id = cs.c_payment_id 
+   LEFT JOIN
+      c_creditcardsettlement ccs 
+      ON cs.c_creditcardsettlement_id = ccs.c_creditcardsettlement_id 
+WHERE
+   p.tendertype = 'C'::bpchar;
+
+--20170518-1250 Merge de revision 1951
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_couponssettlements','a_name','character varying(60)'));
+
+
+--20170519-1122 Nuevas tablas a ser bitacoreadas
+-- Configuración de medios de cobro
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_POSPaymentMedium','AD_ComponentObjectUID','varchar(100)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_POSPaymentMedium','AD_ComponentVersion_ID','integer'));
+-- Lista de Precio
+update ad_system set dummy = (SELECT addcolumnifnotexists('M_PriceList','AD_ComponentObjectUID','varchar(100)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('M_PriceList','AD_ComponentVersion_ID','integer'));
+-- Version de Lista de Precio
+update ad_system set dummy = (SELECT addcolumnifnotexists('M_PriceList_Version','AD_ComponentObjectUID','varchar(100)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('M_PriceList_Version','AD_ComponentVersion_ID','integer'));
+-- Configuracion de Descuentos
+update ad_system set dummy = (SELECT addcolumnifnotexists('M_DiscountConfig','AD_ComponentObjectUID','varchar(100)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('M_DiscountConfig','AD_ComponentVersion_ID','integer'));
+
+--20170519-1145 Merge de revision 1953
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_couponssettlements','processed','character(1) NOT NULL DEFAULT ''N'''));
+
+--20170519-1424 Merge de Ajustes en Ventana de Cupones
+DROP VIEW libertya.c_paymentcoupon_v;
+
+CREATE OR REPLACE VIEW libertya.c_paymentcoupon_v AS
+SELECT
+   p.c_payment_id,
+   p.ad_client_id,
+   p.ad_org_id,
+   p.created,
+   p.createdby,
+   p.updated,
+   p.updatedby,
+   'Y'::character(1) AS isactive,
+   efp.m_entidadfinanciera_id,
+   p.m_entidadfinancieraplan_id,
+   ccs.settlementno,
+   p.c_invoice_id,
+   p.creditcardnumber,
+   p.couponnumber,
+   p.c_bpartner_id,
+   coalesce(p.a_name, bp.name) as a_name,
+   p.datetrx,
+   p.couponbatchnumber,
+   p.payamt,
+   p.c_currency_id,
+   p.docstatus,
+   cs.isreconciled,
+   efp.cuotaspago AS totalallocations,
+   ccs.paymentdate AS settlementdate,
+   p.auditstatus,
+   ''::character(1) AS reject,
+   ''::character(1) AS unreject,
+   ef.c_bpartner_id AS m_entidadfinanciera_bp_id 
+FROM
+   c_payment p 
+   INNER JOIN
+	c_bpartner bp 
+	ON p.c_bpartner_id = bp.c_bpartner_id
+   LEFT JOIN
+      m_entidadfinancieraplan efp 
+      ON p.m_entidadfinancieraplan_id = efp.m_entidadfinancieraplan_id 
+   INNER JOIN 
+      m_entidadfinanciera ef
+      ON efp.m_entidadfinanciera_id = ef.m_entidadfinanciera_id
+   LEFT JOIN
+      c_couponssettlements cs 
+      ON p.c_payment_id = cs.c_payment_id 
+   LEFT JOIN
+      c_creditcardsettlement ccs 
+      ON cs.c_creditcardsettlement_id = ccs.c_creditcardsettlement_id 
+WHERE
+   p.tendertype = 'C'::bpchar;
+   
+--20170519-1600 Merge de Revisiones 1916 y 1929
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_withholdingsettlement','c_retencionschema_id','integer'));
+
+ALTER TABLE c_withholdingsettlement DROP COLUMN c_retenciontype_id;
+
+--20170519-1650 Merge de Revisión 1847
+ALTER TABLE libertya.c_creditcardsettlement ADD CONSTRAINT uniquecreditcardsettlement UNIQUE (settlementno, c_bpartner_id);
+
+--20170522-2000 Incorporación de rango de numeración de cheques en chequeras
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_bankaccountdoc','startno','numeric(18,0)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_bankaccountdoc','endno','numeric(18,0)'));
+
+--20170523-1115 Chequeras por usuario
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_bankaccountdoc','isuserassigned','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+
+CREATE TABLE c_bankaccountdocuser
+(
+  c_bankaccountdocuser_id integer NOT NULL,
+  ad_client_id integer NOT NULL,
+  ad_org_id integer NOT NULL,
+  isactive character(1) NOT NULL DEFAULT 'Y'::bpchar,
+  created timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  createdby integer NOT NULL,
+  updated timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  updatedby integer NOT NULL,
+  c_bankaccountdoc_id integer NOT NULL,
+  ad_user_id integer NOT NULL,
+  CONSTRAINT c_bankaccountdocuser_pkey PRIMARY KEY (c_bankaccountdocuser_id),
+  CONSTRAINT c_bankaccountdocuser_c_bankaccountdoc FOREIGN KEY (c_bankaccountdoc_id)
+      REFERENCES c_bankaccountdoc (c_bankaccountdoc_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT c_bankaccountdocuser_ad_user FOREIGN KEY (ad_user_id)
+      REFERENCES ad_user (ad_user_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE CASCADE
+)
+WITH (
+  OIDS=TRUE
+);
+ALTER TABLE c_bankaccountdocuser
+  OWNER TO libertya;
+  
+ --20170524-1148 Versionado de BBDD para release
+ UPDATE ad_system SET version = '23-05-2017' WHERE ad_system_id = 0;
+ 

@@ -3,7 +3,9 @@ package org.openXpertya.model;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Properties;
 import java.util.Vector;
@@ -16,6 +18,8 @@ import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.TimeUtil;
+import org.openXpertya.util.Util;
 
 public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 	
@@ -36,9 +40,25 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 
 	public String completeIt() {
 		POCRGenerator poGenerator = new POCRGenerator(getCtx(), POCRType.PAYMENT_ORDER,get_TrxName());
+		// Lockear la secuencia si es que está marcada asi
+		MDocType allocTargetDocType = MDocType.get(getCtx(), getC_DoctypeAllocTarget_ID());
+		MSequence allocTargetSeq = new MSequence(getCtx(), allocTargetDocType.getDocNoSequence_ID(), get_TrxName());
+		MSequenceLock seqLock = null;
+		if (allocTargetDocType != null && allocTargetDocType.isLockSeq() && allocTargetSeq != null) {
+			seqLock = new MSequenceLock(getCtx(), 0, null);
+			seqLock.setAD_Sequence_ID(allocTargetSeq.getID());
+			seqLock.setC_DocType_ID(allocTargetDocType.getID());
+			seqLock.setAD_Table_ID(get_Table_ID());
+			seqLock.setRecord_ID(getID());
+			if(!seqLock.save()){
+				setProcessMsg(CLogger.retrieveErrorAsString());
+				return DocAction.STATUS_Invalid;
+			}
+		}
 		try {
+			poGenerator.setDocType(getC_DoctypeAllocTarget_ID());
+			poGenerator.setCurrentSeqLock(seqLock);
 			for (MPaymentBatchPODetail detail : getBatchDetails()) {
-				boolean saveOk = true;
 				
 				//Proveedor
 				MBPartner bPartner = new MBPartner(getCtx(), detail.getC_BPartner_ID(), get_TrxName());
@@ -52,13 +72,11 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 				
 				//Genero OP y completo datos de cabecera
 				poGenerator.createAllocationHdr(X_C_AllocationHdr.ALLOCATIONTYPE_PaymentOrder);
-				poGenerator.getAllocationHdr().setDateTrx(this.getBatchDate());
+				poGenerator.getAllocationHdr().setDateTrx(getBatchDate());
 				poGenerator.getAllocationHdr().setDateAcct(getBatchDate());
 				poGenerator.getAllocationHdr().setDescription(Msg.getMsg(getCtx(), "PaymentBatchPOAllocationDescription") + " " + getDocumentNo());
 				poGenerator.getAllocationHdr().setIsManual(false);
 				poGenerator.getAllocationHdr().setC_BPartner_ID(detail.getC_BPartner_ID());
-				poGenerator.getAllocationHdr().setC_DocType_ID(getC_DoctypeAllocTarget_ID());
-				poGenerator.getAllocationHdr().setDocumentNo(MSequence.getDocumentNo(getC_DoctypeAllocTarget_ID(), get_TrxName()));
 								
 				//Arrays para cáculo de retenciones
 				Vector<Integer> facturasProcesar = new Vector<Integer>();
@@ -99,6 +117,12 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 				//Genero el pago
 				MBankAccount bankAccount = new MBankAccount(getCtx(), bPartner.getC_BankAccount_ID(), get_TrxName());
 				X_C_BankAccountDoc chequera = bankAccount.getFirstBankAccountDoc();
+				// Si no existe chequera, significa que no hay alguna o no está
+				// asociada al usuario actual
+				if(chequera == null){
+					throw new Exception(Msg.getMsg(getCtx(), "PaymentBatchPOBankAccountDocNotFound"));
+				}
+				
 				BigDecimal importe = detail.getPaymentAmount().subtract(totalRetenciones);
 				
 				//Generar y completar el payment Cheque
@@ -126,20 +150,14 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 				
 				// Guarda el pago
 				if (!pay.save()) {
-					m_processMsg = CLogger.retrieveErrorAsString();
-					saveOk = false;
+					throw new Exception(CLogger.retrieveErrorAsString());
 					// Completa el pago
 				} else if (!pay.processIt(DocAction.ACTION_Complete)) {
-					m_processMsg = pay.getProcessMsg();
-					saveOk = false;
+					throw new Exception(pay.getProcessMsg());
 					// Guarda los cambios del procesamiento
 				} else if (!pay.save()) {
-					m_processMsg = CLogger.retrieveErrorAsString();
-					saveOk = false;
+					throw new Exception(CLogger.retrieveErrorAsString());
 				}
-				
-				if (!saveOk)
-					return DocAction.STATUS_Invalid;
 				
 				//Agrego el pago generado
 				poGenerator.addCreditPayment(pay.getID(), pay.getPayAmt());
@@ -148,22 +166,19 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 				poGenerator.generateLines();
 				poGenerator.getAllocationHdr().updateTotalByLines();
 				if(!poGenerator.getAllocationHdr().save()){
-					m_processMsg = Msg.getMsg(getCtx(), "AllocationSaveError");
-					return DocAction.STATUS_Invalid;
+					throw new Exception(CLogger.retrieveErrorAsString());
 				}
 				poGenerator.completeAllocation();
 				detail.setC_AllocationHdr_ID(poGenerator.getAllocationHdr().getC_AllocationHdr_ID());
 				if (!detail.save()) {
-					m_processMsg = Msg.getMsg(getCtx(), "AllocationSaveError");
-					return DocAction.STATUS_Invalid;
+					throw new Exception(CLogger.retrieveErrorAsString());
 				}
 				poGenerator.reset();
 				
 				//Actualizo el siguien número de la chequera
 				chequera.setCurrentNext(chequera.getCurrentNext() + 1);
 				if (!chequera.save()) {
-					m_processMsg = Msg.getMsg(getCtx(), "AllocationSaveError");
-					return DocAction.STATUS_Invalid;
+					throw new Exception(CLogger.retrieveErrorAsString());
 				}
 			}
 		} catch (AllocationGeneratorException e) {
@@ -176,8 +191,18 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 			e.printStackTrace();
 			m_processMsg = e.getMessage();
 			return DocAction.STATUS_Invalid;
+		} finally{
+			// Desactivo el bloqueo de secuencia
+			poGenerator.setCurrentSeqLock(null);
+			if(seqLock != null){
+				seqLock.setIsActive(false);
+				if(!seqLock.save()){
+					setProcessMsg(CLogger.retrieveErrorAsString());
+					return DocAction.STATUS_Invalid;
+				}
+			}
 		}
-		
+				
 		// Finaliza correctamente la acción
 		setProcessed(true);
 		setDocAction(DOCACTION_Close);
@@ -239,6 +264,21 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 	public String prepareIt() {
 		boolean isValid = true;
 		
+		// Si el tipo de documento no permite lotes fuera de fecha, se debe
+		// actualizar automáticamente la fecha del lote con la fecha actual
+		MDocType dt = MDocType.get(getCtx(), getC_DocType_ID());
+		if(!dt.isAllowOtherBatchPaymentDate()
+				&& getBatchDate().compareTo(Env.getDate()) != 0
+				&& !TimeUtil.isSameDay(getBatchDate(), Env.getDate())){
+			setBatchDate(Env.getDate());
+			try{
+				updateBatchPaymentDate();
+			} catch(Exception e){
+				setProcessMsg(e.getMessage());
+				return DocAction.STATUS_Invalid;
+			}
+		}		
+		
 		//Valido que no haya datalles sin facturas
 		for (MPaymentBatchPODetail detail : getBatchDetails()) {
 			MBPartner bPartner = new MBPartner(getCtx(), detail.getC_BPartner_ID(), get_TrxName()); 
@@ -295,6 +335,29 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 		return DocAction.STATUS_InProgress;
 	}
 
+	private void updateBatchPaymentDate() throws Exception{
+		List<MPaymentBatchPODetail> details = getBatchDetails();
+		for (MPaymentBatchPODetail mPaymentBatchPODetail : details) {
+			if (mPaymentBatchPODetail.getPaymentDate().compareTo(getBatchDate()) < 0){
+				mPaymentBatchPODetail.setPaymentDate(getCalculatedPaymentDateRule(getBatchDate()));
+				if(!mPaymentBatchPODetail.save()){
+					throw new Exception(CLogger.retrieveErrorAsString());
+				}
+			}
+		}
+	}
+	
+	public Timestamp getCalculatedPaymentDateRule(Timestamp baseDate){
+		Timestamp calcDate = baseDate;
+		if(getPaymentDateRule().equals(MPaymentBatchPO.PAYMENTDATERULE_LastDueDate)){
+			Calendar baseCalendar = Calendar.getInstance();
+			baseCalendar.setTimeInMillis(baseDate.getTime());
+			baseCalendar.add(Calendar.DATE, Util.isEmpty(getAddDays(), true)?1:getAddDays());
+			calcDate = new Timestamp(baseCalendar.getTimeInMillis());
+		}
+		return calcDate;
+	}
+	
 	@Override
 	public boolean approveIt() {
 		return false;

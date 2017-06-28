@@ -782,7 +782,7 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 			// Env.getContextAsDate(ctx, WindowNo, "DateInvoiced");
 			if (C_BPartner_ID != null
 					&& (letra == null || !letra.getLetra().equals("C")))
-				buscarCai(mTab, AD_Client_ID, AD_Org_ID, C_BPartner_ID
+				buscarCai(ctx, mTab, AD_Client_ID, AD_Org_ID, C_BPartner_ID
 						.intValue(), pto);
 		}
 
@@ -939,33 +939,28 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 	 * @Parametros: 
 	 * @return:
 	 */
-	private String buscarCai(MTab mTab ,int AD_Client_ID, int AD_Org_ID, int part, int pto)
+	private String buscarCai(Properties ctx, MTab mTab ,int AD_Client_ID, int AD_Org_ID, int part, int pto)
 	{	
 		if(part != 0 && pto != 0){
-			Timestamp fechaVencimiento = null;
 			Timestamp date = (Timestamp)mTab.getValue("DateInvoiced");
 			mTab.setValue("CAI",null);
 			mTab.setValue("DATECAI",null);
 			
 			String sql = "SELECT * FROM C_BPartner_CAI WHERE AD_CLIENT_ID = ? " +
-					"AND posnumber = ? AND C_BPARTNER_ID = ? " +
+					"AND posnumber = ? AND C_BPARTNER_ID = ? AND datecai::date >= ?::date " +
 					"ORDER BY datecai ";
 			try
 			{
-				PreparedStatement pstmt = DB.prepareStatement(sql.toString());
+				PreparedStatement pstmt = DB.prepareStatement(sql.toString(), null, true);
 				pstmt.setInt(1,AD_Client_ID);
-
 				pstmt.setInt(2,pto);
 				pstmt.setInt(3,part);
+				pstmt.setTimestamp(4, date);
 				
 				ResultSet rs = pstmt.executeQuery();
-				while (rs.next()){
-					//setear cai y fecha no vencido
-					fechaVencimiento = rs.getTimestamp("datecai");
-					if(!fechaVencimiento.before(date)){
-						mTab.setValue("CAI",rs.getString("cai"));
-						mTab.setValue("DATECAI",rs.getTimestamp("datecai"));
-					}
+				if (rs.next()){
+					mTab.setValue("CAI",rs.getString("cai"));
+					mTab.setValue("DATECAI",rs.getTimestamp("datecai"));
 				}
 			}
 			catch (SQLException e)
@@ -1168,7 +1163,7 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 		
 		
 		if(partner != null && (letra == null || !letra.getLetra().equals("C")))	{
-			return buscarCai(mTab, AD_Client_ID, AD_Org_ID,partner.intValue(),pto);
+			return buscarCai(ctx, mTab, AD_Client_ID, AD_Org_ID,partner.intValue(),pto);
 		}
 		
 		return "";

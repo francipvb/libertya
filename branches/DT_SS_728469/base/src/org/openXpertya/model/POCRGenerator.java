@@ -3,6 +3,8 @@ package org.openXpertya.model;
 import java.math.BigDecimal;
 import java.util.Properties;
 
+import org.openXpertya.reflection.CallResult;
+import org.openXpertya.util.Msg;
 import org.openXpertya.util.Util;
 
 /**
@@ -278,6 +280,7 @@ public class POCRGenerator extends AllocationGenerator {
 		getDebits().clear();
 		getCredits().clear();
 		setAllocationHdr(null);
+		setDocumentNo(null);
 	}
 	
 	/**
@@ -302,5 +305,14 @@ public class POCRGenerator extends AllocationGenerator {
 		this.paymentRule = paymentRule;
 	}
 	
+	@Override
+	protected CallResult customValidationsAddDocument(Document document){
+		CallResult result = new CallResult();
+		if(getType() == POCRType.PAYMENT_ORDER && !document.isAuthorized())
+			result.setMsg(
+					Msg.getMsg(getCtx(), "OPRCNotAuthorizedDocument", new Object[] { document.type, document.amount }),
+					true);
+		return result;
+	}
 	
 }
