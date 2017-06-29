@@ -76,19 +76,25 @@ public class ImportAmex extends Import {
 						if (tax != null) {
 							if (AmexPaymentsWithTaxes.match(payment, tax)) {
 								apwt = new AmexPaymentsWithTaxes(payment, tax);
-								break;
+								int no = apwt.save(ctx, trxName);
+								if (no > 0) {
+									processed += no;
+								} else if (no < 0) {
+									areadyExists += (no * -1);
+								}
 							}
 						}
 					}
 					if (apwt == null) {
 						apwt = new AmexPaymentsWithTaxes(payment);
+						int no = apwt.save(ctx, trxName);
+						if (no > 0) {
+							processed += no;
+						} else if (no < 0) {
+							areadyExists += (no * -1);
+						}
 					}
-					int no = apwt.save(ctx, trxName);
-					if (no > 0) {
-						processed += no;
-					} else if (no < 0) {
-						areadyExists += (no * -1);
-					}
+					
 				}
 			}
 			log.info("Procesados = " + processed + ", Preexistentes = " + areadyExists + ", Pagina = " + currentPage + "/" + lastPage);
@@ -110,11 +116,6 @@ public class ImportAmex extends Import {
 			get = makeGetter(externalService.getAttributeByName("URL Impuestos").getName()); // Metodo get para obtener impuestos.
 			get.addQueryParam("paginate", resultsPerPage); // Parametro de elem. por pagina.
 			get.addQueryParam("page", currentPage); // Parametro de pagina a consultar.
-
-			// Si hay parámetros extra, los agrego.
-			if (!extraParams.isEmpty()) {
-				get.addQueryParams(extraParams);
-			}
 
 			// Filtro por "número secuencial de pago".
 			StringBuffer secNumbersStr = new StringBuffer();

@@ -594,152 +594,165 @@ public class ImportSettlements extends SvrProcess {
 		try {
 			int C_BPartner_ID = getC_BPartner_ID(rs.getString("comercio"));
 			if (C_BPartner_ID > 0) {
-				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-				Date date = sdf.parse(rs.getString("fecha_pago"));				
-
-				BigDecimal amt = safeMultiply(rs.getString("neto"), rs.getString("signo_neto"));
-
 				String settlementNo = rs.getString("nro_liquidacion");
-				if (settlementNo == null || settlementNo.equals("null")) {
-					settlementNo = "";
-				}
-				
-				//Acumuladores para totales de impuestos, tasas, etc.
-				BigDecimal withholdingAmt = new BigDecimal(0);
-				BigDecimal expensesAmt = new BigDecimal(0);
-				BigDecimal ivaAmt = new BigDecimal(0);
-				BigDecimal commissionAmt = new BigDecimal(0);
-				
-				MCreditCardSettlement settlement = new MCreditCardSettlement(getCtx(), 0, get_TrxName());
-				settlement.setGenerateChildrens(false);
-
-				settlement.setCreditCardType(MCreditCardSettlement.CREDITCARDTYPE_NARANJA);
-				settlement.setC_BPartner_ID(C_BPartner_ID);
-				settlement.setPaymentDate(new Timestamp(date.getTime()));
-				settlement.setAmount(amt);
-				settlement.setNetAmount(amt);
-				settlement.setC_Currency_ID(defaultCurrency.getC_Currency_ID());
-				settlement.setSettlementNo(settlementNo);
-
-				if (!settlement.save()) {
-					return ERROR;
-				}
-				
-				/* IIBB */
-				try {
-					int C_RetencionSchema_ID = getRetencionSchemaByNroEst(rs.getString("comercio"));
-					BigDecimal withholding = safeMultiply(rs.getString("ret_ingresos_brutos"), rs.getString("signo_ret_ing_brutos"));
-					if (withholding.compareTo(new BigDecimal(0)) != 0 && C_RetencionSchema_ID > 0) {
-						MRetencionSchema retSchema = new MRetencionSchema(getCtx(), C_RetencionSchema_ID, get_TrxName());
-						MWithholdingSettlement ws = new MWithholdingSettlement(getCtx(), 0, get_TrxName());
-						ws.setC_RetencionSchema_ID(C_RetencionSchema_ID);
-						ws.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
-						ws.setC_Region_ID(retSchema.getC_Region_ID());
-						ws.setAmount(withholding);
-						ws.save();
-						withholdingAmt = withholdingAmt.add(withholding);
+				BigDecimal compraAmt = safeMultiply(rs.getString("compra"), "D".equals(rs.getString("tipo_mov")) ? "+" : "-");
+				int C_CreditCardSettlement_ID = getSettlementIdFromNroAndBPartner(settlementNo, C_BPartner_ID);
+				if (C_CreditCardSettlement_ID > 0) {
+					MCreditCardSettlement settlement = new MCreditCardSettlement(getCtx(), C_CreditCardSettlement_ID, get_TrxName());
+					settlement.setAmount(settlement.getAmount().add(compraAmt));
+					if (!settlement.save(get_TrxName())) {
+						return ERROR;
+					} else {
+						result = SAVED;
+						markAsImported(tableName, rs.getInt(tableName + "_ID"));
 					}
-				} catch (NullPointerException e) {
-					e.printStackTrace();
-				}
-				/* -- -- -- */
-				try {
-					String name = "Retencion IVA";
-					int C_RetencionSchema_ID = getRetencionSchemaIDByValue(attributes.get(name).getName());
-					BigDecimal withholding = safeMultiply(rs.getString("retencion_iva_140"), rs.getString("signo_ret_iva_140"));
-					if (withholding.compareTo(new BigDecimal(0)) != 0) {
-						MWithholdingSettlement ws = new MWithholdingSettlement(getCtx(), 0, get_TrxName());
-						ws.setC_RetencionSchema_ID(C_RetencionSchema_ID);
-						ws.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
-						ws.setAmount(withholding);
-						ws.save();
-						withholdingAmt = withholdingAmt.add(withholding);
-					}
-				} catch (NullPointerException e) {
-					e.printStackTrace();
-				}
-				/* -- -- -- */
-				try {
-					String name = "Retencion Ganancias";
-					int C_RetencionSchema_ID = getRetencionSchemaIDByValue(attributes.get(name).getName());
-					BigDecimal withholding = safeMultiply(rs.getString("retencion_ganancias"), rs.getString("signo_ret_ganancias"));
-					if (withholding.compareTo(new BigDecimal(0)) != 0) {
-						MWithholdingSettlement ws = new MWithholdingSettlement(getCtx(), 0, get_TrxName());
-						ws.setC_RetencionSchema_ID(C_RetencionSchema_ID);
-						ws.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
-						ws.setAmount(withholding);
-						ws.save();
-						withholdingAmt = withholdingAmt.add(withholding);
-					}
-				} catch (NullPointerException e) {
-					e.printStackTrace();
-				}
-				/* -- -- -- */
-				try {
-					String name = "Comisiones - Conceptos fact a descontar mes pago";
-					int C_CardSettlementConcepts_ID = getCardSettlementConceptIDByValue(attributes.get(name).getName());
-					BigDecimal commission = safeMultiply(rs.getString("importe_ara_vto"), rs.getString("signo_ara_vto")).add(safeMultiply(rs.getString("importe_ara_facturado_30"), rs.getString("signo_ara_facturado_30")))
-							.add(safeMultiply(rs.getString("importe_ara_facturado_60"), rs.getString("signo_ara_facturado_60"))).add(safeMultiply(rs.getString("importe_ara_facturado_90"), rs.getString("signo_ara_facturado_90")))
-							.add(safeMultiply(rs.getString("importe_ara_facturado_120"), rs.getString("signo_ara_facturado_120")));
-					if (commission.compareTo(new BigDecimal(0)) != 0) {
-						MCommissionConcepts cc = new MCommissionConcepts(getCtx(), 0, get_TrxName());
-						cc.setC_CardSettlementConcepts_ID(C_CardSettlementConcepts_ID);
-						cc.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
-						cc.setAmount(commission);
-						cc.save();
-						commissionAmt = commissionAmt.add(commission); 
-					}
-				} catch (NullPointerException e) {
-					e.printStackTrace();
-				}
-				/* -- -- -- */
-				try {
-					String name = "IVA 21";
-					int C_Tax_ID = getTaxIDByName(attributes.get(name).getName());
-					BigDecimal iva = safeMultiply(rs.getString("imp_iva_21_vto"), rs.getString("sig_iva_21_vto")).add(safeMultiply(rs.getString("imp_iva_21_facturado_30"), rs.getString("imp_iva_21_facturado_30")))
-							.add(safeMultiply(rs.getString("imp_iva_21_facturado_60"), rs.getString("imp_iva_21_facturado_60"))).add(safeMultiply(rs.getString("imp_iva_21_facturado_90"), rs.getString("imp_iva_21_facturado_90")))
-							.add(safeMultiply(rs.getString("imp_iva_21_facturado_120"), rs.getString("imp_iva_21_facturado_120")));
-					if (iva.compareTo(new BigDecimal(0)) != 0) {
-						MIVASettlements iv = new MIVASettlements(getCtx(), 0, get_TrxName()); 
-						iv.setC_Tax_ID(C_Tax_ID);
-						iv.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
-						iv.setAmount(iva);
-						iv.save();
-						ivaAmt = ivaAmt.add(iva);
-					}
-				} catch (NullPointerException e) {
-					e.printStackTrace();
-				}
-				/* -- -- -- */
-				try {
-					String name = "Gastos - Conceptos fact a descontar mes pago";
-					int C_CardSettlementConcept_ID = getCardSettlementConceptIDByValue(attributes.get(name).getName());
-					BigDecimal expense = safeMultiply(rs.getString("imp_acre_liq_ant_vto"), rs.getString("sig_acre_liq_ant_vto")).add(safeMultiply(rs.getString("imp_acre_liq_ant_facturado_30"), rs.getString("sig_acre_liq_ant_facturado_30")))
-							.add(safeMultiply(rs.getString("imp_acre_liq_ant_facturado_60"), rs.getString("sig_acre_liq_ant_facturado_60"))).add(safeMultiply(rs.getString("imp_acre_liq_ant_facturado_90"), rs.getString("sig_acre_liq_ant_facturado_90")))
-							.add(safeMultiply(rs.getString("imp_acre_liq_ant_facturado_120"), rs.getString("sig_acre_liq_ant_facturado_120"))).add(safeMultiply(rs.getString("imp_int_plan_esp_vto"), rs.getString("sig_int_plan_esp_vto")))
-							.add(safeMultiply(rs.getString("imp_int_plan_esp_facturado_30"), rs.getString("sig_int_plan_esp_facturado_30"))).add(safeMultiply(rs.getString("imp_int_plan_esp_facturado_60"), rs.getString("sig_int_plan_esp_facturado_60")))
-							.add(safeMultiply(rs.getString("imp_int_plan_esp_facturado_90"), rs.getString("sig_int_plan_esp_facturado_90"))).add(safeMultiply(rs.getString("imp_int_plan_esp_facturado_120"), rs.getString("sig_int_plan_esp_facturado_120")));
-					if (expense.compareTo(new BigDecimal(0)) != 0) {
-						MExpenseConcepts ec = new MExpenseConcepts(getCtx(), 0, get_TrxName());
-						ec.setC_Cardsettlementconcepts_ID(C_CardSettlementConcept_ID);
-						ec.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
-						ec.setAmount(expense);
-						ec.save();
-						expensesAmt = expensesAmt.add(expense); 
-					}
-				} catch (NullPointerException e) {
-					e.printStackTrace();
-				}
-				/* -- -- -- */
-				settlement.setWithholding(withholdingAmt);
-				settlement.setExpenses(expensesAmt);
-				settlement.setIVAAmount(ivaAmt);
-				settlement.setCommissionAmount(commissionAmt);
-				if (!settlement.save(get_TrxName())) {
-					return ERROR;
 				} else {
-					result = SAVED;
-					markAsImported(tableName, rs.getInt(tableName + "_ID"));
+				
+					SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+					Date date = sdf.parse(rs.getString("fecha_pago"));				
+	
+					BigDecimal amt = safeMultiply(rs.getString("neto"), rs.getString("signo_neto"));
+					if (settlementNo == null || settlementNo.equals("null")) {
+						settlementNo = "";
+					}
+					
+					//Acumuladores para totales de impuestos, tasas, etc.
+					BigDecimal withholdingAmt = new BigDecimal(0);
+					BigDecimal expensesAmt = new BigDecimal(0);
+					BigDecimal ivaAmt = new BigDecimal(0);
+					BigDecimal commissionAmt = new BigDecimal(0);
+					
+					MCreditCardSettlement settlement = new MCreditCardSettlement(getCtx(), 0, get_TrxName());
+					settlement.setGenerateChildrens(false);
+	
+					settlement.setCreditCardType(MCreditCardSettlement.CREDITCARDTYPE_NARANJA);
+					settlement.setC_BPartner_ID(C_BPartner_ID);
+					settlement.setPaymentDate(new Timestamp(date.getTime()));
+					settlement.setAmount(compraAmt);
+					settlement.setNetAmount(amt);
+					settlement.setC_Currency_ID(defaultCurrency.getC_Currency_ID());
+					settlement.setSettlementNo(settlementNo);
+	
+					if (!settlement.save()) {
+						return ERROR;
+					}
+					
+					/* IIBB */
+					try {
+						int C_RetencionSchema_ID = getRetencionSchemaByNroEst(rs.getString("comercio"));
+						BigDecimal withholding = safeMultiply(rs.getString("ret_ingresos_brutos"), rs.getString("signo_ret_ing_brutos"));
+						if (withholding.compareTo(new BigDecimal(0)) != 0 && C_RetencionSchema_ID > 0) {
+							MRetencionSchema retSchema = new MRetencionSchema(getCtx(), C_RetencionSchema_ID, get_TrxName());
+							MWithholdingSettlement ws = new MWithholdingSettlement(getCtx(), 0, get_TrxName());
+							ws.setC_RetencionSchema_ID(C_RetencionSchema_ID);
+							ws.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
+							ws.setC_Region_ID(retSchema.getC_Region_ID());
+							ws.setAmount(withholding);
+							ws.save();
+							withholdingAmt = withholdingAmt.add(withholding);
+						}
+					} catch (NullPointerException e) {
+						e.printStackTrace();
+					}
+					/* -- -- -- */
+					try {
+						String name = "Retencion IVA";
+						int C_RetencionSchema_ID = getRetencionSchemaIDByValue(attributes.get(name).getName());
+						BigDecimal withholding = safeMultiply(rs.getString("retencion_iva_140"), rs.getString("signo_ret_iva_140"));
+						if (withholding.compareTo(new BigDecimal(0)) != 0) {
+							MWithholdingSettlement ws = new MWithholdingSettlement(getCtx(), 0, get_TrxName());
+							ws.setC_RetencionSchema_ID(C_RetencionSchema_ID);
+							ws.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
+							ws.setAmount(withholding);
+							ws.save();
+							withholdingAmt = withholdingAmt.add(withholding);
+						}
+					} catch (NullPointerException e) {
+						e.printStackTrace();
+					}
+					/* -- -- -- */
+					try {
+						String name = "Retencion Ganancias";
+						int C_RetencionSchema_ID = getRetencionSchemaIDByValue(attributes.get(name).getName());
+						BigDecimal withholding = safeMultiply(rs.getString("retencion_ganancias"), rs.getString("signo_ret_ganancias"));
+						if (withholding.compareTo(new BigDecimal(0)) != 0) {
+							MWithholdingSettlement ws = new MWithholdingSettlement(getCtx(), 0, get_TrxName());
+							ws.setC_RetencionSchema_ID(C_RetencionSchema_ID);
+							ws.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
+							ws.setAmount(withholding);
+							ws.save();
+							withholdingAmt = withholdingAmt.add(withholding);
+						}
+					} catch (NullPointerException e) {
+						e.printStackTrace();
+					}
+					/* -- -- -- */
+					try {
+						String name = "Comisiones - Conceptos fact a descontar mes pago";
+						int C_CardSettlementConcepts_ID = getCardSettlementConceptIDByValue(attributes.get(name).getName());
+						BigDecimal commission = safeMultiply(rs.getString("importe_ara_vto"), rs.getString("signo_ara_vto")).add(safeMultiply(rs.getString("importe_ara_facturado_30"), rs.getString("signo_ara_facturado_30")))
+								.add(safeMultiply(rs.getString("importe_ara_facturado_60"), rs.getString("signo_ara_facturado_60"))).add(safeMultiply(rs.getString("importe_ara_facturado_90"), rs.getString("signo_ara_facturado_90")))
+								.add(safeMultiply(rs.getString("importe_ara_facturado_120"), rs.getString("signo_ara_facturado_120")));
+						if (commission.compareTo(new BigDecimal(0)) != 0) {
+							MCommissionConcepts cc = new MCommissionConcepts(getCtx(), 0, get_TrxName());
+							cc.setC_CardSettlementConcepts_ID(C_CardSettlementConcepts_ID);
+							cc.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
+							cc.setAmount(commission);
+							cc.save();
+							commissionAmt = commissionAmt.add(commission); 
+						}
+					} catch (NullPointerException e) {
+						e.printStackTrace();
+					}
+					/* -- -- -- */
+					try {
+						String name = "IVA 21";
+						int C_Tax_ID = getTaxIDByName(attributes.get(name).getName());
+						BigDecimal iva = safeMultiply(rs.getString("imp_iva_21_vto"), rs.getString("sig_iva_21_vto")).add(safeMultiply(rs.getString("imp_iva_21_facturado_30"), rs.getString("sig_iva_21_facturado_30")))
+								.add(safeMultiply(rs.getString("imp_iva_21_facturado_60"), rs.getString("sig_iva_21_facturado_60"))).add(safeMultiply(rs.getString("imp_iva_21_facturado_90"), rs.getString("sig_iva_21_facturado_90")))
+								.add(safeMultiply(rs.getString("imp_iva_21_facturado_120"), rs.getString("sig_iva_21_facturado_120")));
+						if (iva.compareTo(new BigDecimal(0)) != 0) {
+							MIVASettlements iv = new MIVASettlements(getCtx(), 0, get_TrxName()); 
+							iv.setC_Tax_ID(C_Tax_ID);
+							iv.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
+							iv.setAmount(iva);
+							iv.save();
+							ivaAmt = ivaAmt.add(iva);
+						}
+					} catch (NullPointerException e) {
+						e.printStackTrace();
+					}
+					/* -- -- -- */
+					try {
+						String name = "Gastos - Conceptos fact a descontar mes pago";
+						int C_CardSettlementConcept_ID = getCardSettlementConceptIDByValue(attributes.get(name).getName());
+						BigDecimal expense = safeMultiply(rs.getString("imp_acre_liq_ant_vto"), rs.getString("sig_acre_liq_ant_vto")).add(safeMultiply(rs.getString("imp_acre_liq_ant_facturado_30"), rs.getString("sig_acre_liq_ant_facturado_30")))
+								.add(safeMultiply(rs.getString("imp_acre_liq_ant_facturado_60"), rs.getString("sig_acre_liq_ant_facturado_60"))).add(safeMultiply(rs.getString("imp_acre_liq_ant_facturado_90"), rs.getString("sig_acre_liq_ant_facturado_90")))
+								.add(safeMultiply(rs.getString("imp_acre_liq_ant_facturado_120"), rs.getString("sig_acre_liq_ant_facturado_120"))).add(safeMultiply(rs.getString("imp_int_plan_esp_vto"), rs.getString("sig_int_plan_esp_vto")))
+								.add(safeMultiply(rs.getString("imp_int_plan_esp_facturado_30"), rs.getString("sig_int_plan_esp_facturado_30"))).add(safeMultiply(rs.getString("imp_int_plan_esp_facturado_60"), rs.getString("sig_int_plan_esp_facturado_60")))
+								.add(safeMultiply(rs.getString("imp_int_plan_esp_facturado_90"), rs.getString("sig_int_plan_esp_facturado_90"))).add(safeMultiply(rs.getString("imp_int_plan_esp_facturado_120"), rs.getString("sig_int_plan_esp_facturado_120")));
+						if (expense.compareTo(new BigDecimal(0)) != 0) {
+							MExpenseConcepts ec = new MExpenseConcepts(getCtx(), 0, get_TrxName());
+							ec.setC_Cardsettlementconcepts_ID(C_CardSettlementConcept_ID);
+							ec.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
+							ec.setAmount(expense);
+							ec.save();
+							expensesAmt = expensesAmt.add(expense); 
+						}
+					} catch (NullPointerException e) {
+						e.printStackTrace();
+					}
+					/* -- -- -- */
+					settlement.setWithholding(withholdingAmt);
+					settlement.setExpenses(expensesAmt);
+					settlement.setIVAAmount(ivaAmt);
+					settlement.setCommissionAmount(commissionAmt);
+					if (!settlement.save(get_TrxName())) {
+						return ERROR;
+					} else {
+						result = SAVED;
+						markAsImported(tableName, rs.getInt(tableName + "_ID"));
+					}
 				}
 			} else {
 				result = IGNORED;
@@ -832,6 +845,9 @@ public class ImportSettlements extends SvrProcess {
 		try {
 			int C_BPartner_ID = getC_BPartner_ID(rs.getString("num_est"));
 			if (C_BPartner_ID > 0) {
+				String settlementNo = rs.getString("num_sec_pago");
+				int C_CreditCardSettlement_ID = getSettlementIdFromNroAndBPartner(settlementNo, C_BPartner_ID);
+				
 				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 				Date date = sdf.parse(rs.getString("fecha_pago"));
 
@@ -849,53 +865,65 @@ public class ImportSettlements extends SvrProcess {
 				BigDecimal ivaAmt = new BigDecimal(0);
 				BigDecimal commissionAmt = new BigDecimal(0);
 
-				MCreditCardSettlement settlement = new MCreditCardSettlement(getCtx(), 0, get_TrxName());
-				settlement.setGenerateChildrens(false);
+				MCreditCardSettlement settlement = null;
+				
+				if (C_CreditCardSettlement_ID > 0) {
+					settlement = new MCreditCardSettlement(getCtx(), C_CreditCardSettlement_ID, get_TrxName());
+					withholdingAmt = settlement.getWithholding();
+					perceptionAmt = settlement.getPerception();
+					expensesAmt = settlement.getExpenses();
+					ivaAmt = settlement.getIVAAmount();
+					commissionAmt = settlement.getCommissionAmount();
+				} else {
+					settlement = new MCreditCardSettlement(getCtx(), 0, get_TrxName());
+					settlement.setGenerateChildrens(false);
 
-				settlement.setCreditCardType(MCreditCardSettlement.CREDITCARDTYPE_AMEX);
-				settlement.setC_BPartner_ID(C_BPartner_ID);
-				settlement.setPaymentDate(date != null ? new Timestamp(date.getTime()) : null);
-				settlement.setAmount(safeNumber(rs.getString("imp_bruto_est")));
-				settlement.setNetAmount(amt);
-				settlement.setC_Currency_ID(defaultCurrency.getC_Currency_ID());
-				settlement.setSettlementNo(rs.getString("num_sec_pago"));
+					settlement.setCreditCardType(MCreditCardSettlement.CREDITCARDTYPE_AMEX);
+					settlement.setC_BPartner_ID(C_BPartner_ID);
+					settlement.setPaymentDate(date != null ? new Timestamp(date.getTime()) : null);
+					settlement.setAmount(safeNumber(rs.getString("imp_bruto_est")));
+					settlement.setNetAmount(amt);
+					settlement.setC_Currency_ID(defaultCurrency.getC_Currency_ID());
+					settlement.setSettlementNo(rs.getString("num_sec_pago"));
 
-				if (!settlement.save()) {
-					return ERROR;
+					if (!settlement.save()) {
+						return ERROR;
+					}
+					/* -- -- -- */
+					try {
+						String name = "Imp total desc aceleracion";
+						int C_CardSettlementConcept_ID = getCardSettlementConceptIDByValue(attributes.get(name).getName());
+						BigDecimal expense = negativeValue(safeNumber(rs.getString("imp_tot_desc_acel")));
+						if (expense.compareTo(new BigDecimal(0)) != 0) {
+							MExpenseConcepts ec = new MExpenseConcepts(getCtx(), 0, get_TrxName());
+							ec.setC_Cardsettlementconcepts_ID(C_CardSettlementConcept_ID);
+							ec.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID()); 
+							ec.setAmount(expense);
+							ec.save();
+							expensesAmt = expensesAmt.add(expense);
+						}
+					} catch (NullPointerException e) {
+						e.printStackTrace();
+					}
+					/* -- -- -- */
+					try {
+						String name = "Importe Descuento";
+						int C_CardSettlementConcepts_ID = getCardSettlementConceptIDByValue(attributes.get(name).getName());
+						BigDecimal commission = negativeValue(safeNumber(rs.getString("imp_desc_pago")));
+						if (commission.compareTo(new BigDecimal(0)) != 0) {
+							MCommissionConcepts cc = new MCommissionConcepts(getCtx(), 0, get_TrxName());
+							cc.setC_CardSettlementConcepts_ID(C_CardSettlementConcepts_ID);
+							cc.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
+							cc.setAmount(commission);
+							cc.save();
+							commissionAmt = commissionAmt.add(commission);
+						}
+					} catch (NullPointerException e) {
+						e.printStackTrace();
+					}
 				}
 				
-				/* -- -- -- */
-				try {
-					String name = "Imp total desc aceleracion";
-					int C_CardSettlementConcept_ID = getCardSettlementConceptIDByValue(attributes.get(name).getName());
-					BigDecimal expense = negativeValue(safeNumber(rs.getString("imp_tot_desc_acel")));
-					if (expense.compareTo(new BigDecimal(0)) != 0) {
-						MExpenseConcepts ec = new MExpenseConcepts(getCtx(), 0, get_TrxName());
-						ec.setC_Cardsettlementconcepts_ID(C_CardSettlementConcept_ID);
-						ec.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID()); 
-						ec.setAmount(expense);
-						ec.save();
-						expensesAmt = expensesAmt.add(expense);
-					}
-				} catch (NullPointerException e) {
-					e.printStackTrace();
-				}
-				/* -- -- -- */
-				try {
-					String name = "Importe Descuento";
-					int C_CardSettlementConcepts_ID = getCardSettlementConceptIDByValue(attributes.get(name).getName());
-					BigDecimal commission = negativeValue(safeNumber(rs.getString("imp_desc_pago")));
-					if (commission.compareTo(new BigDecimal(0)) != 0) {
-						MCommissionConcepts cc = new MCommissionConcepts(getCtx(), 0, get_TrxName());
-						cc.setC_CardSettlementConcepts_ID(C_CardSettlementConcepts_ID);
-						cc.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
-						cc.setAmount(commission);
-						cc.save();
-						commissionAmt = commissionAmt.add(commission);
-					}
-				} catch (NullPointerException e) {
-					e.printStackTrace();
-				}
+				
 				/* -- -- -- */
 				try {
 					if (codImp.equals("01")) {
@@ -1449,9 +1477,9 @@ public class ImportSettlements extends SvrProcess {
 			return BigDecimal.ZERO;
 		}
 		if (input.signum() == -1) {
-			return input;
+			return input.negate();
 		}
-		return input.negate();
+		return input;
 	}
 
 	/**
@@ -1593,6 +1621,27 @@ public class ImportSettlements extends SvrProcess {
 		}
 		
 		return C_RetencionSchema_ID;
+	}
+	
+	/**
+	 * Obtiene una liquidación a partir del número de liquidación y la 
+	 * E.Comercial asociada.
+	 * @param nro_liq Nombre por el cual buscar el registro.
+	 * @param C_BPartner_ID ID Entidad Comercial.
+	 * @return ID Liquidación o -1 si no existe.
+	 */
+	private int getSettlementIdFromNroAndBPartner(String nro_liq, int C_BPartner_ID) {
+		StringBuffer sql = new StringBuffer();
+
+		sql.append("SELECT ");
+		sql.append("	* ");
+		sql.append("FROM ");
+		sql.append("	" + MCreditCardSettlement.Table_Name + " ");
+		sql.append("WHERE ");
+		sql.append("	c_bpartner_id = ? ");
+		sql.append("	AND settlementno = ? ");
+
+		return DB.getSQLValue(get_TrxName(), sql.toString(), C_BPartner_ID, nro_liq);
 	}
 
 }
