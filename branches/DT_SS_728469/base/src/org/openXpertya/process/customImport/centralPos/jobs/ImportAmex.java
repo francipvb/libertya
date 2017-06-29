@@ -117,6 +117,11 @@ public class ImportAmex extends Import {
 			get.addQueryParam("paginate", resultsPerPage); // Parametro de elem. por pagina.
 			get.addQueryParam("page", currentPage); // Parametro de pagina a consultar.
 
+			// Si hay parámetros extra, los agrego.
+			if (!extraParams.isEmpty()) {
+				get.addQueryParams(extraParams);
+			}
+
 			// Filtro por "número secuencial de pago".
 			StringBuffer secNumbersStr = new StringBuffer();
 			for (String s : secNumbers) {

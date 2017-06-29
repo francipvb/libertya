@@ -822,6 +822,13 @@ public class ImportSettlements extends SvrProcess {
 				markAsError(tableName, rs.getInt(tableName + "_ID"), "No existe retención de IIBB para la región configurada en la E.Financiera");
 				return false;
 			} 
+			
+			//IIBB Bs. As.
+			id = getRetencionSchemaForBsAs();
+			if (id <= 0) {
+				markAsError(tableName, rs.getInt(tableName + "_ID"), "No existe retención de IIBB para la provincia de Bs. As. (Cod. 09)");
+				return false;
+			}
 		} catch (SQLException e) {
 			e.printStackTrace();
 			return false;
@@ -999,57 +1006,16 @@ public class ImportSettlements extends SvrProcess {
 					}
 					//Si es código 09 recupero, si existe, un esquema de retención de IIBB para la Bs. As.. 
 					if (codImp.equals("09")) { // IIBB o IIBB Bs.As.
-						StringBuffer sql = new StringBuffer();
-
-						sql.append("SELECT ");
-						sql.append("	rs.C_RetencionSchema_ID, ");
-						sql.append("	rs.C_Region_ID ");
-						sql.append("FROM ");
-						sql.append("	" + X_C_RetencionSchema.Table_Name + " rs ");
-						sql.append("	INNER JOIN " + X_C_RetencionType.Table_Name + " rt ");
-						sql.append("		ON rs.C_RetencionType_ID = rs.C_RetencionType_ID ");
-						sql.append("	INNER JOIN " + X_C_Region.Table_Name + " rg ");
-						sql.append("		ON rs.C_Region_ID = rg.C_Region_ID ");
-						sql.append("WHERE ");
-						sql.append("	rs.RetencionApplication = 'S' ");
-						sql.append("	AND rt.RetentionType = 'B' ");
-						sql.append("	AND rt.IsActive = 'Y' ");
-						sql.append("	AND rs.IsActive = 'Y' ");
-						sql.append("	AND rs.IsActive = 'Y' ");
-						sql.append("	AND rg.jurisdictioncode = 902 ");
-
-						PreparedStatement ps = null;
-						ResultSet rst = null;
-
-						int C_RetencionSchema_ID = -1;
-						int C_Region_ID = -1;
-
-						try {
-							ps = DB.prepareStatement(sql.toString());
-							rst = ps.executeQuery();
-
-							if (rst.next()) {
-								C_RetencionSchema_ID = rst.getInt(1);
-								C_Region_ID = rst.getInt(2);
-							}
-						} catch (Exception e) {
-							log.log(Level.SEVERE, "createFromAmex", e);
-						} finally {
-							try {
-								rst.close();
-								ps.close();
-							} catch (SQLException e) {
-								log.log(Level.SEVERE, "Cannot close statement or resultset");
-							}
-						}
+						int C_RetencionSchema_ID = getRetencionSchemaForBsAs();
 						
 						if (C_RetencionSchema_ID > 0) {
+							MRetencionSchema retSch= new MRetencionSchema(getCtx(), C_RetencionSchema_ID, get_TrxName()); 
 							BigDecimal withholding = negativeValue(safeNumber(rs.getString("importe_imp")));
 							if (withholding.compareTo(new BigDecimal(0)) != 0) {
 								MWithholdingSettlement ws = new MWithholdingSettlement(getCtx(), 0, get_TrxName());
 								ws.setC_RetencionSchema_ID(C_RetencionSchema_ID);
 								ws.setC_CreditCardSettlement_ID(settlement.getC_CreditCardSettlement_ID());
-								ws.setC_Region_ID(C_Region_ID);
+								ws.setC_Region_ID(retSch.getC_Region_ID());
 								ws.setAmount(withholding);
 								ws.save();
 								withholdingAmt = withholdingAmt.add(withholding);
@@ -1642,6 +1608,49 @@ public class ImportSettlements extends SvrProcess {
 		sql.append("	AND settlementno = ? ");
 
 		return DB.getSQLValue(get_TrxName(), sql.toString(), C_BPartner_ID, nro_liq);
+	}
+	
+	private int getRetencionSchemaForBsAs() {
+		StringBuffer sql = new StringBuffer();
+
+		sql.append("SELECT ");
+		sql.append("	rs.C_RetencionSchema_ID, ");
+		sql.append("	rs.C_Region_ID ");
+		sql.append("FROM ");
+		sql.append("	" + X_C_RetencionSchema.Table_Name + " rs ");
+		sql.append("	INNER JOIN " + X_C_RetencionType.Table_Name + " rt ");
+		sql.append("		ON rs.C_RetencionType_ID = rs.C_RetencionType_ID ");
+		sql.append("	INNER JOIN " + X_C_Region.Table_Name + " rg ");
+		sql.append("		ON rs.C_Region_ID = rg.C_Region_ID ");
+		sql.append("WHERE ");
+		sql.append("	rs.RetencionApplication = 'S' ");
+		sql.append("	AND rt.RetentionType = 'B' ");
+		sql.append("	AND rt.IsActive = 'Y' ");
+		sql.append("	AND rs.IsActive = 'Y' ");
+		sql.append("	AND rs.IsActive = 'Y' ");
+		sql.append("	AND rg.jurisdictioncode = 902 ");
+
+		PreparedStatement ps = null;
+		ResultSet rst = null;
+
+		try {
+			ps = DB.prepareStatement(sql.toString());
+			rst = ps.executeQuery();
+
+			if (rst.next()) {
+				return rst.getInt(1);
+			}
+		} catch (Exception e) {
+			log.log(Level.SEVERE, "createFromAmex", e);
+		} finally {
+			try {
+				rst.close();
+				ps.close();
+			} catch (SQLException e) {
+				log.log(Level.SEVERE, "Cannot close statement or resultset");
+			}
+		}
+		return -1;
 	}
 
 }
