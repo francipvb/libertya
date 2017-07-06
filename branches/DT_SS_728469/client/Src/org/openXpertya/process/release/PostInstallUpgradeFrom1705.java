@@ -31,6 +31,18 @@ public class PostInstallUpgradeFrom1705 extends PluginPostInstallProcess {
 	protected final static String ORDEN_PAGO_JASPER_REPORT_UID = "CORE-AD_JasperReport-1000012";
 	protected final static String ORDEN_PAGO_JASPER_REPORT_FILENAME = "OrdenPago.jasper";
 	
+	/** UID del Subreporte de Totales por Tipo del Informe de Declaración de Valores */
+	protected final static String DECLARACION_VALORES_TOTALXKIND_JASPER_REPORT_UID = "CORE-AD_JasperReport-1010226";
+	protected final static String DECLARACION_VALORES_TOTALXKIND_JASPER_REPORT_FILENAME = "DeclaracionDeValores_TotalXKind.jasper";
+
+	/** UID del Informe de Declaración de Valores */
+	protected final static String DECLARACION_VALORES_JASPER_REPORT_UID = "CORE-AD_JasperReport-1010047";
+	protected final static String DECLARACION_VALORES_JASPER_REPORT_FILENAME = "DeclaracionDeValores.jasper";
+
+	/** UID Impresión Cheques */
+	protected final static String CHECK_PRINTING_JASPER_REPORT_UID = "SSTE2CORE-AD_JasperReport-1010144-20161018155925";
+	protected final static String CHECK_PRINTING_JASPER_REPORT_FILENAME = "ChequesFrances.jasper";
+	
 	@Override
 	protected String doIt() throws Exception {
 		super.doIt();
@@ -108,6 +120,39 @@ public class PostInstallUpgradeFrom1705 extends PluginPostInstallProcess {
 							.readBinaryFromJar(
 									jarFileURL,
 									getBinaryFileURL(ORDEN_PAGO_JASPER_REPORT_FILENAME)));
+		
+		// Subreporte de Totales por Tipo del Informe de Declaración de Valores
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					DECLARACION_VALORES_TOTALXKIND_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(DECLARACION_VALORES_TOTALXKIND_JASPER_REPORT_FILENAME)));
+		
+		// Informe de Declaración de Valores
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					DECLARACION_VALORES_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(DECLARACION_VALORES_JASPER_REPORT_FILENAME)));
+		
+		// Impresión de cheques - Francés
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					CHECK_PRINTING_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(CHECK_PRINTING_JASPER_REPORT_FILENAME)));
 		
 		return " ";
 	}

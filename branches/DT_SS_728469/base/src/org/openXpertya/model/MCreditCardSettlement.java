@@ -780,7 +780,7 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 				return DocAction.STATUS_Invalid;
 			}
 			
-			payment.setC_BankAccount_ID(bankAccountID);
+			payment.setBankAccountDetails(bankAccountID);
 
 			boolean saveOk = true;
 
@@ -1068,7 +1068,6 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 	public BigDecimal getApprovalAmt() {
 		return getNetAmount();
 	}
-
 	public void setGenerateChildrens(boolean generateChildrens) {
 		this.generateChildrens = generateChildrens;
 	}
