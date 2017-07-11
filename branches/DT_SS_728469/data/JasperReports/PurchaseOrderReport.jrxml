@@ -63,6 +63,7 @@ WHERE (($P{AD_Org_ID} IS NULL) OR (0 = $P{AD_Org_ID}) OR (o.ad_org_id = $P{AD_Or
 	AND (($P{AD_CLIENT_ID} IS NULL) OR (o.ad_client_id = $P{AD_CLIENT_ID})) 
 	AND (($P{C_BPartner_ID} IS NULL) OR (bp.c_bpartner_id = $P{C_BPartner_ID})) 
 	AND (($P{Estado} IS NULL) OR (o.docstatus = $P{Estado}))
+	AND o.docstatus IN ('CO','CL')
 	AND (($P{FechaDesde}::date IS NULL) OR (o.dateacct::date >= $P{FechaDesde}::date)) 
 	AND (($P{FechaHasta}::date IS NULL) OR (o.dateacct::date <= $P{FechaHasta}::date))
 	AND (($P{FechaDesdeAuthorization}::date IS NULL) OR (aut.authorizationdate::date >= $P{FechaDesdeAuthorization}::date)) 

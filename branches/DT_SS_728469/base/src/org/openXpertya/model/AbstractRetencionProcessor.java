@@ -6,7 +6,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -696,13 +695,11 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 			Timestamp dateTo, MRetencionSchema retSchema) throws Exception {
 		Map<Integer, BigDecimal> pays = new HashMap<Integer, BigDecimal>();
 		String sql = "SELECT DISTINCT p.c_payment_id, currencybase(p.payamt, p.c_currency_id, p.datetrx, p.ad_client_id, p.ad_org_id) as prepayamt "
-				+ "FROM   m_retencion_invoice ri "
-				+ "INNER JOIN c_allocationhdr ah ON ri.c_allocationhdr_id = ah.c_allocationhdr_id "
-				+ "INNER JOIN c_allocationline al ON al.c_allocationhdr_id = ah.c_allocationhdr_id "
-				+ "INNER JOIN c_payment p ON al.c_payment_id = p.c_payment_id "
+				+ "FROM c_payment as p "
 				+ "WHERE p.docstatus in ('CO','CL') AND "
-				+ "			p.c_bpartner_id = ?	AND " + "			p.isreceipt = 'N' AND "
-				+ "			p.AD_Client_ID = ? AND ri.c_retencionschema_id = ? AND ";
+				+ "			p.c_bpartner_id = ?	AND " 
+				+ "			p.isreceipt = 'N' AND "
+				+ "			p.AD_Client_ID = ? AND ";
 		// Fecha desde
 		if (dateFrom != null) {
 			sql += "			p.DateTrx::date >= ?::date AND ";
@@ -738,8 +735,6 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		}
 		// Compañía
 		ps.setInt(i++, clientID);
-		// Esquema de retención en consulta principal
-		ps.setInt(i++, retSchema.getID());
 		// Fecha desde
 		if (dateFrom != null) {
 			ps.setTimestamp(i++, dateFrom);
@@ -782,13 +777,11 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 			Timestamp dateTo, MRetencionSchema retSchema) throws Exception {
 		Map<Integer, BigDecimal> pays = new HashMap<Integer, BigDecimal>();
 		String sql = "SELECT DISTINCT p.c_payment_id, p.isallocated "
-				+ "FROM   m_retencion_invoice ri "
-				+ "INNER JOIN c_allocationhdr ah ON ri.c_allocationhdr_id = ah.c_allocationhdr_id "
-				+ "INNER JOIN c_allocationline al ON al.c_allocationhdr_id = ah.c_allocationhdr_id "
-				+ "INNER JOIN c_payment p ON al.c_payment_id = p.c_payment_id "
+				+ "FROM c_payment p  "
 				+ "WHERE p.docstatus in ('CO','CL') AND "
-				+ "			p.c_bpartner_id = ?	AND " + "			p.isreceipt = 'N' AND "
-				+ "			p.AD_Client_ID = ? AND ri.c_retencionschema_id = ? AND ";
+				+ "			p.c_bpartner_id = ?	AND " 
+				+ "			p.isreceipt = 'N' AND "
+				+ "			p.AD_Client_ID = ? AND ";
 		// Fecha desde
 		if (dateFrom != null) {
 			sql += "			p.DateTrx::date >= ?::date AND ";
@@ -820,8 +813,6 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		}
 		// Compañía
 		ps.setInt(i++, clientID);
-		//Esquema de retención en la consulta principal
-		ps.setInt(i++, retSchema.getID());
 		// Fecha desde
 		if (dateFrom != null) {
 			ps.setTimestamp(i++, dateFrom);
@@ -1331,9 +1322,8 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		BigDecimal porcentaje = BigDecimal.ZERO;
 		for (int i = 0; i < padronTypes.size()
 				&& Util.isEmpty(porcentaje, true); i++) {
-			Timestamp allocTrxDate = new Timestamp(getDateTrx() != null ? getDateTrx().getTime(): (new Date()).getTime());
 			porcentaje = MBPartnerPadronBsAs.getBPartnerPerc("retencion",
-					getBPartner().getTaxID(), allocTrxDate, padronTypes.get(i),
+					getBPartner().getTaxID(), Env.getDate(), padronTypes.get(i),
 					getTrxName());
 		}
 		// Si no lo encuentra, entonces el valor por defecto parámetro
