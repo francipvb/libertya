@@ -351,6 +351,12 @@ public class ImportSettlements extends SvrProcess {
 				markAsError(tableName, rs.getInt(tableName + "_ID"), "No se encontró el concepto Ret IVA");
 				return false;
 			}
+			name = "Gastos por promocion";
+			id = getCardSettlementConceptIDByValue(attributes.get(name).getName());
+			if (id <= 0) {
+				markAsError(tableName, rs.getInt(tableName + "_ID"), "No se encontró el concepto Gastos por promoción");
+				return false;
+			}
 			//IIBB
 			id = getRetencionSchemaByNroEst(rs.getString("comercio_participante") + rs.getString("producto"));
 			if (id <= 0) {
@@ -405,7 +411,9 @@ public class ImportSettlements extends SvrProcess {
 				
 				BigDecimal totalAmt = new BigDecimal(0);
 				
-				if (!rs.getString("importe_total_signo").equals("Negativo")) {
+				//Sumo o resto al total si el código_movimiento es "Cupon" o "Representacion Cupón"
+				if (rs.getString("codigo_movimiento").equals("Cupón") ||
+						rs.getString("codigo_movimiento").equals("Representación Cupón")) {
 					totalAmt = safeMultiply(rs.getString("importe_total"), rs.getString("importe_total_signo"));
 				}
 				
@@ -570,12 +578,15 @@ public class ImportSettlements extends SvrProcess {
 						markAsImported(tableName, rs.getInt(tableName + "_ID"));
 					}
 				}
-				if (rs.getString("importe_total_signo").equals("Negativo")) {
+				//Agrego "Gastos por Promoción"
+				if (rs.getString("codigo_movimiento").equals("Cupón Crédito") ||
+						rs.getString("codigo_movimiento").equals("Cargo") ||
+						rs.getString("codigo_movimiento").equals("Contrapartida Cupón")) {
 					/* -- -- -- */
 					try {
 						String name = "Gastos por promocion";
 						int C_CardSettlementConcept_ID = getCardSettlementConceptIDByValue(attributes.get(name).getName());
-						BigDecimal expense = safeMultiply(rs.getString("importe_total"), rs.getString("importe_total_signo"));
+						BigDecimal expense = negativeValue(safeMultiply(rs.getString("importe_total"), rs.getString("importe_total_signo")));
 						if (expense.compareTo(new BigDecimal(0)) != 0) {
 							int MExpenseConcepts_ID = getExpenseConceptIDByValueAndSettlementID(C_CardSettlementConcept_ID, C_CreditCardSettlement_ID);
 							MExpenseConcepts ec = new MExpenseConcepts(getCtx(), MExpenseConcepts_ID > 0 ? MExpenseConcepts_ID : 0, get_TrxName());
