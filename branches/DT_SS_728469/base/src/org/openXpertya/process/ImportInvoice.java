@@ -741,6 +741,13 @@ public class ImportInvoice extends SvrProcess {
 					if( imp.getM_AuthorizationChain_ID() != 0 ) {
 						invoice.setM_AuthorizationChain_ID(imp.getM_AuthorizationChain_ID());
 					}
+					
+					if(!Util.isEmpty(imp.getAuthorizationChainStatus(), true)){
+						invoice.setAuthorizationChainStatus(imp.getAuthorizationChainStatus());
+						if(MInvoice.AUTHORIZATIONCHAINSTATUS_Authorized.equals(imp.getAuthorizationChainStatus())){
+							invoice.setSkipAuthorizationChain(true);
+						}
+					}
 
 					//
 					Timestamp dateInvoiced = imp.getDateInvoiced() != null ? imp
@@ -768,6 +775,9 @@ public class ImportInvoice extends SvrProcess {
 					else{
 						invoice.setIsPrinted(imp.isPrinted());
 					}		
+					
+					invoice.setCAI(imp.getCAI());
+					invoice.setDateCAI(imp.getDateCAI());
 					
 					invoice.setSkipLastFiscalDocumentNoValidation(true);
 					

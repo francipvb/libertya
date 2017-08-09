@@ -578,24 +578,6 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 	public BigDecimal getPayNetAmt() {
 		return getPayNetAmt(getInvoiceList(), getAmountList());
 	}
-
-	/**
-	 * Obtiene las facturas imputadas al crédito parámetro.
-	 * 
-	 * @param allocationLineCreditColumn
-	 *            nombre de columna de la tabla c_allocationline que posee el
-	 *            crédito parámetro
-	 * @param creditID
-	 *            id del crédito
-	 * @return map con clave factura y monto imputado a ella
-	 * @throws Exception
-	 *             en caso de error
-	 */
-	public Map<MInvoice, BigDecimal> getAllocatedInvoicesAmts(
-			String allocationLineCreditColumn, Integer creditID)
-			throws Exception {
-		return getAllocatedInvoicesAmts(allocationLineCreditColumn, creditID, true);
-	}
 	
 	public Map<MInvoice, BigDecimal> getAllocatedInvoicesAmts(
 			String allocationLineCreditColumn, Integer creditID, 
@@ -830,7 +812,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		while (rs.next()) {
 			paymentID = rs.getInt("c_payment_id");
 			// Determinar las facturas imputadas al pago y obtener su neto
-			allocatedAmts = getAllocatedInvoicesAmts("c_payment_id", paymentID);
+			allocatedAmts = getAllocatedInvoicesAmts("c_payment_id", paymentID, false);
 			netTotal = getPayNetAmt(
 					new ArrayList<MInvoice>(allocatedAmts.keySet()),
 					new ArrayList<BigDecimal>(allocatedAmts.values()));
@@ -1016,8 +998,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		while (rs.next()) {
 			cashlineID = rs.getInt("c_cashline_id");
 			// Determinar las facturas imputadas al cashline y obtener su neto
-			allocatedAmts = getAllocatedInvoicesAmts("c_cashline_id",
-					cashlineID);
+			allocatedAmts = getAllocatedInvoicesAmts("c_cashline_id", cashlineID, false);
 			netTotal = getPayNetAmt(
 					new ArrayList<MInvoice>(allocatedAmts.keySet()),
 					new ArrayList<BigDecimal>(allocatedAmts.values()));
@@ -1139,8 +1120,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 				+ "INNER JOIN c_invoice i ON ri.c_invoice_id = i.c_invoice_id "
 				+ "WHERE i.docstatus in ('CO','CL') AND "
 				+ "			i.c_bpartner_id = ? AND " 
-				+ "			i.ad_client_id = ? AND "
-				+ "			ri.c_retencionschema_id = ? AND ";
+				+ "			i.ad_client_id = ? AND ";
 		if(!Util.isEmpty(srcInvoiceID, true)){
 			sql += "		ri.c_invoice_src_id = "+srcInvoiceID+" AND ";
 		}
@@ -1171,8 +1151,6 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		}
 		// Compañía
 		ps.setInt(i++, clientID);
-		// Esquema de retención en consulta principal
-		ps.setInt(i++, retSchema.getID());
 		// Fecha desde
 		if (dateFrom != null) {
 			ps.setTimestamp(i++, dateFrom);
@@ -1292,13 +1270,11 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 			total = total.add(getSumAmts(new ArrayList<BigDecimal>(cashlines
 					.values())));
 			// 3) Retenciones
-			// Se comenta ya que los algoritmos no restan las retenciones como
-			// parte de los pagos anteriores, sino al final
-			/*Map<Integer, BigDecimal> retenciones = getSumaRetencionesPagosAnteriores(
+			Map<Integer, BigDecimal> retenciones = getSumaRetencionesPagosAnteriores(
 					getBPartner(), clientID, dateFrom, dateTo,
 					getRetencionSchema());
 			total = total.add(getSumAmts(new ArrayList<BigDecimal>(retenciones
-					.values())));*/
+					.values())));
 		} catch (Exception ex) {
 			log.info("Error al buscar el total del monto pagado en el mes !!!! ");
 			ex.printStackTrace();
@@ -1319,16 +1295,18 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 	 *         por defecto si no encuentra ninguno
 	 */
 	protected BigDecimal getPorcentajePadron(List<String> padronTypes, BigDecimal defaultPorcentaje){
-		BigDecimal porcentaje = BigDecimal.ZERO;
-		for (int i = 0; i < padronTypes.size()
-				&& Util.isEmpty(porcentaje, true); i++) {
+		BigDecimal porcentaje = null;
+		for (int i = 0; i < padronTypes.size() && porcentaje == null; i++) {
 			porcentaje = MBPartnerPadronBsAs.getBPartnerPerc("retencion",
 					getBPartner().getTaxID(), Env.getDate(), padronTypes.get(i),
 					getTrxName());
 		}
 		// Si no lo encuentra, entonces el valor por defecto parámetro
-		if(Util.isEmpty(porcentaje, true)){
+		if(porcentaje == null){
 			porcentaje = defaultPorcentaje;
+		}
+		if(porcentaje == null){
+			porcentaje = BigDecimal.ZERO;
 		}
 		return porcentaje;
 	}

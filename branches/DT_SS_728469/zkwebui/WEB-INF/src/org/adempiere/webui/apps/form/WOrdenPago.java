@@ -1036,7 +1036,9 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
     		BigDecimal monto = null;
     		
     		try {
-    			monto = (BigDecimal)txtTotalPagar1.getValue();
+    			
+    			monto = m_model.numberParse((String)txtTotalPagar1.getValue());
+    			
     		} catch (Exception e) {
     			showError("@SaveErrorNotUnique@ \n\n" + txtTotalPagar1.getLabel().getValue());
     			
@@ -1217,7 +1219,7 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
      * @param evt
      */
     private void cmdBPartnerSelActionPerformed(ValueChangeEvent evt){
-    	if((this.BPartnerSel.getValue() == null)){
+    	if((this.BPartnerSel.getNewValueOnChange() == null)){
     		this.cmdProcess.setEnabled(false);
     	}
     	else{
@@ -1774,8 +1776,8 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
         	customUpdateBPartnerRelatedComponents(true);
         	buscarPagos();
         	// Actualizar interfaz grafica para null value
-			if (BPartnerSel.getNewValueOnChange() == null)
-				this.cmdProcess.setEnabled(false); //cmdBPartnerSelActionPerformed(null);
+        	if (BPartnerSel.getValue() == null)
+				cmdBPartnerSelActionPerformed(null);
         	updatePayAllInvoices(false);
         	
 			// Activo/Desactivo pestaña de Pagos Adelantados dependiendo
