@@ -1343,9 +1343,9 @@ public class ImportSettlements extends SvrProcess {
 				}
 				/* -- -- -- */
 				try {
-					String name = "Ret IVA";
+					String name = "Ret Ganancias";
 					int C_RetencionSchema_ID = getRetencionSchemaIDByValue(attributes.get(name).getName());
-					BigDecimal withholding = safeMultiply(rs.getString("ret_iva"), "+");
+					BigDecimal withholding = safeMultiply(rs.getString("ret_gcias"), rs.getString("signo_31"));
 					if (withholding.compareTo(new BigDecimal(0)) != 0) {
 						MWithholdingSettlement ws = new MWithholdingSettlement(getCtx(), 0, get_TrxName());
 						ws.setC_RetencionSchema_ID(C_RetencionSchema_ID);
@@ -1360,9 +1360,9 @@ public class ImportSettlements extends SvrProcess {
 				}
 				/* -- -- -- */
 				try {
-					String name = "Ret Ganancias";
+					String name = "Ret IVA";
 					int C_RetencionSchema_ID = getRetencionSchemaIDByValue(attributes.get(name).getName());
-					BigDecimal withholding = safeMultiply(rs.getString("ret_gcias"), rs.getString("signo_31"));
+					BigDecimal withholding = safeMultiply(rs.getString("ret_iva"), "+");
 					if (withholding.compareTo(new BigDecimal(0)) != 0) {
 						MWithholdingSettlement ws = new MWithholdingSettlement(getCtx(), 0, get_TrxName());
 						ws.setC_RetencionSchema_ID(C_RetencionSchema_ID);
