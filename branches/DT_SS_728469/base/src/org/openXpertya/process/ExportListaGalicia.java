@@ -496,11 +496,13 @@ public class ExportListaGalicia extends ExportBankList {
 		sql.append("		WHEN retentiontype = 'G' THEN '02' ");
 		sql.append("		WHEN retentiontype = 'B' THEN '03' ");
 		sql.append("		WHEN retentiontype = 'S' THEN '04' ");
+		sql.append("		WHEN retentiontype = 'J' THEN '04' ");
 		sql.append("	ELSE '00' END AS tipo, ");
 		sql.append("	CASE WHEN retentiontype = 'I' THEN '1' ");
-		sql.append("		WHEN retentiontype = 'G' THEN '2' ");
-		sql.append("		WHEN retentiontype = 'B' THEN '1' ");
+		sql.append("		WHEN retentiontype = 'G' THEN '1' ");
+		sql.append("		WHEN retentiontype = 'B' THEN '2' ");
 		sql.append("		WHEN retentiontype = 'S' THEN '1' ");
+		sql.append("		WHEN retentiontype = 'J' THEN '1' ");
 		sql.append("	ELSE '0' END AS impuesto, ");
 		sql.append("	COALESCE(r.ad_componentobjectuid,'0') AS provincia, ");
 		sql.append("	i.documentno, ");
@@ -535,6 +537,10 @@ public class ExportListaGalicia extends ExportBankList {
 			ps.setInt(1, rs.getInt("c_allocationhdr_id"));
 			rsre = ps.executeQuery();
 			while (rsre.next()) {
+				//Verifico tipo de retención, si falta configurar disparo error
+				if ("00".equals(rsre.getString("tipo"))) {
+					throw new Exception("Existen Tipos de Retenciones sin configurar");
+				}
 				// Escribir retención
 				writeRetencion(rs, rsre);
 				// Separador de filas
