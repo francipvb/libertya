@@ -131,7 +131,7 @@ public class ExportListaGalicia extends ExportBankList {
 
 		header.append(dateFormat_ddMMyyyy.format(calendarDateTrx.getTime()));
 		header.append(dateFormat_ddMMyyyy.format(calendarDateTrx.getTime()));
-		header.append(getBankListConfig().getSucursalDefault());
+		header.append(fillField(getBankListConfig().getSucursalDefault(), "0", MExpFormatRow.ALIGNMENT_Right, 3, null));
 		header.append(fillField(" ", " ", MExpFormatRow.ALIGNMENT_Right, 54, null));
 		header.append("001"); // Moneda Pesos
 		header.append(fillField(" ", " ", MExpFormatRow.ALIGNMENT_Right, 22, null));
@@ -247,7 +247,7 @@ public class ExportListaGalicia extends ExportBankList {
 		// Importe del cheque
 		row.append(fillField(String.valueOf(payAmt), "0", MExpFormatRow.ALIGNMENT_Right, 17, null));
 		// Sucursal distribuidora
-		row.append(fillField(rs.getString("sucursal"), " ", MExpFormatRow.ALIGNMENT_Left, 3, null));
+		row.append(fillField(rs.getString("sucursal"), "0", MExpFormatRow.ALIGNMENT_Right, 3, null));
 		// Nombre/R. Social beneficiario
 		row.append(fillField(rs.getString("name"), " ", MExpFormatRow.ALIGNMENT_Left, 50, null));
 		// Dirección beneficiario
