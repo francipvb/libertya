@@ -157,11 +157,10 @@ public class ExportRetentionsPatagonia extends ExportBankList {
 			write(getFileHeader());
 
 			while (rs.next()) {
-
+				lineSecNo++;
 				write(getLineHeader(rs.getInt(1)));
 				write(getLineDetail(rs.getInt(1)));
 				write(getLineFooter());
-				lineSecNo++;
 
 			}
 
