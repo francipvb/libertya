@@ -10,7 +10,6 @@ import org.openXpertya.model.X_C_AllocationHdr;
 import org.openXpertya.model.X_C_AllocationLine;
 import org.openXpertya.model.X_C_BPartner;
 import org.openXpertya.model.X_C_BPartner_BankList;
-import org.openXpertya.model.X_C_BankAccount;
 import org.openXpertya.model.X_C_Currency;
 import org.openXpertya.model.X_C_DocType;
 import org.openXpertya.model.X_C_ElectronicPaymentBranch;
@@ -94,7 +93,7 @@ public class ExportListaPatagonia extends ExportBankList {
 		sql.append("SELECT DISTINCT ");
 		sql.append("	ahb.c_allocationhdr_id, ");
 		sql.append("	ahb.documentno, ");
-		sql.append("	bp.name, ");
+		sql.append("	(CASE WHEN p.a_name IS NOT NULL AND length(trim(p.a_name)) > 0 THEN p.a_name ELSE bp.name END) AS name, ");
 		sql.append("	p.datetrx, ");
 		sql.append("	p.c_payment_id, ");
 		sql.append("	p.duedate as paymentduedate, ");
@@ -111,7 +110,7 @@ public class ExportListaPatagonia extends ExportBankList {
 		sql.append("	COALESCE( ");
 		sql.append("	  (SELECT email FROM ad_user u ");
 		sql.append("	   WHERE u.c_bpartner_id = bp.c_bpartner_id ");
-		sql.append("	   ORDER BY u.updated LIMIT 1 ");
+		sql.append("	   ORDER BY u.updated desc LIMIT 1 ");
 		sql.append("		), ' ' ");
 		sql.append("	) AS email, ");
 		sql.append("	COALESCE( ");

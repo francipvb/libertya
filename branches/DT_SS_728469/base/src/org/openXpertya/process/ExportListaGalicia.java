@@ -17,8 +17,6 @@ import org.openXpertya.model.X_C_AllocationLine;
 import org.openXpertya.model.X_C_BPartner;
 import org.openXpertya.model.X_C_BPartner_BankList;
 import org.openXpertya.model.X_C_BPartner_Location;
-import org.openXpertya.model.X_C_BankAccount;
-import org.openXpertya.model.X_C_BankList;
 import org.openXpertya.model.X_C_BankListLine;
 import org.openXpertya.model.X_C_DocType;
 import org.openXpertya.model.X_C_ElectronicPaymentBranch;
@@ -127,11 +125,11 @@ public class ExportListaGalicia extends ExportBankList {
 
 		BigDecimal res = DB.getSQLValueBD(get_TrxName(), sql.toString(), getBankList().getID());
 
-		header.append(fillField(String.valueOf(res.abs().multiply(Env.ONEHUNDRED).intValue()), "0", MExpFormatRow.ALIGNMENT_Right, 17, null));
+		header.append(fillField(String.valueOf(res.abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN)), "0", MExpFormatRow.ALIGNMENT_Right, 17, null));
 
 		header.append(dateFormat_ddMMyyyy.format(calendarDateTrx.getTime()));
 		header.append(dateFormat_ddMMyyyy.format(calendarDateTrx.getTime()));
-		header.append(fillField(getBankListConfig().getSucursalDefault(), "0", MExpFormatRow.ALIGNMENT_Right, 3, null));
+		header.append(getBankListConfig().getSucursalDefault());
 		header.append(fillField(" ", " ", MExpFormatRow.ALIGNMENT_Right, 54, null));
 		header.append("001"); // Moneda Pesos
 		header.append(fillField(" ", " ", MExpFormatRow.ALIGNMENT_Right, 22, null));
@@ -150,7 +148,7 @@ public class ExportListaGalicia extends ExportBankList {
 		sql.append("	p.c_payment_id, ");
 		sql.append("	lgp.c_bpartner_id, ");
 		sql.append("	lgp.payamt, ");
-		sql.append("	COALESCE(p.a_name, bp.name) AS name, ");
+		sql.append("	(CASE WHEN p.a_name IS NOT NULL AND length(trim(p.a_name)) > 0 THEN p.a_name ELSE bp.name END) AS name, ");
 		sql.append("	Translate(COALESCE(bp.taxid, p.a_cuit), '-', '') AS cuit, ");
 		sql.append("	(SELECT ");
 		sql.append("		l.address1 ");
@@ -235,7 +233,7 @@ public class ExportListaGalicia extends ExportBankList {
 	}
 
 	protected void writeCheckLine(ResultSet rs) throws Exception {
-		Integer payAmt = rs.getBigDecimal("payamt").abs().multiply(Env.ONEHUNDRED).intValue();
+		BigDecimal payAmt = rs.getBigDecimal("payamt").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
 		String address = Util.isEmpty(rs.getString("address"), true) ? "A" : rs.getString("address");
 		String city = Util.isEmpty(rs.getString("city"), true) ? "C" : rs.getString("city");
 		String postal = Util.isEmpty(rs.getString("postal"), true) ? "P" : rs.getString("postal");
@@ -247,7 +245,7 @@ public class ExportListaGalicia extends ExportBankList {
 		// Importe del cheque
 		row.append(fillField(String.valueOf(payAmt), "0", MExpFormatRow.ALIGNMENT_Right, 17, null));
 		// Sucursal distribuidora
-		row.append(fillField(rs.getString("sucursal"), "0", MExpFormatRow.ALIGNMENT_Right, 3, null));
+		row.append(fillField(rs.getString("sucursal"), " ", MExpFormatRow.ALIGNMENT_Left, 3, null));
 		// Nombre/R. Social beneficiario
 		row.append(fillField(rs.getString("name"), " ", MExpFormatRow.ALIGNMENT_Left, 50, null));
 		// Dirección beneficiario
@@ -333,9 +331,9 @@ public class ExportListaGalicia extends ExportBankList {
 				StringBuffer op = new StringBuffer("O1");
 				documentno = rsop.getString("documentno").replace(getOpPrefix(), "").replace(getOpSuffix(), "");
 				op.append(fillField(documentno, "0", MExpFormatRow.ALIGNMENT_Right, 10, null));
-				Integer debitos = rsop.getBigDecimal("debitos").abs().multiply(Env.ONEHUNDRED).intValue();
-				Integer creditos = rsop.getBigDecimal("creditos").abs().multiply(Env.ONEHUNDRED).intValue();
-				Integer total = rsop.getBigDecimal("total").abs().multiply(Env.ONEHUNDRED).intValue();
+				BigDecimal debitos = rsop.getBigDecimal("debitos").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
+				BigDecimal creditos = rsop.getBigDecimal("creditos").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
+				BigDecimal total = rsop.getBigDecimal("total").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
 				op.append(fillField(String.valueOf(debitos), "0", MExpFormatRow.ALIGNMENT_Right, 17, null));
 				op.append(fillField(String.valueOf(debitos), "0", MExpFormatRow.ALIGNMENT_Right, 17, null));
 				op.append(fillField(String.valueOf(creditos), "0", MExpFormatRow.ALIGNMENT_Right, 17, null));
@@ -445,9 +443,9 @@ public class ExportListaGalicia extends ExportBankList {
 				fc.append(fillField("Factura de Proveedor", " ", MExpFormatRow.ALIGNMENT_Right, 30, null));
 				fc.append(dateFormat_ddMMyyyy.format(rsfc.getTimestamp("dateinvoiced")));
 
-				Integer total = rsfc.getBigDecimal("grandtotal").abs().multiply(Env.ONEHUNDRED).intValue();
-				Integer retencion = rsfc.getBigDecimal("retencion").abs().multiply(Env.ONEHUNDRED).intValue();
-				Integer retencion_base = rsfc.getBigDecimal("retencion_base").abs().multiply(Env.ONEHUNDRED).intValue();
+				BigDecimal total = rsfc.getBigDecimal("grandtotal").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
+				BigDecimal retencion = rsfc.getBigDecimal("retencion").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
+				BigDecimal retencion_base = rsfc.getBigDecimal("retencion_base").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
 
 				fc.append(fillField(String.valueOf(total), "0", MExpFormatRow.ALIGNMENT_Right, 17, null));
 				fc.append(fillField(String.valueOf(retencion), "0", MExpFormatRow.ALIGNMENT_Right, 17, null));
@@ -498,12 +496,9 @@ public class ExportListaGalicia extends ExportBankList {
 		sql.append("		WHEN retentiontype = 'S' THEN '04' ");
 		sql.append("		WHEN retentiontype = 'J' THEN '04' ");
 		sql.append("	ELSE '00' END AS tipo, ");
-		sql.append("	CASE WHEN retentiontype = 'I' THEN '1' ");
-		sql.append("		WHEN retentiontype = 'G' THEN '1' ");
-		sql.append("		WHEN retentiontype = 'B' THEN '2' ");
-		sql.append("		WHEN retentiontype = 'S' THEN '1' ");
-		sql.append("		WHEN retentiontype = 'J' THEN '1' ");
-		sql.append("	ELSE '0' END AS impuesto, ");
+		sql.append("	CASE WHEN rt.is_by_region = 'Y' THEN '2' ");
+		sql.append("	ELSE '1' END AS impuesto, ");
+		sql.append("	rt.is_by_region, ");
 		sql.append("	COALESCE(r.ad_componentobjectuid,'0') AS provincia, ");
 		sql.append("	i.documentno, ");
 		sql.append("	iibb, ");
@@ -537,10 +532,6 @@ public class ExportListaGalicia extends ExportBankList {
 			ps.setInt(1, rs.getInt("c_allocationhdr_id"));
 			rsre = ps.executeQuery();
 			while (rsre.next()) {
-				//Verifico tipo de retención, si falta configurar disparo error
-				if ("00".equals(rsre.getString("tipo"))) {
-					throw new Exception("Existen Tipos de Retenciones sin configurar");
-				}
 				// Escribir retención
 				writeRetencion(rs, rsre);
 				// Separador de filas
@@ -573,7 +564,7 @@ public class ExportListaGalicia extends ExportBankList {
 		re.append(rsre.getString("tipo"));
 		re.append(fillField(" ", " ", MExpFormatRow.ALIGNMENT_Right, 20, null));
 		re.append(rsre.getString("impuesto"));
-		re.append(provincias.get(rsre.getString("provincia"))); 
+		re.append(rsre.getString("is_by_region").equals("Y") ? provincias.get(rsre.getString("provincia")) : "    "); 
 		re.append(fillField(" ", " ", MExpFormatRow.ALIGNMENT_Right, 30, null));
 		re.append(fillField("0", "0", MExpFormatRow.ALIGNMENT_Right, 4, null));
 		if (rsre.getString("documentno").length() <= 10) {
@@ -589,7 +580,7 @@ public class ExportListaGalicia extends ExportBankList {
 		re.append(fillField(tmp, " ", MExpFormatRow.ALIGNMENT_Left, 35, null));
 		re.append(dateFormat_ddMMyyyy.format(rs.getTimestamp("allocationdate")));
 
-		Integer total = rsre.getBigDecimal("grandtotal").abs().multiply(Env.ONEHUNDRED).intValue();
+		BigDecimal total = rsre.getBigDecimal("grandtotal").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
 		re.append(fillField(String.valueOf(total), "0", MExpFormatRow.ALIGNMENT_Right, 17, null));
 		re.append(dateFormat_MMyyyy.format(rs.getTimestamp("allocationdate")));
 		re.append(fillField(" ", " ", MExpFormatRow.ALIGNMENT_Right, 137, null));
@@ -609,10 +600,10 @@ public class ExportListaGalicia extends ExportBankList {
 		} else {
 			rp.append(rsre.getString("esquema").substring(0, 30));
 		}
-		Integer noimponible = rsre.getBigDecimal("noimponible").abs().multiply(Env.ONEHUNDRED).intValue();
-		Integer retencion = rsre.getBigDecimal("retencion").abs().multiply(Env.ONEHUNDRED).intValue();
-		Integer retencion_base = rsre.getBigDecimal("base").abs().multiply(Env.ONEHUNDRED).intValue();
-		Integer retencion_perc = rsre.getBigDecimal("perc").abs().multiply(Env.ONEHUNDRED).intValue();
+		BigDecimal noimponible = rsre.getBigDecimal("noimponible").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
+		BigDecimal retencion = rsre.getBigDecimal("retencion").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
+		BigDecimal retencion_base = rsre.getBigDecimal("base").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
+		BigDecimal retencion_perc = rsre.getBigDecimal("perc").abs().multiply(Env.ONEHUNDRED).setScale(0, BigDecimal.ROUND_DOWN);
 
 		rp.append("03");
 		rp.append("1");
