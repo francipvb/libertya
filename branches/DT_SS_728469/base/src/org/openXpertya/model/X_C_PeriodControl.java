@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_PeriodControl
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2017-03-31 11:05:26.279 */
+ *  @version  - 2017-09-26 10:29:06.602 */
 public class X_C_PeriodControl extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -21,6 +21,7 @@ setC_Period_ID (0);
 setDocBaseType (null);
 setDocTypeControl (false);
 setPeriodAction (null);	// N
+setPermanentlyOpen (false);
 }
  */
 }
@@ -148,11 +149,13 @@ public static final String DOCBASETYPE_BankList = "BLB";
 public static final String DOCBASETYPE_CheckPrinting = "CHP";
 /** AP Payment Batch = APB */
 public static final String DOCBASETYPE_APPaymentBatch = "APB";
+/** Credit Card Settlement = CCS */
+public static final String DOCBASETYPE_CreditCardSettlement = "CCS";
 /** Set Document BaseType.
 Logical type of document */
 public void setDocBaseType (String DocBaseType)
 {
-if (DocBaseType.equals("MMP") || DocBaseType.equals("MXI") || DocBaseType.equals("MXP") || DocBaseType.equals("ARF") || DocBaseType.equals("MMS") || DocBaseType.equals("MMR") || DocBaseType.equals("MMM") || DocBaseType.equals("POO") || DocBaseType.equals("POR") || DocBaseType.equals("MMI") || DocBaseType.equals("MOR") || DocBaseType.equals("MOU") || DocBaseType.equals("MOM") || DocBaseType.equals("MOV") || DocBaseType.equals("MOP") || DocBaseType.equals("MOF") || DocBaseType.equals("GLJ") || DocBaseType.equals("GLD") || DocBaseType.equals("API") || DocBaseType.equals("APP") || DocBaseType.equals("ARI") || DocBaseType.equals("ARR") || DocBaseType.equals("SOO") || DocBaseType.equals("MOI") || DocBaseType.equals("CMB") || DocBaseType.equals("CMC") || DocBaseType.equals("CMA") || DocBaseType.equals("APC") || DocBaseType.equals("ARC") || DocBaseType.equals("PJI") || DocBaseType.equals("AMO") || DocBaseType.equals("BLB") || DocBaseType.equals("CHP") || DocBaseType.equals("APB") || ( refContainsValue("CORE-AD_Reference-183", DocBaseType) ) );
+if (DocBaseType.equals("MMP") || DocBaseType.equals("MXI") || DocBaseType.equals("MXP") || DocBaseType.equals("ARF") || DocBaseType.equals("MMS") || DocBaseType.equals("MMR") || DocBaseType.equals("MMM") || DocBaseType.equals("POO") || DocBaseType.equals("POR") || DocBaseType.equals("MMI") || DocBaseType.equals("MOR") || DocBaseType.equals("MOU") || DocBaseType.equals("MOM") || DocBaseType.equals("MOV") || DocBaseType.equals("MOP") || DocBaseType.equals("MOF") || DocBaseType.equals("GLJ") || DocBaseType.equals("GLD") || DocBaseType.equals("API") || DocBaseType.equals("APP") || DocBaseType.equals("ARI") || DocBaseType.equals("ARR") || DocBaseType.equals("SOO") || DocBaseType.equals("MOI") || DocBaseType.equals("CMB") || DocBaseType.equals("CMC") || DocBaseType.equals("CMA") || DocBaseType.equals("APC") || DocBaseType.equals("ARC") || DocBaseType.equals("PJI") || DocBaseType.equals("AMO") || DocBaseType.equals("BLB") || DocBaseType.equals("CHP") || DocBaseType.equals("APB") || DocBaseType.equals("CCS") || ( refContainsValue("CORE-AD_Reference-183", DocBaseType) ) );
  else throw new IllegalArgumentException ("DocBaseType Invalid value: " + DocBaseType + ".  Valid: " +  refValidOptions("CORE-AD_Reference-183") );
 if (DocBaseType == null) throw new IllegalArgumentException ("DocBaseType is mandatory");
 if (DocBaseType.length() > 3)
@@ -255,6 +258,24 @@ Current state of this period */
 public String getPeriodStatus() 
 {
 return (String)get_Value("PeriodStatus");
+}
+/** Set Accounting Permanently Open.
+Period control accounting is permanently open omitting any status */
+public void setPermanentlyOpen (boolean PermanentlyOpen)
+{
+set_Value ("PermanentlyOpen", new Boolean(PermanentlyOpen));
+}
+/** Get Accounting Permanently Open.
+Period control accounting is permanently open omitting any status */
+public boolean isPermanentlyOpen() 
+{
+Object oo = get_Value("PermanentlyOpen");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
 }
 /** Set Process Now */
 public void setProcessing (boolean Processing)

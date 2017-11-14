@@ -34,6 +34,8 @@ import org.openXpertya.cc.CurrentAccountBalanceStrategy;
 import org.openXpertya.cc.CurrentAccountDocument;
 import org.openXpertya.cc.CurrentAccountManager;
 import org.openXpertya.cc.CurrentAccountManagerFactory;
+import org.openXpertya.electronicInvoice.ElectronicInvoiceInterface;
+import org.openXpertya.electronicInvoice.ElectronicInvoiceProvider;
 import org.openXpertya.model.DiscountCalculator.ICreditDocument;
 import org.openXpertya.model.DiscountCalculator.IDocument;
 import org.openXpertya.model.DiscountCalculator.IDocumentLine;
@@ -1873,56 +1875,57 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 
 		boolean locale_ar = CalloutInvoiceExt.ComprobantesFiscalesActivos();
 
-		// dREHER - Setea la letra correspondiente, luego se encarga la misma
-		// clase de verificar si corresponde
-		// con el tipo segun IVA Cliente E IVA Compa#ia
-		if (locale_ar && getC_Letra_Comprobante_ID() <= 0) {
-
-			// dREHER - Llamo pasando como parametro la organizacion del
-			// documento
-			Integer categoriaIvaClient = CalloutInvoiceExt
-					.darCategoriaIvaClient(getAD_Org_ID());
-
-			// TODO: despues eliminar comentario
-			log.fine("Trajo condicion IVA de organizacion como ="
-					+ categoriaIvaClient);
-
-			categoriaIvaClient = categoriaIvaClient == null ? 0
-					: categoriaIvaClient;
-			int categoriaIvaPartner = partner.getC_Categoria_Iva_ID();
-
-			// Algunas de las categorias de iva no esta asignada
-			if (categoriaIvaClient == 0 || categoriaIvaPartner == 0) {
-				String errorDesc = (categoriaIvaClient == 0 ? "@ClientWithoutIVAError@"
-						: "@BPartnerWithoutIVAError@");
-				log.saveError(
-						"InvalidInvoiceLetraSaveError",
-						Msg.parseTranslation(getCtx(), errorDesc
-								+ ". @CompleteBPandClientCateoriaIVA@"));
-				return false;
-			}
-
-			if (isSOTrx()) { // partner -> customer, empresa -> vendor
-				Integer letra = CalloutInvoiceExt.darLetraComprobante(
-						categoriaIvaPartner, categoriaIvaClient);
-				setC_Letra_Comprobante_ID(letra == null ? 0 : letra);
-
-				log.fine("Iva cliente=" + categoriaIvaPartner
-						+ " iva compa#ia=" + categoriaIvaClient);
-
-				// chequear aca que letra trae y que condiciones de iva envia
-
-			} else { // empresa -> customer, partner -> vendor
-				Integer letra = CalloutInvoiceExt.darLetraComprobante(
-						categoriaIvaClient, categoriaIvaPartner);
-				setC_Letra_Comprobante_ID(letra == null ? 0 : letra);
-			}
-		}
+		/*
+		 * Matias Cap - Disytel
+		 * ------------------------------------------------------------------
+		 * Se comenta este código porque para determinar letra y realizar
+		 * validaciones de categorías de iva, el tipo de documento debe ser
+		 * fiscal
+		 * ------------------------------------------------------------------
+		 * dREHER - Setea la letra correspondiente, luego se encarga la
+		 * misma // clase de verificar si corresponde // con el tipo segun IVA
+		 * Cliente E IVA Compa#ia if (locale_ar && getC_Letra_Comprobante_ID()
+		 * <= 0 && ) {
+		 * 
+		 * // dREHER - Llamo pasando como parametro la organizacion del //
+		 * documento Integer categoriaIvaClient = CalloutInvoiceExt
+		 * .darCategoriaIvaClient(getAD_Org_ID());
+		 * 
+		 * // TODO: despues eliminar comentario log.fine(
+		 * "Trajo condicion IVA de organizacion como =" + categoriaIvaClient);
+		 * 
+		 * categoriaIvaClient = categoriaIvaClient == null ? 0 :
+		 * categoriaIvaClient; int categoriaIvaPartner =
+		 * partner.getC_Categoria_Iva_ID();
+		 * 
+		 * // Algunas de las categorias de iva no esta asignada if
+		 * (categoriaIvaClient == 0 || categoriaIvaPartner == 0) { String
+		 * errorDesc = (categoriaIvaClient == 0 ? "@ClientWithoutIVAError@" :
+		 * "@BPartnerWithoutIVAError@"); log.saveError(
+		 * "InvalidInvoiceLetraSaveError", Msg.parseTranslation(getCtx(),
+		 * errorDesc + ". @CompleteBPandClientCateoriaIVA@")); return false; }
+		 * 
+		 * if (isSOTrx()) { // partner -> customer, empresa -> vendor Integer
+		 * letra = CalloutInvoiceExt.darLetraComprobante( categoriaIvaPartner,
+		 * categoriaIvaClient); setC_Letra_Comprobante_ID(letra == null ? 0 :
+		 * letra);
+		 * 
+		 * log.fine("Iva cliente=" + categoriaIvaPartner + " iva compa#ia=" +
+		 * categoriaIvaClient);
+		 * 
+		 * // chequear aca que letra trae y que condiciones de iva envia
+		 * 
+		 * } else { // empresa -> customer, partner -> vendor Integer letra =
+		 * CalloutInvoiceExt.darLetraComprobante( categoriaIvaClient,
+		 * categoriaIvaPartner); setC_Letra_Comprobante_ID(letra == null ? 0 :
+		 * letra); } }
+		 */
 
 		// Si el Tipo de Documento Destino es 0, se calcula a partir del Nro de
 		// Punto de Venta y el Tipo de Comprobante (FC, NC, ND)
-		if (locale_ar) {
-			if (getC_DocTypeTarget_ID() == 0) {
+		if (locale_ar && getC_DocTypeTarget_ID() == 0 && getPuntoDeVenta() > 0 && !Util.isEmpty(getLetra(), true)) {
+			String docTypeBaseKey = getDocTypeBaseKey(getTipoComprobante());
+			if (!Util.isEmpty(docTypeBaseKey, true)) {
 				MDocType docType = MDocType.getDocType(getCtx(),
 						getAD_Org_ID(),
 						getDocTypeBaseKey(getTipoComprobante()), getLetra(),
@@ -1935,11 +1938,9 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 					return false;
 				}
 			}
-		} else {
-			if (getC_DocTypeTarget_ID() == 0) {
-				setC_DocTypeTarget_ID(isSOTrx() ? MDocType.DOCBASETYPE_ARInvoice
-						: MDocType.DOCBASETYPE_APInvoice);
-			}
+		} else if(!locale_ar && getC_DocTypeTarget_ID() == 0){
+			setC_DocTypeTarget_ID(isSOTrx() ? MDocType.DOCBASETYPE_ARInvoice
+					: MDocType.DOCBASETYPE_APInvoice);
 		}
 
 		// Payment Term
@@ -2224,6 +2225,12 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			
 		}
 
+		// Quito punto de venta y letra en caso que el tipo de doc no sea fiscal
+		if(locale_ar && !docType.isFiscalDocument() && (getPuntoDeVenta() > 0 || getC_Letra_Comprobante_ID() > 0)){
+			setPuntoDeVenta(0);
+			setC_Letra_Comprobante_ID(0);
+		}
+		
 		// Si es un débito, se aplican las percepciones
 		if (isDebit && !isProcessed()) {
 			setApplyPercepcion(true);
@@ -2334,12 +2341,25 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			}
 		} 
 		
-		// Si la Tarifa de la Factura tiene activo el campo “Actualizar Precios con Factura de Compra” y 
-		// si la Moneda de la Factura de Proveedor es diferente a la moneda de la Tarifa seleccionada para la Factura
-		// El campo Fecha de TC para Actualizar Precios debe ser obligatorio
-		if (!isSOTrx() && getC_Currency_ID() != priceListCurrency && priceList.isActualizarPreciosConFacturaDeCompra() && getFechadeTCparaActualizarPrecios()==null) {
-			log.saveError("Error", Msg.translate(getCtx(), "FechadeTCparaActualizarPreciosMandatory"));
-			return false;
+		if (!isSOTrx()) {
+			// Si la Tarifa de la Factura tiene activo el campo “Actualizar Precios con Factura de Compra” y 
+			// si la Moneda de la Factura de Proveedor es diferente a la moneda de la Tarifa seleccionada para la Factura
+			// El campo Fecha de TC para Actualizar Precios debe ser obligatorio
+			if(getC_Currency_ID() != priceListCurrency && priceList.isActualizarPreciosConFacturaDeCompra() && getFechadeTCparaActualizarPrecios()==null){
+				log.saveError("Error", Msg.translate(getCtx(), "FechadeTCparaActualizarPreciosMandatory"));
+				return false;
+			}
+			
+			// Si se modificó el esquema de vencimientos y la factura se encuentra
+			// en un lote de pagos, entonces error
+			if(!newRecord && is_ValueChanged("C_PaymentTerm_ID")){
+				MPaymentBatchPO paymentBatch = MPaymentBatchPO.getFromInvoice(getCtx(), getID(), get_TrxName());
+				if(paymentBatch != null){
+					log.saveError("SaveError", Msg.getMsg(getCtx(), "InvoiceInPaymentBatchPO",
+							new Object[] { paymentBatch.getDocumentNo() }));
+					return false;
+				}
+			}
 		}
 		
 		return true;
@@ -2566,7 +2586,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		// se debe tener en cuenta en la validación
 		if (isSOTrx() && requireFiscalPrint() && isManualDocumentNo()) {
 			whereClause
-					.append(" AND (docStatus in ('CO', 'CL') OR (docStatus in ('VO', 'RE') AND fiscalalreadyprinted = 'Y')) ");
+					.append(" AND (docStatus in ('CO', 'CL', 'VO', 'RE') AND fiscalalreadyprinted = 'Y') ");
 		} else {
 			whereClause.append(" AND docStatus in ('CO', 'CL') ");
 		}
@@ -2642,19 +2662,6 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 
 		return sb.toString();
 	} // toString
-
-	private String getDocTypeKey() {
-		StringBuffer sql = new StringBuffer();
-
-		sql.append("SELECT ");
-		sql.append("	docbasetype ");
-		sql.append("FROM ");
-		sql.append("	" + X_C_DocType.Table_Name + " ");
-		sql.append("WHERE ");
-		sql.append("	c_doctype_id = ? ");
-
-		return DB.getSQLValueString(get_TrxName(), sql.toString(), getC_DocTypeTarget_ID());
-	}
 
 	/**
 	 * Descripción de Método
@@ -4022,6 +4029,14 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				amt = MConversionRate.convert(getCtx(), amt,
 						getC_Currency_ID(), C_CurrencyTo_ID, getDateAcct(), 0,
 						getAD_Client_ID(), getAD_Org_ID());
+				// NO existe conversión entre la moneda original y la del proyecto
+				if(amt == null){
+					m_processMsg = Msg.getMsg(getCtx(), "NoCurrenciesConversion",
+							new Object[] { MCurrency.getISO_Code(getCtx(), getC_Currency_ID()),
+									MCurrency.getISO_Code(getCtx(), C_CurrencyTo_ID),
+									Env.getDateFormatted(getDateAcct()) });
+					return DocAction.STATUS_Invalid;
+				}
 			}
 
 			BigDecimal newAmt = project.getInvoicedAmt();
@@ -4361,7 +4376,11 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			// === Lógica adicional para evitar doble notificación a AFIP. ===
 			// Si tiene CAE asignado, no debe generarlo nuevamente
 			if ((getcae() == null || getcae().length() == 0) && getcaecbte() != getNumeroComprobante()) {
-				ProcessorWSFE processor = new ProcessorWSFE(this);
+				// Se intenta obtener un proveedor de WSFE, en caso de no encontrarlo se utiliza la vieja version (via pyafipws) 
+				ElectronicInvoiceInterface processor = ElectronicInvoiceProvider.getImplementation(this);
+				if (processor==null) {
+					processor = new ProcessorWSFE(this);
+				} 
 				String errorMsg = processor.generateCAE();
 				if (Util.isEmpty(processor.getCAE())) {
 					setcaeerror(errorMsg);
@@ -4721,6 +4740,14 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		MDocType reversalDocType = docType;
 		boolean isCredit = docType.getDocBaseType().equals(
 				MDocType.DOCBASETYPE_ARCreditMemo);
+		
+		// Si el período está cerrado no se puede anular una factura de proveedor
+		if (!isSOTrx() && MDocType.DOCBASETYPE_APInvoice.equals(docType.getDocBaseType()) 
+				&& !MPeriod.isOpen(getCtx(), getDateAcct(), docType.getDocBaseType(), docType)) {
+			m_processMsg = "@PeriodClosed@";
+			return false;
+		}
+		
 		// ////////////////////////////////////////////////////////////////
 		// LOCALIZACIÓN ARGENTINA
 		// Para la localización argentina es necesario contemplar el tipo
@@ -5923,11 +5950,12 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 
 	public void calculatePercepciones() throws Exception {
 		MDocType docType = MDocType.get(getCtx(), getC_DocTypeTarget_ID());
-
 		if (docType.isFiscalDocument()
-				&& MOrgPercepcion.existsOrgPercepcion(getCtx(), getAD_Org_ID(),
-						get_TrxName()) && 
-						((getDocTypeKey().equals("ARC") && !MPreference.GetCustomPreferenceValueBool("SinPercepcionNCManual")) || !getDocTypeKey().equals("ARC") || isVoidProcess())) {
+				&& docType.isApplyPerception() 
+				&& MOrgPercepcion.existsOrgPercepcion(getCtx(), getAD_Org_ID(), get_TrxName()) 
+				&& ((docType.getDocBaseType().equals("ARC") && !MPreference.GetCustomPreferenceValueBool("SinPercepcionNCManual")) 
+						|| !docType.getDocBaseType().equals("ARC") 
+						|| isVoidProcess())) {
 			GeneratorPercepciones generator = new GeneratorPercepciones(
 					getCtx(), getDiscountableWrapper(), get_TrxName());
 			generator.calculatePercepciones(this);
@@ -5937,9 +5965,11 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 	public void recalculatePercepciones() throws Exception {
 		MDocType docType = MDocType.get(getCtx(), getC_DocTypeTarget_ID());
 		if (docType.isFiscalDocument()
-				&& MOrgPercepcion.existsOrgPercepcion(getCtx(), getAD_Org_ID(),
-						get_TrxName()) && 
-				((getDocTypeKey().equals("ARC") && !MPreference.GetCustomPreferenceValueBool("SinPercepcionNCManual")) || !getDocTypeKey().equals("ARC") || isVoidProcess())) {
+				&& docType.isApplyPerception()
+				&& MOrgPercepcion.existsOrgPercepcion(getCtx(), getAD_Org_ID(),	get_TrxName()) 
+				&& ((docType.getDocBaseType().equals("ARC") && !MPreference.GetCustomPreferenceValueBool("SinPercepcionNCManual")) 
+						|| !docType.getDocBaseType().equals("ARC") 
+						|| isVoidProcess())) {
 			GeneratorPercepciones generator = new GeneratorPercepciones(
 					getCtx(), getDiscountableWrapper(), get_TrxName());
 			generator.recalculatePercepciones(this);

@@ -171,7 +171,8 @@ public class LaunchInvoice extends SvrProcess {
 		}
 		
 		// Descuentos aplicados totales
-		jasperwrapper.addParameter("NROCOMPROBANTE", invoice.getNumeroDeDocumento().replace("<", "").replace(">", ""));
+		jasperwrapper.addParameter("NROCOMPROBANTE", (!Util.isEmpty(invoice.getNumeroDeDocumento(), true)
+				? invoice.getNumeroDeDocumento() : invoice.getDocumentNo()).replace("<", "").replace(">", ""));
 		jasperwrapper.addParameter("NROCOMPROBANTESMALL",
 				invoice.getPuntoDeVenta()
 						+ "00000000".substring(String.valueOf(invoice.getNumeroComprobante()).length())
@@ -488,7 +489,7 @@ public class LaunchInvoice extends SvrProcess {
 			//jasperwrapper.addParameter("RET_ALLOC_AMOUNT", allocation.getGrandTotal());
 			MAllocationHdr allocation = new MAllocationHdr(getCtx(), retencion_invoice.getC_AllocationHdr_ID(), null);
 			// Monto del pago actual
-			jasperwrapper.addParameter("RET_ALLOC_AMOUNT", LaunchOrdenPago
+			jasperwrapper.addParameter("RET_ALLOC_AMOUNT", MAllocationHdr
 					.getPayNetAmt(getCtx(), allocation, get_TrxName())); 
 			// Comprobante/s que origina/n la retención. (Números de Documento de las facturas en el Recibo) 
 			jasperwrapper.addParameter("RET_ALLOC_INVOICES", get_Retencion_Invoices(allocation));

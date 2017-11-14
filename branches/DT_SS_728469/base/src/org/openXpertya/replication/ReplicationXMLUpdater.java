@@ -11,8 +11,6 @@ package org.openXpertya.replication;
  * -------------------------------------------------------------------------
  */
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Vector;
 
 import org.openXpertya.model.MChangeLog;
@@ -20,15 +18,11 @@ import org.openXpertya.model.MTableReplication;
 import org.openXpertya.model.X_AD_Client;
 import org.openXpertya.model.X_AD_Sequence;
 import org.openXpertya.model.X_C_BPartner;
-import org.openXpertya.model.X_C_Cash;
-import org.openXpertya.model.X_C_CashLine;
-import org.openXpertya.model.X_C_Invoice;
 import org.openXpertya.model.X_C_Order;
 import org.openXpertya.model.X_C_OrderLine;
 import org.openXpertya.model.X_M_Transfer;
 import org.openXpertya.plugin.common.PluginUtils;
 import org.openXpertya.plugin.install.PluginXMLUpdater;
-import org.openXpertya.plugin.install.PluginXMLUpdater.ChangeGroup;
 import org.openXpertya.process.CreateReplicationTriggerProcess;
 import org.openXpertya.util.DB;
 
@@ -295,12 +289,6 @@ public class ReplicationXMLUpdater extends PluginXMLUpdater {
 			query.append( quotes + column.getNewValue() + quotes);
 			retValue = true;
 		}
-		/* A fin de que el procesador contable genere las entradas contables correspondientes, el Posted deben ser pasadas como false */
-		else if ("Posted".equals(column.getName()))
-		{
-			query.append( quotes + "N" + quotes);
-			retValue = true;
-		}
 		/* El created y updated también deberían copiarse como cualquier otro dato (no utilizar NOW() como lo hace la superclase) */
 		else if (("Created".equalsIgnoreCase(column.getName()) || "Updated".equalsIgnoreCase(column.getName())) && column.getNewValue()!=null && column.getNewValue().length() > 0 )
 		{
@@ -435,6 +423,12 @@ public class ReplicationXMLUpdater extends PluginXMLUpdater {
 			 * No replicar el campo Ref_Order_ID para la tabla C_Order_ID
 			 */
 			else if (X_C_Order.Table_Name.equalsIgnoreCase(tableName) && "ref_order_id".equalsIgnoreCase(column.getName())) {
+				changeGroup.getColumns().remove(i);
+			}
+			/*
+			 * No replicar el campo posted. El campo Posted de cualquier registro no debe modificarse en el destino, dado que el procesador contable de dicho host debera realizar la contabilidad cuando se considere necesario
+			 */
+			else if ("posted".equalsIgnoreCase(column.getName())) {
 				changeGroup.getColumns().remove(i);
 			}
 		}

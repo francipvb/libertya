@@ -355,8 +355,12 @@ ALTER TABLE rv_unreconciled_payment
 --20170823-1615 Nueva configuración de tipo de documento para indicar el tipo de transacción frente al LIVA
 update ad_system set dummy = (SELECT addcolumnifnotexists('c_doctype','transactiontypefrontliva','character(1)'));
 
---20170828-1427 Nuevo indice para reduccion de tiempos en la importacion de padrones. 
-create index c_bpartner_padron_bsas_cuit on c_bpartner_padron_bsas(cuit);
+--20170828-1427 Nuevo indice para reduccion de tiempos en la importacion de padrones.
+--COMENTADO 20171006: 
+--	Este indice ya existe.  Bajo 11.10 fue eliminado pero bajo 13.01 fue creado nuevamente. 
+--	No hay necesidad de que exista en el presente preinstall.
+--	En realidad la presencia de esta sentencia genera un error en instalación (no se puede usar IF NOT EXISTS por incompatibilidad con Postgres 8.4) 
+--create index c_bpartner_padron_bsas_cuit on c_bpartner_padron_bsas(cuit);
 
 --20170830-0044 En el caso de efectivo, si tenemos una condición parámetro, entonces siempre debe tener una factura/nc relacionada
 CREATE OR REPLACE FUNCTION v_documents_org_filtered(
@@ -615,3 +619,1089 @@ CREATE OR REPLACE VIEW c_invoice_percepciones_v AS
 
 ALTER TABLE c_invoice_percepciones_v
   OWNER TO libertya; 
+  
+  --20170922-1124 Tasas de conversion invalidas dado que son de cia System (se eliminan solo si las mismas no fueron modificadas)
+  delete from c_conversion_rate where c_conversion_rate_id = 117 and ad_client_id = 0 and updated = '2000-01-02 00:00:00';
+  delete from c_conversion_rate where c_conversion_rate_id = 119 and ad_client_id = 0 and updated = '2000-01-02 00:00:00';
+  delete from c_conversion_rate where c_conversion_rate_id = 120 and ad_client_id = 0 and updated = '2000-01-02 00:00:00';
+  
+--20170926-0900 Nueva columna que permite mantener abierto un control de período aún si se encuentra cerrado
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_PeriodControl','permanentlyopen','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+
+--20171018-1353 Se tiene en cuenta la cantidad reservada (qtyreserved) para actualizar el reservado del storage
+CREATE OR REPLACE FUNCTION update_reserved(
+    clientid integer,
+    orgid integer,
+    productid integer)
+  RETURNS void AS
+$BODY$
+/***********
+Actualiza la cantidad reservada de los depósitos de la compañía, organización y artículo parametro, 
+siempre y cuando existan los regitros en m_storage 
+y sólo sobre locators marcados como default ya que asi se realiza al procesar pedidos.
+Las cantidades reservadas se obtienen de pedidos procesados. 
+IMPORTANTE: No funciona para artículos que no son ITEMS (Stockeables)
+*/
+BEGIN
+	update m_storage s
+	set qtyreserved = coalesce((select sum(ol.qtyreserved) as qtypending
+					from c_orderline ol
+					inner join c_order o on o.c_order_id = ol.c_order_id
+					inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+					inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+					where ol.qtyreserved <> 0
+						and o.processed = 'Y' 
+						and s.m_product_id = ol.m_product_id
+						and s.m_locator_id = l.m_locator_id
+						and o.issotrx = 'Y'),0)
+	where ad_client_id = clientid
+		and (orgid = 0 or ad_org_id = orgid)
+		and (productid = 0 or m_product_id = productid)
+		and s.m_locator_id IN (select defaultLocator 
+					from (select m_warehouse_id, max(m_locator_id) as defaultLocator
+						from m_locator l
+						where l.isdefault = 'Y' and l.isactive = 'Y'
+						GROUP by m_warehouse_id) as dl);
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION update_reserved(integer, integer, integer)
+  OWNER TO libertya;
+
+--20171023-1530 Función que permite obtener la cantidad pendiente a fecha de corte
+CREATE OR REPLACE FUNCTION getqtyreserved(
+    clientid integer,
+    orgid integer,
+    locatorid integer,
+    productid integer,
+    dateto date)
+  RETURNS numeric AS
+$BODY$
+/***********
+Obtiene la cantidad reservada a fecha de corte. Si no hay fecha de corte, entonces se devuelven los pendientes actuales.
+La cantidad pendiente a una fecha de corte equivale a:
+1) Sumar la cantidad pedida a esa fecha
+2) Sumar las NC con la marca Actualizar Pedido luego de esa fecha.
+3) Restar los transaction de inouts con tipo de documento que gestionen cantidades reservadas de stock y pendientes a fecha de corte. Salidas son negativas y entradas positivas.
+4) Restar las cantidades transferidas a fecha de corte
+*/
+DECLARE
+	reserved numeric;
+BEGIN
+	reserved := 0;
+	--Si no hay fecha de corte o es mayor o igual a la fecha actual, entonces se suman las cantidades reservadas de los pedidos
+	if ( dateTo is null OR dateTo >= current_date ) THEN
+		SELECT INTO reserved coalesce(sum(ol.qtyreserved),0)
+		from c_orderline ol
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+		inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+		where ol.qtyreserved <> 0
+			and o.processed = 'Y' 
+			and ol.m_product_id = productid
+			and l.m_locator_id = locatorid
+			and o.issotrx = 'Y';
+	ELSE
+		SELECT INTO reserved coalesce(sum(qty),0)
+		from (
+		-- Cantidad pedida a fecha de corte
+		select coalesce(sum(ol.qtyordered),0) as qty
+			from c_orderline ol
+			inner join c_order o on o.c_order_id = ol.c_order_id
+			inner join c_doctype dt on dt.c_doctype_id = o.c_doctype_id
+			inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+			inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+			where o.ad_client_id = clientid
+				and o.ad_org_id = orgid
+				and o.processed = 'Y' 
+				and ol.m_product_id = productid
+				and l.m_locator_id = locatorid
+				and o.issotrx = 'Y'
+				and dt.doctypekey NOT IN ('SOSOTH','SOSOT')
+				and o.dateordered::date <= dateTo::date
+				and o.dateordered::date <= current_date
+		union all
+		-- Notas de crédito con el check Actualizar Cantidades de Pedido
+		select coalesce(sum(il.qtyinvoiced),0) as qty
+		from c_invoiceline il
+		inner join c_invoice i on i.c_invoice_id = il.c_invoice_id
+		inner join c_orderline ol on ol.c_orderline_id = il.c_orderline_id
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+		inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+		where o.ad_client_id = clientid
+			and o.ad_org_id = orgid
+			and o.processed = 'Y' 
+			and ol.m_product_id = productid
+			and l.m_locator_id = locatorid
+			and i.issotrx = 'Y'
+			and i.updateorderqty = 'Y'
+			and o.dateordered::date <= dateTo::date
+			and i.dateinvoiced::date > dateTo::date
+			and i.dateinvoiced::date <= current_date
+		union all
+		--En transaction las salidas son negativas y las entradas positivas
+		select coalesce(sum(t.movementqty),0) as qty
+		from m_transaction t
+		inner join m_inoutline iol on iol.m_inoutline_id = t.m_inoutline_id
+		inner join m_inout io on io.m_inout_id = iol.m_inout_id
+		inner join c_doctype dt on dt.c_doctype_id = io.c_doctype_id
+		inner join c_orderline ol on ol.c_orderline_id = iol.c_orderline_id
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		where t.ad_client_id = clientid
+			and t.ad_org_id = orgid
+			and t.m_product_id = productid
+			and t.m_locator_id = locatorid
+			and dt.reservestockmanagment = 'Y'
+			and o.dateordered::date <= dateTo::date
+			and t.movementdate::date <= dateTo::date
+			and t.movementdate::date <= current_date
+		union all
+		--Cantidades transferidas
+		select coalesce(sum(ol.qtyordered * -1),0) as qty
+		from c_orderline ol
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		inner join c_orderline rl on rl.c_orderline_id = ol.ref_orderline_id
+		inner join c_order r on r.c_order_id = rl.c_order_id
+		inner join c_doctype dt on dt.c_doctype_id = o.c_doctype_id
+		inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+		inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+		where o.ad_client_id = clientid
+			and o.ad_org_id = orgid
+			and o.processed = 'Y' 
+			and ol.m_product_id = productid
+			and l.m_locator_id = locatorid
+			and o.issotrx = 'Y'
+			and dt.doctypekey IN ('SOSOT')
+			and r.dateordered::date <= dateTo::date
+			and o.dateordered::date <= dateTo::date
+			and o.dateordered::date <= current_date
+		) todo;
+	END IF;
+	
+	return reserved;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION getqtyreserved(integer, integer, integer, integer, date)
+  OWNER TO libertya;
+  
+--20171024-0945 Incorporación de condición de configuración de tipo de documento frente a iva
+CREATE OR REPLACE FUNCTION v_dailysales_current_account_filtered(
+    orgid integer,
+    posid integer,
+    userid integer,
+    datefrom date,
+    dateto date,
+    invoicedatefrom date,
+    invoicedateto date,
+    addinvoicedate boolean)
+  RETURNS SETOF v_dailysales_type AS
+$BODY$
+declare
+	consulta varchar;
+	whereDateInvoices varchar;
+	whereInvoiceDate varchar;
+	wherePOSInvoices varchar;
+	whereUserInvoices varchar;
+	whereOrg varchar;
+	whereClauseStd varchar;
+	posJournalPaymentsFrom varchar;
+	dateFromPOSJournalPayments varchar;
+	dateToPOSJournalPayments varchar;
+	orgIDPOSJournalPayments integer;
+	adocument v_dailysales_type;
+BEGIN
+	-- Armado de las condiciones en base a los parámetros
+	-- Organización
+	whereOrg = '';
+	if orgID is not null AND orgID > 0 THEN
+		whereOrg = ' AND i.ad_org_id = ' || orgID;
+	END IF;
+	
+	-- Fecha de factura
+	whereInvoiceDate = '';
+	if addInvoiceDate then
+		if invoiceDateFrom is not null then
+			whereInvoiceDate = ' AND date_trunc(''day'', i.dateacct) >= date_trunc(''day'', '''|| invoiceDateFrom || '''::date)';
+		end if;
+		if invoiceDateTo is not null then
+			whereInvoiceDate = whereInvoiceDate || ' AND date_trunc(''day'', i.dateacct) <= date_trunc(''day'', ''' || invoiceDateTo || '''::date) ';
+		end if;
+	end if;
+
+	-- Fechas para allocations y facturas
+	whereDateInvoices = '';
+	if dateFrom is not null then
+		whereDateInvoices = ' AND date_trunc(''day''::text, i.dateinvoiced) >= date_trunc(''day'', ''' || dateFrom || '''::date)';
+	end if;
+
+	if dateTo is not null then
+		whereDateInvoices = whereDateInvoices || ' AND date_trunc(''day''::text, i.dateinvoiced) <= date_trunc(''day'', ''' || dateTo || '''::date) ';
+	end if;
+	
+	-- TPV
+	wherePOSInvoices = ' AND (' || posID || ' = -1 OR pj.c_pos_id = ' || posID || ')';
+
+	-- Usuario
+	whereUserInvoices = ' AND (' || userID || ' = -1 OR pj.ad_user_id = ' || userID || ')';
+
+	-- Condiciones básicas del reporte
+	whereClauseStd = ' ( i.issotrx = ''Y'' ' ||
+			 whereOrg || 
+			 ' AND (i.docstatus = ''CO'' or i.docstatus = ''CL'' or i.docstatus = ''RE'' or i.docstatus = ''VO'' OR i.docstatus = ''??'') ' ||
+			 ' AND dt.isfiscaldocument = ''Y'' ' || 
+			 ' AND (dt.isfiscal is null OR dt.isfiscal = ''N'' OR (dt.isfiscal = ''Y'' AND i.fiscalalreadyprinted = ''Y'')) ' ||
+			 ' AND dt.doctypekey not in (''RTR'', ''RTI'', ''RCR'', ''RCI'') ' || 
+			 ' AND (dt.transactiontypefrontliva is null OR dt.transactiontypefrontliva = ''S'') ' || 
+			 ' ) ';
+
+	-- Agregar las condiciones anteriores
+	whereClauseStd = whereClauseStd || whereInvoiceDate;
+
+	-- Armado del llamado a la función que ejecuta la vista filtrada c_posjournalpayments_v
+	dateFromPOSJournalPayments = (CASE WHEN dateFrom is null THEN 'null::date' ELSE '''' || dateFrom || '''::date' END);
+	dateToPOSJournalPayments = (CASE WHEN dateTo is null THEN 'null::date' ELSE '''' || dateTo || '''::date' END);
+	orgIDPOSJournalPayments = (CASE WHEN orgID is null THEN -1 ELSE orgID END);
+	posJournalPaymentsFrom = 'c_posjournalpayments_v_filtered(' || orgIDPOSJournalPayments || ', ' || dateFromPOSJournalPayments || ', ' || dateToPOSJournalPayments || ')';
+
+	-- Armar la consulta
+	consulta = 'SELECT ''CAI''::character varying AS trxtype, i.ad_client_id, i.ad_org_id, i.c_invoice_id, date_trunc(''day''::text, i.dateinvoiced) AS datetrx, NULL::integer AS c_payment_id, NULL::integer AS c_cashline_id, NULL::integer AS c_invoice_credit_id, ''CC'' AS tendertype, i.documentno, i.description, NULL::unknown AS info, (i.grandtotal - COALESCE(cobros.amount, 0::numeric))::numeric(20,2) AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, NULL::unknown AS c_pospaymentmedium_id, NULL::unknown AS pospaymentmediumname, NULL::integer AS m_entidadfinanciera_id, NULL::unknown AS entidadfinancieraname, NULL::unknown AS entidadfinancieravalue, NULL::integer AS m_entidadfinancieraplan_id, NULL::unknown AS planname, i.docstatus, i.issotrx, i.dateacct::date AS dateacct, i.dateacct::date AS invoicedateacct, pj.c_posjournal_id, pj.ad_user_id, pj.c_pos_id, dt.isfiscal, i.fiscalalreadyprinted
+           FROM c_invoice i
+      LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+   LEFT JOIN ( SELECT c.c_invoice_id, sum(c.amount) AS amount
+         FROM ( SELECT 
+                      CASE
+                          WHEN (dt.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN pjp.c_invoice_credit_id
+                          ELSE i.c_invoice_id
+                      END AS c_invoice_id, pjp.amount
+                 FROM ' || posJournalPaymentsFrom || ' pjp
+            JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+       JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   JOIN c_allocationhdr hdr ON hdr.c_allocationhdr_id = pjp.c_allocationhdr_id
+   LEFT JOIN c_posjournal as pj on pj.c_posjournal_id = i.c_posjournal_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+   LEFT JOIN c_payment p ON p.c_payment_id = pjp.c_payment_id
+   LEFT JOIN c_pospaymentmedium ppm ON ppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+   LEFT JOIN c_cashline c ON c.c_cashline_id = pjp.c_cashline_id
+   LEFT JOIN c_pospaymentmedium ppmc ON ppmc.c_pospaymentmedium_id = c.c_pospaymentmedium_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = pjp.m_entidadfinanciera_id
+   LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = pjp.m_entidadfinancieraplan_id
+   LEFT JOIN c_invoice cc ON cc.c_invoice_id = pjp.c_invoice_credit_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND date_trunc(''day''::text, i.dateacct) = date_trunc(''day''::text, pjp.dateacct::timestamp with time zone) AND ((i.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar])) AND hdr.isactive = ''Y''::bpchar OR (i.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar])) AND hdr.isactive = ''N''::bpchar)) c
+        GROUP BY c.c_invoice_id) cobros ON cobros.c_invoice_id = i.c_invoice_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND (cobros.amount IS NULL OR i.grandtotal <> cobros.amount) AND i.initialcurrentaccountamt > 0::numeric AND (dt.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND "position"(dt.doctypekey::text, ''CDN''::text) < 1
+UNION ALL 
+         SELECT ''CAIA''::character varying AS trxtype, i.ad_client_id, i.ad_org_id, i.c_invoice_id, date_trunc(''day''::text, i.dateinvoiced) AS datetrx, NULL::integer AS c_payment_id, NULL::integer AS c_cashline_id, NULL::integer AS c_invoice_credit_id, ''CC'' AS tendertype, i.documentno, i.description, NULL::unknown AS info, (i.grandtotal - COALESCE(cobros.amount, 0::numeric))::numeric(20,2) * (-1)::numeric AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, NULL::integer AS c_pospaymentmedium_id, NULL::unknown AS pospaymentmediumname, NULL::integer AS m_entidadfinanciera_id, NULL::unknown AS entidadfinancieraname, NULL::unknown AS entidadfinancieravalue, NULL::integer AS m_entidadfinancieraplan_id, NULL::unknown AS planname, i.docstatus, i.issotrx, i.dateacct::date AS dateacct, i.dateacct::date AS invoicedateacct, pj.c_posjournal_id, pj.ad_user_id, pj.c_pos_id, dt.isfiscal, i.fiscalalreadyprinted
+           FROM c_invoice i
+      LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+   LEFT JOIN ( SELECT c.c_invoice_id, sum(c.amount) AS amount
+         FROM ( SELECT 
+                      CASE
+                          WHEN (dt.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN pjp.c_invoice_credit_id
+                          ELSE i.c_invoice_id
+                      END AS c_invoice_id, pjp.amount
+                 FROM ' || posJournalPaymentsFrom || ' pjp
+            JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+       JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   JOIN c_allocationhdr hdr ON hdr.c_allocationhdr_id = pjp.c_allocationhdr_id
+   LEFT JOIN c_posjournal as pj on pj.c_posjournal_id = i.c_posjournal_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+   LEFT JOIN c_payment p ON p.c_payment_id = pjp.c_payment_id
+   LEFT JOIN c_pospaymentmedium ppm ON ppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+   LEFT JOIN c_cashline c ON c.c_cashline_id = pjp.c_cashline_id
+   LEFT JOIN c_pospaymentmedium ppmc ON ppmc.c_pospaymentmedium_id = c.c_pospaymentmedium_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = pjp.m_entidadfinanciera_id
+   LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = pjp.m_entidadfinancieraplan_id
+   LEFT JOIN c_invoice cc ON cc.c_invoice_id = pjp.c_invoice_credit_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND date_trunc(''day''::text, i.dateacct) = date_trunc(''day''::text, pjp.dateacct::timestamp with time zone) AND ((i.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar])) AND hdr.isactive = ''Y''::bpchar OR (i.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar])) AND hdr.isactive = ''N''::bpchar)) c
+        GROUP BY c.c_invoice_id) cobros ON cobros.c_invoice_id = i.c_invoice_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND (cobros.amount IS NULL OR i.grandtotal <> cobros.amount) AND i.initialcurrentaccountamt > 0::numeric AND (dt.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND "position"(dt.doctypekey::text, ''CDN''::text) < 1 AND (i.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar]));';
+
+-- raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_dailysales_current_account_filtered(integer, integer, integer, date, date, date, date, boolean)
+  OWNER TO libertya;
+
+--v_dailysales_current_account_payments_filtered
+  
+CREATE OR REPLACE FUNCTION v_dailysales_current_account_payments_filtered(
+    orgid integer,
+    posid integer,
+    userid integer,
+    datefrom date,
+    dateto date)
+  RETURNS SETOF v_dailysales_type AS
+$BODY$
+declare
+	consulta varchar;
+	whereDatePayments varchar;
+	wherePOSPayments varchar;
+	whereUserPayments varchar;
+	whereOrg varchar;
+	whereClauseStd varchar;
+	posJournalPaymentsFrom varchar;
+	dateFromPOSJournalPayments varchar;
+	dateToPOSJournalPayments varchar;
+	orgIDPOSJournalPayments integer;
+	adocument v_dailysales_type;
+BEGIN
+	-- Armado de las condiciones en base a los parámetros
+	-- Organización
+	whereOrg = '';
+	if orgID is not null AND orgID > 0 THEN
+		whereOrg = ' AND i.ad_org_id = ' || orgID;
+	END IF;
+
+	-- Fechas para allocations y facturas
+	whereDatePayments = '';
+	if dateFrom is not null then
+		whereDatePayments = ' AND date_trunc(''day'', pjp.allocationdate) >= date_trunc(''day'', ''' || dateFrom || '''::date)';
+	end if;
+
+	if dateTo is not null then
+		whereDatePayments = whereDatePayments || ' AND date_trunc(''day'', pjp.allocationdate) <= date_trunc(''day'', ''' || dateTo || '''::date) ';
+	end if;
+	
+	-- TPV
+	wherePOSPayments = ' AND (' || posID || ' = -1 OR COALESCE(pjh.c_pos_id, pj.c_pos_id) = ' || posID || ')';
+
+	-- Usuario
+	whereUserPayments = ' AND (' || userID || ' = -1 OR COALESCE(pjh.ad_user_id, pj.ad_user_id) = ' || userID || ')';
+
+	-- Condiciones básicas del reporte
+	whereClauseStd = ' ( i.issotrx = ''Y'' ' ||
+			 whereOrg || 
+			 ' AND (i.docstatus = ''CO'' or i.docstatus = ''CL'' or i.docstatus = ''RE'' or i.docstatus = ''VO'' OR i.docstatus = ''??'') ' ||
+			 ' AND dtc.isfiscaldocument = ''Y'' ' || 
+			 ' AND (dtc.isfiscal is null OR dtc.isfiscal = ''N'' OR (dtc.isfiscal = ''Y'' AND i.fiscalalreadyprinted = ''Y'')) ' ||
+			 ' AND dtc.doctypekey not in (''RTR'', ''RTI'', ''RCR'', ''RCI'') ' || 
+			 ' AND (dtc.transactiontypefrontliva is null OR dtc.transactiontypefrontliva = ''S'') ' || 
+			 ' ) ';
+
+	-- Armado del llamado a la función que ejecuta la vista filtrada c_posjournalpayments_v
+	dateFromPOSJournalPayments = (CASE WHEN dateFrom is null THEN 'null::date' ELSE '''' || dateFrom || '''::date' END);
+	dateToPOSJournalPayments = (CASE WHEN dateTo is null THEN 'null::date' ELSE '''' || dateTo || '''::date' END);
+	orgIDPOSJournalPayments = (CASE WHEN orgID is null THEN -1 ELSE orgID END);
+	posJournalPaymentsFrom = 'c_posjournalpayments_v_filtered(' || orgIDPOSJournalPayments || ', ' || dateFromPOSJournalPayments || ', ' || dateToPOSJournalPayments || ')';
+
+	-- Armar la consulta
+	consulta = 'SELECT ''PCA''::character varying AS trxtype, pjp.ad_client_id, pjp.ad_org_id, 
+        CASE
+            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN pjp.c_invoice_credit_id
+            ELSE i.c_invoice_id
+        END AS c_invoice_id, pjp.allocationdate AS datetrx, pjp.c_payment_id, pjp.c_cashline_id, 
+        CASE
+            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN i.c_invoice_id
+            ELSE pjp.c_invoice_credit_id
+        END AS c_invoice_credit_id, pjp.tendertype, pjp.documentno, pjp.description, pjp.info, pjp.amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, 
+        CASE
+            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.c_doctype_id
+            WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.c_doctype_id
+            WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.c_pospaymentmedium_id
+            ELSE p.c_pospaymentmedium_id
+        END AS c_pospaymentmedium_id, 
+        CASE
+            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.docbasetype::character varying
+            WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.docbasetype::character varying
+            WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.name
+            ELSE ppm.name
+        END AS pospaymentmediumname, pjp.m_entidadfinanciera_id, ef.name AS entidadfinancieraname, ef.value AS entidadfinancieravalue, pjp.m_entidadfinancieraplan_id, efp.name AS planname, pjp.docstatus, i.issotrx, pjp.dateacct, i.dateacct::date AS invoicedateacct, COALESCE(pjh.c_posjournal_id, pj.c_posjournal_id) AS c_posjournal_id, COALESCE(pjh.ad_user_id, pj.ad_user_id) AS ad_user_id, COALESCE(pjh.c_pos_id, pj.c_pos_id) AS c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+   FROM ' || posJournalPaymentsFrom || ' pjp
+   JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+   LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   JOIN c_allocationhdr hdr ON hdr.c_allocationhdr_id = pjp.c_allocationhdr_id
+   LEFT JOIN c_posjournal pjh ON pjh.c_posjournal_id = hdr.c_posjournal_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+   LEFT JOIN c_payment p ON p.c_payment_id = pjp.c_payment_id
+   LEFT JOIN c_pospaymentmedium ppm ON ppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+   LEFT JOIN c_cashline c ON c.c_cashline_id = pjp.c_cashline_id
+   LEFT JOIN c_pospaymentmedium ppmc ON ppmc.c_pospaymentmedium_id = c.c_pospaymentmedium_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = pjp.m_entidadfinanciera_id
+   LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = pjp.m_entidadfinancieraplan_id
+   LEFT JOIN c_invoice cc ON cc.c_invoice_id = pjp.c_invoice_credit_id
+   LEFT JOIN c_doctype dt ON cc.c_doctypetarget_id = dt.c_doctype_id
+  WHERE ' || whereClauseStd || whereDatePayments || whereUserPayments || wherePOSPayments ||
+  ' AND date_trunc(''day''::text, i.dateacct) <> date_trunc(''day''::text, pjp.allocationdateacct::timestamp with time zone) AND i.initialcurrentaccountamt > 0::numeric AND hdr.isactive = ''Y''::bpchar AND ((dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) OR (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL);';
+
+-- raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_dailysales_current_account_payments_filtered(integer, integer, integer, date, date)
+  OWNER TO libertya;
+
+--v_dailysales_invoices_filtered
+
+CREATE OR REPLACE FUNCTION v_dailysales_invoices_filtered(
+    orgid integer,
+    posid integer,
+    userid integer,
+    datefrom date,
+    dateto date,
+    invoicedatefrom date,
+    invoicedateto date,
+    addinvoicedate boolean)
+  RETURNS SETOF v_dailysales_type AS
+$BODY$
+declare
+	consulta varchar;
+	whereDateInvoices varchar;
+	whereInvoiceDate varchar;
+	wherePOSInvoices varchar;
+	whereUserInvoices varchar;
+	whereOrg varchar;
+	whereClauseStd varchar;
+	adocument v_dailysales_type;
+BEGIN
+	-- Armado de las condiciones en base a los parámetros
+	-- Organización
+	whereOrg = '';
+	if orgID is not null AND orgID > 0 THEN
+		whereOrg = ' AND i.ad_org_id = ' || orgID;
+	END IF;
+	
+	-- Fecha de factura
+	whereInvoiceDate = '';
+	if addInvoiceDate then
+		if invoiceDateFrom is not null then
+			whereInvoiceDate = ' AND date_trunc(''day'', i.dateacct) >= date_trunc(''day'', '''|| invoiceDateFrom || '''::date)';
+		end if;
+		if invoiceDateTo is not null then
+			whereInvoiceDate = whereInvoiceDate || ' AND date_trunc(''day'', i.dateacct) <= date_trunc(''day'', ''' || invoiceDateTo || '''::date) ';
+		end if;
+	end if;
+
+	-- Fechas para allocations y facturas
+	whereDateInvoices = '';
+	if dateFrom is not null then
+		whereDateInvoices = ' AND date_trunc(''day''::text, i.dateinvoiced) >= date_trunc(''day'', ''' || dateFrom || '''::date)';
+	end if;
+
+	if dateTo is not null then
+		whereDateInvoices = whereDateInvoices || ' AND date_trunc(''day''::text, i.dateinvoiced) <= date_trunc(''day'', ''' || dateTo || '''::date) ';
+	end if;
+	
+	-- TPV
+	wherePOSInvoices = ' AND (' || posID || ' = -1 OR pj.c_pos_id = ' || posID || ')';
+
+	-- Usuario
+	whereUserInvoices = ' AND (' || userID || ' = -1 OR pj.ad_user_id = ' || userID || ')';
+
+	-- Condiciones básicas del reporte
+	whereClauseStd = ' ( i.issotrx = ''Y'' ' ||
+			 whereOrg || 
+			 ' AND (i.docstatus = ''CO'' or i.docstatus = ''CL'' or i.docstatus = ''RE'' or i.docstatus = ''VO'' OR i.docstatus = ''??'') ' ||
+			 ' AND dtc.isfiscaldocument = ''Y'' ' || 
+			 ' AND (dtc.isfiscal is null OR dtc.isfiscal = ''N'' OR (dtc.isfiscal = ''Y'' AND i.fiscalalreadyprinted = ''Y'')) ' ||
+			 ' AND dtc.doctypekey not in (''RTR'', ''RTI'', ''RCR'', ''RCI'') ' || 
+			 ' AND (dtc.transactiontypefrontliva is null OR dtc.transactiontypefrontliva = ''S'') ' || 
+			 ' ) ';
+
+	-- Agregar las condiciones anteriores
+	whereClauseStd = whereClauseStd || whereInvoiceDate || whereDateInvoices || wherePOSInvoices || whereUserInvoices;
+
+	-- Armar la consulta
+	consulta = 'SELECT ''I''::character varying AS trxtype, i.ad_client_id, i.ad_org_id, i.c_invoice_id, date_trunc(''day''::text, i.dateinvoiced) AS datetrx, NULL::integer AS c_payment_id, NULL::integer AS c_cashline_id, NULL::integer AS c_invoice_credit_id, dtc.docbasetype AS tendertype, i.documentno, i.description, NULL::unknown AS info, i.grandtotal * dtc.signo_issotrx::numeric AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, dtc.c_doctype_id AS c_pospaymentmedium_id, dtc.name AS pospaymentmediumname, NULL::integer AS m_entidadfinanciera_id, NULL::unknown AS entidadfinancieraname, NULL::unknown AS entidadfinancieravalue, NULL::integer AS m_entidadfinancieraplan_id, NULL::unknown AS planname, i.docstatus, i.issotrx, i.dateacct::date AS dateacct, i.dateacct::date AS invoicedateacct, pj.c_posjournal_id, pj.ad_user_id, pj.c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+   FROM c_invoice i
+   LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+  WHERE ' || whereClauseStd ||
+  ' AND NOT (
+  		EXISTS (
+			SELECT * FROM (
+				SELECT *
+				FROM c_allocationline al
+				WHERE i.c_invoice_id = al.c_invoice_id AND i.isvoidable = ''Y''::bpchar 
+			) as FOO
+			JOIN c_payment p ON p.c_payment_id = foo.c_payment_id
+			JOIN c_cashline cl ON cl.c_payment_id = p.c_payment_id
+		)
+	);';
+
+-- raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_dailysales_invoices_filtered(integer, integer, integer, date, date, date, date, boolean)
+  OWNER TO libertya;
+
+--v_dailysales_v2_filtered
+
+CREATE OR REPLACE FUNCTION v_dailysales_v2_filtered(
+    orgid integer,
+    posid integer,
+    userid integer,
+    datefrom date,
+    dateto date,
+    invoicedatefrom date,
+    invoicedateto date,
+    addinvoicedate boolean)
+  RETURNS SETOF v_dailysales_type AS
+$BODY$
+declare
+	consulta varchar;
+	whereDateInvoices varchar;
+	whereDatePayments varchar;
+	whereInvoiceDate varchar;
+	wherePOSInvoices varchar;
+	wherePOSPayments varchar;
+	whereUserInvoices varchar;
+	whereUserPayments varchar;
+	whereOrg varchar;
+	whereClauseStd varchar;
+	posJournalPaymentsFrom varchar;
+	dateFromPOSJournalPayments varchar;
+	dateToPOSJournalPayments varchar;
+	orgIDPOSJournalPayments integer;
+	adocument v_dailysales_type;
+BEGIN
+	-- Armado de las condiciones en base a los parámetros
+	-- Organización
+	whereOrg = '';
+	if orgID is not null AND orgID > 0 THEN
+		whereOrg = ' AND i.ad_org_id = ' || orgID;
+	END IF;
+	
+	-- Fecha de factura
+	whereInvoiceDate = '';
+	if addInvoiceDate then
+		if invoiceDateFrom is not null then
+			whereInvoiceDate = ' AND date_trunc(''day'', i.dateacct) >= date_trunc(''day'', '''|| invoiceDateFrom || '''::date)';
+		end if;
+		if invoiceDateTo is not null then
+			whereInvoiceDate = whereInvoiceDate || ' AND date_trunc(''day'', i.dateacct) <= date_trunc(''day'', ''' || invoiceDateTo || '''::date) ';
+		end if;
+	end if;
+
+	-- Fechas para allocations y facturas
+	whereDatePayments = '';
+	whereDateInvoices = '';
+	if dateFrom is not null then
+		whereDatePayments = ' AND date_trunc(''day'', pjp.allocationdate) >= date_trunc(''day'', ''' || dateFrom || '''::date)';
+		whereDateInvoices = ' AND date_trunc(''day''::text, i.dateinvoiced) >= date_trunc(''day'', ''' || dateFrom || '''::date)';
+	end if;
+
+	if dateTo is not null then
+		whereDatePayments = whereDatePayments || ' AND date_trunc(''day'', pjp.allocationdate) <= date_trunc(''day'', ''' || dateTo || '''::date) ';
+		whereDateInvoices = whereDateInvoices || ' AND date_trunc(''day''::text, i.dateinvoiced) <= date_trunc(''day'', ''' || dateTo || '''::date) ';
+	end if;
+	
+	-- TPV
+	wherePOSPayments = ' AND (' || posID || ' = -1 OR COALESCE(pjh.c_pos_id, pj.c_pos_id) = ' || posID || ')';
+	wherePOSInvoices = ' AND (' || posID || ' = -1 OR pj.c_pos_id = ' || posID || ')';
+
+	-- Usuario
+	whereUserPayments = ' AND (' || userID || ' = -1 OR COALESCE(pjh.ad_user_id, pj.ad_user_id) = ' || userID || ')';
+	whereUserInvoices = ' AND (' || userID || ' = -1 OR pj.ad_user_id = ' || userID || ')';
+
+	-- Condiciones básicas del reporte
+	whereClauseStd = ' ( i.issotrx = ''Y'' ' ||
+			 whereOrg || 
+			 ' AND (i.docstatus = ''CO'' or i.docstatus = ''CL'' or i.docstatus = ''RE'' or i.docstatus = ''VO'' OR i.docstatus = ''??'') ' ||
+			 ' AND dtc.isfiscaldocument = ''Y'' ' || 
+			 ' AND (dtc.isfiscal is null OR dtc.isfiscal = ''N'' OR (dtc.isfiscal = ''Y'' AND i.fiscalalreadyprinted = ''Y'')) ' ||
+			 ' AND dtc.doctypekey not in (''RTR'', ''RTI'', ''RCR'', ''RCI'') ' || 
+			 ' AND (dtc.transactiontypefrontliva is null OR dtc.transactiontypefrontliva = ''S'') ' || 
+			 ' ) ';
+
+	-- Agregar las condiciones anteriores
+	whereClauseStd = whereClauseStd || whereInvoiceDate;
+
+	-- Armado del llamado a la función que ejecuta la vista filtrada c_posjournalpayments_v
+	dateFromPOSJournalPayments = (CASE WHEN dateFrom is null THEN 'null::date' ELSE '''' || dateFrom || '''::date' END);
+	dateToPOSJournalPayments = (CASE WHEN dateTo is null THEN 'null::date' ELSE '''' || dateTo || '''::date' END);
+	orgIDPOSJournalPayments = (CASE WHEN orgID is null THEN -1 ELSE orgID END);
+	posJournalPaymentsFrom = 'c_posjournalpayments_v_filtered(' || orgIDPOSJournalPayments || ', ' || dateFromPOSJournalPayments || ', ' || dateToPOSJournalPayments || ')';
+
+	-- Armar la consulta
+	consulta = '(        (         SELECT ''P''::character varying AS trxtype, pjp.ad_client_id, pjp.ad_org_id, 
+                                CASE
+                                    WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN pjp.c_invoice_credit_id
+                                    ELSE i.c_invoice_id
+                                END AS c_invoice_id, pjp.allocationdate AS datetrx, pjp.c_payment_id, pjp.c_cashline_id, 
+                                CASE
+                                    WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN i.c_invoice_id
+                                    ELSE pjp.c_invoice_credit_id
+                                END AS c_invoice_credit_id, pjp.tendertype, pjp.documentno, pjp.description, pjp.info, pjp.amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, 
+                                CASE
+                                    WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.c_doctype_id
+                                    WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.c_doctype_id
+                                    WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.c_pospaymentmedium_id
+                                    ELSE p.c_pospaymentmedium_id
+                                END AS c_pospaymentmedium_id, 
+                                CASE
+                                    WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.docbasetype::character varying
+                                    WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.docbasetype::character varying
+                                    WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.name
+                                    ELSE ppm.name
+                                END AS pospaymentmediumname, pjp.m_entidadfinanciera_id, ef.name AS entidadfinancieraname, ef.value AS entidadfinancieravalue, pjp.m_entidadfinancieraplan_id, efp.name AS planname, pjp.docstatus, i.issotrx, pjp.dateacct, i.dateacct::date AS invoicedateacct, COALESCE(pjh.c_posjournal_id, pj.c_posjournal_id) AS c_posjournal_id, COALESCE(pjh.ad_user_id, pj.ad_user_id) AS ad_user_id, COALESCE(pjh.c_pos_id, pj.c_pos_id) AS c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+                           FROM ' || posJournalPaymentsFrom || ' pjp
+                      JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+                 LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+            JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+       JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   JOIN c_allocationhdr hdr ON hdr.c_allocationhdr_id = pjp.c_allocationhdr_id
+   LEFT JOIN c_posjournal pjh ON pjh.c_posjournal_id = hdr.c_posjournal_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+   LEFT JOIN c_payment p ON p.c_payment_id = pjp.c_payment_id
+   LEFT JOIN c_pospaymentmedium ppm ON ppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+   LEFT JOIN c_cashline c ON c.c_cashline_id = pjp.c_cashline_id
+   LEFT JOIN c_pospaymentmedium ppmc ON ppmc.c_pospaymentmedium_id = c.c_pospaymentmedium_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = pjp.m_entidadfinanciera_id
+   LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = pjp.m_entidadfinancieraplan_id
+   LEFT JOIN c_invoice cc ON cc.c_invoice_id = pjp.c_invoice_credit_id
+   LEFT JOIN c_doctype dt ON cc.c_doctypetarget_id = dt.c_doctype_id
+  WHERE ' || whereClauseStd || whereDatePayments || whereUserPayments || wherePOSPayments ||
+  ' AND (date_trunc(''day''::text, i.dateacct) = date_trunc(''day''::text, pjp.dateacct::timestamp with time zone) OR i.initialcurrentaccountamt = 0::numeric) AND ((dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) OR (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL) AND (pjp.c_invoice_credit_id IS NULL OR pjp.c_invoice_credit_id IS NOT NULL AND (cc.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar]))) AND NOT (EXISTS ( SELECT c2.c_payment_id
+   FROM c_cashline c2
+  WHERE c2.c_payment_id = pjp.c_payment_id AND i.isvoidable = ''Y''::bpchar))
+                UNION ALL 
+                         SELECT ''NCC''::character varying AS trxtype, i.ad_client_id, i.ad_org_id, i.c_invoice_id, date_trunc(''day''::text, i.dateinvoiced) AS datetrx, NULL::unknown AS c_payment_id, NULL::unknown AS c_cashline_id, NULL::unknown AS c_invoice_credit_id, 
+                                CASE
+                                    WHEN i.paymentrule::text = ''T''::text OR i.paymentrule::text = ''Tr''::text THEN ''A''::character varying
+                                    WHEN i.paymentrule::text = ''B''::text THEN ''CA''::character varying
+                                    WHEN i.paymentrule::text = ''K''::text THEN ''C''::character varying
+                                    WHEN i.paymentrule::text = ''P''::text THEN ''CC''::character varying
+                                    WHEN i.paymentrule::text = ''S''::text THEN ''K''::character varying
+                                    ELSE i.paymentrule
+                                END AS tendertype, i.documentno, i.description, NULL::unknown AS info, i.grandtotal * dtc.signo_issotrx::numeric AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, 
+                                CASE
+                                    WHEN i.paymentrule::text = ''P''::text THEN NULL::integer
+                                    ELSE ( SELECT ad_ref_list.ad_ref_list_id
+                                       FROM ad_ref_list
+                                      WHERE ad_ref_list.ad_reference_id = 195 AND ad_ref_list.value::text = i.paymentrule::text
+                                     LIMIT 1)
+                                END AS c_pospaymentmedium_id, 
+                                CASE
+                                    WHEN i.paymentrule::text = ''T''::text OR i.paymentrule::text = ''Tr''::text THEN ''A''::character varying
+                                    WHEN i.paymentrule::text = ''B''::text THEN ''CA''::character varying
+                                    WHEN i.paymentrule::text = ''K''::text THEN ''C''::character varying
+                                    WHEN i.paymentrule::text = ''P''::text THEN NULL::character varying
+                                    WHEN i.paymentrule::text = ''S''::text THEN ''K''::character varying
+                                    ELSE i.paymentrule
+                                END AS pospaymentmediumname, NULL::unknown AS m_entidadfinanciera_id, NULL::unknown AS entidadfinancieraname, NULL::unknown AS entidadfinancieravalue, NULL::unknown AS m_entidadfinancieraplan_id, NULL::unknown AS planname, i.docstatus, i.issotrx, i.dateacct::date AS dateacct, i.dateacct::date AS invoicedateacct, pj.c_posjournal_id, pj.ad_user_id, pj.c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+                           FROM c_invoice i
+                      LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+                 JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+            JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+       JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND dtc.docbasetype = ''ARC''::bpchar AND ((i.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar])) OR (i.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar])) AND (EXISTS ( SELECT al.c_allocationline_id
+          FROM c_allocationline al
+         WHERE al.c_invoice_id = i.c_invoice_id))) AND NOT (EXISTS ( SELECT al.c_allocationline_id
+          FROM c_allocationline al
+         WHERE al.c_invoice_credit_id = i.c_invoice_id)))
+        UNION ALL 
+                 SELECT ''PA''::character varying AS trxtype, pjp.ad_client_id, pjp.ad_org_id, 
+                        CASE
+                            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN pjp.c_invoice_credit_id
+                            ELSE i.c_invoice_id
+                        END AS c_invoice_id, pjp.allocationdate AS datetrx, pjp.c_payment_id, pjp.c_cashline_id, 
+                        CASE
+                            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN i.c_invoice_id
+                            ELSE pjp.c_invoice_credit_id
+                        END AS c_invoice_credit_id, pjp.tendertype, pjp.documentno, pjp.description, pjp.info, pjp.amount * (-1)::numeric AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, 
+                        CASE
+                            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.c_doctype_id
+                            WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.c_doctype_id
+                            WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.c_pospaymentmedium_id
+                            ELSE p.c_pospaymentmedium_id
+                        END AS c_pospaymentmedium_id, 
+                        CASE
+                            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.docbasetype::character varying
+                            WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.docbasetype::character varying
+                            WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.name
+                            ELSE ppm.name
+                        END AS pospaymentmediumname, pjp.m_entidadfinanciera_id, ef.name AS entidadfinancieraname, ef.value AS entidadfinancieravalue, pjp.m_entidadfinancieraplan_id, efp.name AS planname, pjp.docstatus, i.issotrx, pjp.dateacct, i.dateacct::date AS invoicedateacct, COALESCE(pjh.c_posjournal_id, pj.c_posjournal_id) AS c_posjournal_id, COALESCE(pjh.ad_user_id, pj.ad_user_id) AS ad_user_id, COALESCE(pjh.c_pos_id, pj.c_pos_id) AS c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+                   FROM ' || posJournalPaymentsFrom || ' pjp
+              JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+         LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+    JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   JOIN c_allocationhdr hdr ON hdr.c_allocationhdr_id = pjp.c_allocationhdr_id
+   LEFT JOIN c_posjournal pjh ON pjh.c_posjournal_id = hdr.c_posjournal_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+   LEFT JOIN c_payment p ON p.c_payment_id = pjp.c_payment_id
+   LEFT JOIN c_pospaymentmedium ppm ON ppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+   LEFT JOIN c_cashline c ON c.c_cashline_id = pjp.c_cashline_id
+   LEFT JOIN c_pospaymentmedium ppmc ON ppmc.c_pospaymentmedium_id = c.c_pospaymentmedium_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = pjp.m_entidadfinanciera_id
+   LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = pjp.m_entidadfinancieraplan_id
+   LEFT JOIN c_invoice cc ON cc.c_invoice_id = pjp.c_invoice_credit_id
+   LEFT JOIN c_doctype dt ON cc.c_doctypetarget_id = dt.c_doctype_id
+  WHERE ' || whereClauseStd || whereDatePayments || whereUserPayments || wherePOSPayments ||
+  ' AND (date_trunc(''day''::text, i.dateacct) = date_trunc(''day''::text, pjp.dateacct::timestamp with time zone) OR i.initialcurrentaccountamt = 0::numeric) AND hdr.isactive = ''N''::bpchar AND NOT (EXISTS ( SELECT c2.c_payment_id
+   FROM c_cashline c2
+  WHERE c2.c_payment_id = pjp.c_payment_id AND i.isvoidable = ''Y''::bpchar)))
+UNION ALL 
+         SELECT ''ND''::character varying AS trxtype, i.ad_client_id, i.ad_org_id, i.c_invoice_id, date_trunc(''day''::text, i.dateinvoiced) AS datetrx, NULL::unknown AS c_payment_id, NULL::unknown AS c_cashline_id, NULL::unknown AS c_invoice_credit_id, 
+                CASE
+                    WHEN i.paymentrule::text = ''T''::text OR i.paymentrule::text = ''Tr''::text THEN ''A''::character varying
+                    WHEN i.paymentrule::text = ''B''::text THEN ''CA''::character varying
+                    WHEN i.paymentrule::text = ''K''::text THEN ''C''::character varying
+                    WHEN i.paymentrule::text = ''P''::text THEN ''CC''::character varying
+                    WHEN i.paymentrule::text = ''S''::text THEN ''K''::character varying
+                    ELSE i.paymentrule
+                END AS tendertype, i.documentno, i.description, NULL::unknown AS info, i.grandtotal * dtc.signo_issotrx::numeric AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, ( SELECT ad_ref_list.ad_ref_list_id
+                   FROM ad_ref_list
+                  WHERE ad_ref_list.ad_reference_id = 195 AND ad_ref_list.value::text = i.paymentrule::text
+                 LIMIT 1) AS c_pospaymentmedium_id, 
+                CASE
+                    WHEN i.paymentrule::text = ''T''::text OR i.paymentrule::text = ''Tr''::text THEN ''A''::character varying
+                    WHEN i.paymentrule::text = ''B''::text THEN ''CA''::character varying
+                    WHEN i.paymentrule::text = ''K''::text THEN ''C''::character varying
+                    WHEN i.paymentrule::text = ''P''::text THEN ''CC''::character varying
+                    WHEN i.paymentrule::text = ''S''::text THEN ''K''::character varying
+                    ELSE i.paymentrule
+                END AS pospaymentmediumname, NULL::unknown AS m_entidadfinanciera_id, NULL::unknown AS entidadfinancieraname, NULL::unknown AS entidadfinancieravalue, NULL::unknown AS m_entidadfinancieraplan_id, NULL::unknown AS planname, i.docstatus, i.issotrx, i.dateacct::date AS dateacct, i.dateacct::date AS invoicedateacct, pj.c_posjournal_id, pj.ad_user_id, pj.c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+           FROM c_invoice i
+      LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND "position"(dtc.doctypekey::text, ''CDN''::text) = 1 AND ((i.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar])) OR (i.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar])) AND (EXISTS ( SELECT al.c_allocationline_id
+   FROM c_allocationline al
+  WHERE al.c_invoice_credit_id = i.c_invoice_id))) AND NOT (EXISTS ( SELECT al.c_allocationline_id
+   FROM c_allocationline al
+  WHERE al.c_invoice_id = i.c_invoice_id));';
+
+--raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_dailysales_v2_filtered(integer, integer, integer, date, date, date, date, boolean)
+  OWNER TO libertya;
+
+--20171027-1104 Omisión de Presupuestos y sólo remitos de salida
+CREATE OR REPLACE FUNCTION getqtyreserved(
+    clientid integer,
+    orgid integer,
+    locatorid integer,
+    productid integer,
+    dateto date)
+  RETURNS numeric AS
+$BODY$
+/***********
+Obtiene la cantidad reservada a fecha de corte. Si no hay fecha de corte, entonces se devuelven los pendientes actuales.
+La cantidad pendiente a una fecha de corte equivale a:
+1) Sumar la cantidad pedida a esa fecha
+2) Sumar las NC con la marca Actualizar Pedido luego de esa fecha.
+3) Restar los transaction de inouts con tipo de documento que gestionen cantidades reservadas de stock y pendientes a fecha de corte. Salidas son negativas y entradas positivas.
+4) Restar las cantidades transferidas a fecha de corte
+*/
+DECLARE
+	reserved numeric;
+BEGIN
+	reserved := 0;
+	--Si no hay fecha de corte o es mayor o igual a la fecha actual, entonces se suman las cantidades reservadas de los pedidos
+	if ( dateTo is null OR dateTo >= current_date ) THEN
+		SELECT INTO reserved coalesce(sum(ol.qtyreserved),0)
+		from c_orderline ol
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+		inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+		where ol.qtyreserved <> 0
+			and o.processed = 'Y' 
+			and ol.m_product_id = productid
+			and l.m_locator_id = locatorid
+			and o.issotrx = 'Y';
+	ELSE
+		SELECT INTO reserved coalesce(sum(qty),0)
+		from (
+		-- Cantidad pedida a fecha de corte
+		select coalesce(sum(ol.qtyordered),0) as qty
+			from c_orderline ol
+			inner join c_order o on o.c_order_id = ol.c_order_id
+			inner join c_doctype dt on dt.c_doctype_id = o.c_doctype_id
+			inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+			inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+			where o.ad_client_id = clientid
+				and o.ad_org_id = orgid
+				and o.processed = 'Y' 
+				and ol.m_product_id = productid
+				and l.m_locator_id = locatorid
+				and o.issotrx = 'Y'
+				and dt.doctypekey NOT IN ('SOSOTH','SOSOT','SOON')
+				and o.dateordered::date <= dateTo::date
+				and o.dateordered::date <= current_date
+		union all
+		-- Notas de crédito con el check Actualizar Cantidades de Pedido
+		select coalesce(sum(il.qtyinvoiced),0) as qty
+		from c_invoiceline il
+		inner join c_invoice i on i.c_invoice_id = il.c_invoice_id
+		inner join c_orderline ol on ol.c_orderline_id = il.c_orderline_id
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+		inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+		where o.ad_client_id = clientid
+			and o.ad_org_id = orgid
+			and o.processed = 'Y' 
+			and ol.m_product_id = productid
+			and l.m_locator_id = locatorid
+			and i.issotrx = 'Y'
+			and i.updateorderqty = 'Y'
+			and o.dateordered::date <= dateTo::date
+			and i.dateinvoiced::date > dateTo::date
+			and i.dateinvoiced::date <= current_date
+		union all
+		--En transaction las salidas son negativas y las entradas positivas
+		select coalesce(sum(t.movementqty),0) as qty
+		from m_transaction t
+		inner join m_inoutline iol on iol.m_inoutline_id = t.m_inoutline_id
+		inner join m_inout io on io.m_inout_id = iol.m_inout_id
+		inner join c_doctype dt on dt.c_doctype_id = io.c_doctype_id
+		inner join c_orderline ol on ol.c_orderline_id = iol.c_orderline_id
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		inner join c_doctype as dto on dto.c_doctype_id = o.c_doctype_id
+		where t.ad_client_id = clientid
+			and t.ad_org_id = orgid
+			and t.m_product_id = productid
+			and t.m_locator_id = locatorid
+			and dt.reservestockmanagment = 'Y'
+			and dto.doctypekey NOT IN ('SOSOTH','SOSOT','SOON')
+			and o.issotrx = 'Y'
+			and o.dateordered::date <= dateTo::date
+			and t.movementdate::date <= dateTo::date
+			and t.movementdate::date <= current_date
+		union all
+		--Cantidades transferidas
+		select coalesce(sum(ol.qtyordered * -1),0) as qty
+		from c_orderline ol
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		inner join c_orderline rl on rl.c_orderline_id = ol.ref_orderline_id
+		inner join c_order r on r.c_order_id = rl.c_order_id
+		inner join c_doctype dt on dt.c_doctype_id = o.c_doctype_id
+		inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+		inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+		where o.ad_client_id = clientid
+			and o.ad_org_id = orgid
+			and o.processed = 'Y' 
+			and ol.m_product_id = productid
+			and l.m_locator_id = locatorid
+			and o.issotrx = 'Y'
+			and dt.doctypekey IN ('SOSOT')
+			and r.dateordered::date <= dateTo::date
+			and o.dateordered::date <= dateTo::date
+			and o.dateordered::date <= current_date
+		) todo;
+	END IF;
+	
+	return reserved;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION getqtyreserved(integer, integer, integer, integer, date)
+  OWNER TO libertya;
+  
+--20171030-1300 Nueva columna de configuración por tipo de documento para aplicar percepciones automáticamente
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_DocType','applyperception','character(1) NOT NULL DEFAULT ''Y''::bpchar'));
+
+--20171108-1351 Soporte postgres 8.4 creacion de indices validando que no existan previamente
+CREATE OR REPLACE FUNCTION addindexifnotexists(
+    indexname character varying,
+    tablename character varying,
+    columnname character varying)
+  RETURNS numeric AS
+$BODY$
+DECLARE
+	existe integer;
+BEGIN
+	
+	  select into existe count(1)
+	from
+	    pg_class t,
+	    pg_class i,
+	    pg_index ix,
+	    pg_attribute a
+	where
+	    t.oid = ix.indrelid
+	    and i.oid = ix.indexrelid
+	    and a.attrelid = t.oid
+	    and a.attnum = ANY(ix.indkey)
+	    and t.relkind = 'r'
+	    and lower(i.relname) = lower(indexname)
+	    and lower(t.relname) = lower(tablename)
+	    and lower(a.attname) = lower(columnname);
+
+
+	IF (existe = 0) THEN
+		EXECUTE 'CREATE INDEX ' || indexname || 
+			' ON ' || tablename || 
+			' (' || columnname || ')';
+		RETURN 1;
+	END IF;
+
+	RETURN 0;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION addindexifnotexists(character varying, character varying, character varying)
+  OWNER TO libertya;
+
+--20171108-1355 Indicie para referencia a inoutline desde invoiceline
+update ad_system set dummy = (SELECT addindexifnotexists('invoiceline_inoutline','c_invoiceline','m_inoutline_id')); 
+
+--20171108-1405 No se debe tener en cuenta el tipo de documento 'Pedido Transferible'
+CREATE OR REPLACE FUNCTION update_reserved(
+    clientid integer,
+    orgid integer,
+    productid integer)
+  RETURNS void AS
+$BODY$
+/***********
+Actualiza la cantidad reservada de los depósitos de la compañía, organización y artículo parametro, 
+siempre y cuando existan los regitros en m_storage 
+y sólo sobre locators marcados como default ya que asi se realiza al procesar pedidos.
+Las cantidades reservadas se obtienen de pedidos procesados. 
+IMPORTANTE: No funciona para artículos que no son ITEMS (Stockeables)
+*/
+BEGIN
+	update m_storage s
+	set qtyreserved = coalesce((select sum(ol.qtyreserved) as qtypending
+					from c_orderline ol
+					inner join c_order o on o.c_order_id = ol.c_order_id
+					inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+					inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+					inner join c_doctype dt on dt.c_doctype_id = o.c_doctypetarget_id
+					where ol.qtyreserved <> 0
+						and o.processed = 'Y' 
+						and s.m_product_id = ol.m_product_id
+						and s.m_locator_id = l.m_locator_id
+						and o.issotrx = 'Y'
+						and dt.doctypekey <> 'SOSOT'),0)
+	where ad_client_id = clientid
+		and (orgid = 0 or ad_org_id = orgid)
+		and (productid = 0 or m_product_id = productid)
+		and s.m_locator_id IN (select defaultLocator 
+					from (select m_warehouse_id, max(m_locator_id) as defaultLocator
+						from m_locator l
+						where l.isdefault = 'Y' and l.isactive = 'Y'
+						GROUP by m_warehouse_id) as dl);
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION update_reserved(integer, integer, integer)
+  OWNER TO libertya;
+  
+--20171109-1344 Sobrecarga de funcion para gestion de indices que soporta whereclause
+CREATE OR REPLACE FUNCTION addindexifnotexists(
+    indexname character varying,
+    tablename character varying,
+    columnname character varying,
+    whereclause character varying)
+  RETURNS numeric AS
+$BODY$
+DECLARE
+	existe integer;
+BEGIN
+	
+	  select into existe count(1)
+	from
+	    pg_class t,
+	    pg_class i,
+	    pg_index ix,
+	    pg_attribute a
+	where
+	    t.oid = ix.indrelid
+	    and i.oid = ix.indexrelid
+	    and a.attrelid = t.oid
+	    and a.attnum = ANY(ix.indkey)
+	    and t.relkind = 'r'
+	    and lower(i.relname) = lower(indexname)
+	    and lower(t.relname) = lower(tablename)
+	    and lower(a.attname) = lower(columnname);
+
+
+	IF (existe = 0) THEN
+		EXECUTE 'CREATE INDEX ' || indexname || 
+			' ON ' || tablename || 
+			' (' || columnname || ') ' || 
+			whereclause;
+		RETURN 1;
+	END IF;
+
+	RETURN 0;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION addindexifnotexists(character varying, character varying, character varying, character varying)
+  OWNER TO libertya;
+
+--20171109-1344 La funcion con 3 argumentos llama a la completa
+CREATE OR REPLACE FUNCTION addindexifnotexists(
+    indexname character varying,
+    tablename character varying,
+    columnname character varying)
+  RETURNS numeric AS
+$BODY$
+BEGIN
+	RETURN addindexifnotexists(indexname, tablename, columnname, '');
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION addindexifnotexists(character varying, character varying, character varying)
+  OWNER TO libertya;
+
+--20171109-1344 Indice especial para gestion tarjetas
+update ad_system set dummy = (SELECT addindexifnotexists('payment_auditstatus','c_payment','auditstatus','WHERE auditstatus=''TV'''));

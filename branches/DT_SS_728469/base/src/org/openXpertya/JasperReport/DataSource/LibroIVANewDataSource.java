@@ -21,6 +21,7 @@ import org.openXpertya.model.MPreference;
 import org.openXpertya.util.CPreparedStatement;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
+import org.openXpertya.util.LibroIVAUtils;
 import org.openXpertya.util.Util;
 
 import net.sf.jasperreports.engine.JRDataSource;
@@ -157,13 +158,13 @@ public class LibroIVANewDataSource implements JRDataSource {
 						+ "			coalesce(inv.puntodeventa,0) as puntodeventa, "
 						+ "			cdt.c_doctype_id, "
 						+ "			cdt.docbasetype, "
-						+ "			(currencyconvert(cit.gravado, inv.c_currency_id, 118, inv.dateacct::timestamp with time zone, inv.c_conversiontype_id, inv.ad_client_id, inv.ad_org_id) * cdt.signo::numeric * "+signOfSign+"::numeric)::numeric(20,2) AS netoGravado,"
-						+ "			(currencyconvert(cit.nogravado, inv.c_currency_id, 118, inv.dateacct::timestamp with time zone, inv.c_conversiontype_id, inv.ad_client_id, inv.ad_org_id) * cdt.signo::numeric * "+signOfSign+"::numeric)::numeric(20,2) AS netoNoGravado, "
-						+ "			(currencyconvert(inv.grandtotal, inv.c_currency_id, 118, inv.dateacct::timestamp with time zone, inv.c_conversiontype_id, inv.ad_client_id, inv.ad_org_id) * cdt.signo::numeric * "+signOfSign+"::numeric)::numeric(20,2) AS total, "
+						+ "			(currencyconvert(cit.gravado, inv.c_currency_id, ?, inv.dateacct::timestamp with time zone, inv.c_conversiontype_id, inv.ad_client_id, inv.ad_org_id) * cdt.signo::numeric * "+signOfSign+"::numeric)::numeric(20,2) AS netoGravado,"
+						+ "			(currencyconvert(cit.nogravado, inv.c_currency_id, ?, inv.dateacct::timestamp with time zone, inv.c_conversiontype_id, inv.ad_client_id, inv.ad_org_id) * cdt.signo::numeric * "+signOfSign+"::numeric)::numeric(20,2) AS netoNoGravado, "
+						+ "			(currencyconvert(inv.grandtotal, inv.c_currency_id, ?, inv.dateacct::timestamp with time zone, inv.c_conversiontype_id, inv.ad_client_id, inv.ad_org_id) * cdt.signo::numeric * "+signOfSign+"::numeric)::numeric(20,2) AS total, "
 						+ "			ct.c_tax_name AS item, "
-						+ "			(currencyconvert(cit.importe, inv.c_currency_id, 118, inv.dateacct::timestamp with time zone, inv.c_conversiontype_id, inv.ad_client_id, inv.ad_org_id) * cdt.signo::numeric * "+signOfSign+"::numeric)::numeric(20,2) AS importe "
+						+ "			(currencyconvert(cit.importe, inv.c_currency_id, ?, inv.dateacct::timestamp with time zone, inv.c_conversiontype_id, inv.ad_client_id, inv.ad_org_id) * cdt.signo::numeric * "+signOfSign+"::numeric)::numeric(20,2) AS importe "
 
-						+ "		FROM ( SELECT c_invoice.c_invoice_id, c_invoice.ad_client_id, c_invoice.ad_org_id, c_invoice.isactive, c_invoice.created, c_invoice.createdby, c_invoice.updated, c_invoice.updatedby, c_invoice.c_currency_id, c_invoice.c_conversiontype_id, c_invoice.documentno, c_invoice.c_bpartner_id, c_invoice.dateacct, c_invoice.dateinvoiced, c_invoice.totallines, c_invoice.grandtotal, c_invoice.issotrx, c_invoice.c_doctype_id, c_invoice.nombrecli, c_invoice.nroidentificcliente, c_invoice.puntodeventa, c_invoice.fiscalalreadyprinted "
+						+ "		FROM ( SELECT c_invoice.c_invoice_id, c_invoice.ad_client_id, c_invoice.ad_org_id, c_invoice.isactive, c_invoice.created, c_invoice.createdby, c_invoice.updated, c_invoice.updatedby, c_invoice.c_currency_id, c_invoice.c_conversiontype_id, c_invoice.documentno, c_invoice.c_bpartner_id, c_invoice.dateacct, c_invoice.dateinvoiced, c_invoice.totallines, c_invoice.grandtotal, c_invoice.issotrx, c_doctype.c_doctype_id, c_invoice.nombrecli, c_invoice.nroidentificcliente, c_invoice.puntodeventa, c_invoice.fiscalalreadyprinted, c_invoice.cae "
 						+ "     	   FROM c_invoice "
 						+ "				INNER JOIN c_doctype ON c_invoice.c_doctypetarget_id = c_doctype.c_doctype_id "
 						+ "     	   WHERE c_invoice.ad_client_id = ? "
@@ -171,8 +172,6 @@ public class LibroIVANewDataSource implements JRDataSource {
 						+ " 		     AND (c_invoice.dateacct::date between ? ::date and ? ::date) "
 						+ getOrgCheck("c_invoice"));// '2012/06/01' and '2012/08/31')
 											// "+getOrgCheck())
-
-		String docStatusClause = " AND (c_invoice.docstatus = 'CO'::bpchar OR c_invoice.docstatus = 'CL'::bpchar OR c_invoice.docstatus = 'RE'::bpchar OR c_invoice.docstatus = 'VO'::bpchar OR c_invoice.docstatus = '??'::bpchar) ";
 		// Si no es ambos
 		if (!p_transactionType.equals("B")) {
 			// Si es transacción de ventas, C = Customer(Cliente)
@@ -186,11 +185,10 @@ public class LibroIVANewDataSource implements JRDataSource {
 				query.append(
 						" AND ((c_invoice.issotrx = 'N' AND c_doctype.transactiontypefrontliva is null) OR c_doctype.transactiontypefrontliva = '"
 								+ MDocType.TRANSACTIONTYPEFRONTLIVA_Purchases + "') ");
-				docStatusClause = " AND (c_invoice.docstatus = 'CO'::bpchar OR c_invoice.docstatus = 'CL'::bpchar OR c_invoice.docstatus = '??'::bpchar) ";
 			}
 		}
 			
-		query.append(docStatusClause);
+		query.append(LibroIVAUtils.getDocStatusFilter(p_transactionType, "c_doctype", "c_invoice"));
 		
 		query.append(" ) inv "
 				+ " 	INNER JOIN ( SELECT c_invoicetax.c_tax_id, c_invoicetax.c_invoice_id, c_invoicetax.taxamt AS importe, "
@@ -206,9 +204,8 @@ public class LibroIVANewDataSource implements JRDataSource {
 				+ "					    END AS gravado, "
 				+ "						c_invoicetax.ad_client_id "
 				+ "					 FROM c_invoicetax) cit ON cit.c_invoice_id = inv.c_invoice_id "
-				+ "		INNER JOIN ( SELECT c_doctype.c_doctype_id, c_doctype.name AS c_doctype_name, c_doctype.docbasetype, c_doctype.signo_issotrx AS signo, c_doctype.doctypekey, c_doctype.printname, c_doctype.isfiscaldocument, c_doctype.isfiscal "
-				+ " 				FROM c_doctype"
-				+ "					WHERE isfiscaldocument = 'Y') cdt ON cdt.c_doctype_id = inv.c_doctype_id "
+				+ "		INNER JOIN ( SELECT c_doctype.c_doctype_id, c_doctype.name AS c_doctype_name, c_doctype.docbasetype, c_doctype.signo_issotrx AS signo, c_doctype.doctypekey, c_doctype.printname, c_doctype.isfiscaldocument, c_doctype.isfiscal, c_doctype.iselectronic "
+				+ " 				FROM c_doctype ) cdt ON cdt.c_doctype_id = inv.c_doctype_id "
 				+ "		INNER JOIN ( SELECT c_tax.c_tax_id, c_tax.name AS c_tax_name, c_tax.c_taxcategory_id, c_tax.rate, taxindicator, sopotype, taxtype "
 				+ " 				FROM c_tax) ct ON ct.c_tax_id = cit.c_tax_id "
 				+ "		INNER JOIN ( SELECT c_taxcategory_id, c_taxcategory.ismanual "
@@ -217,8 +214,8 @@ public class LibroIVANewDataSource implements JRDataSource {
 				+ " 				FROM c_bpartner) cbp ON inv.c_bpartner_id = cbp.c_bpartner_id "
 				+ "		LEFT JOIN ( SELECT c_categoria_iva.c_categoria_iva_id, c_categoria_iva.name AS c_categoria_iva_name, c_categoria_iva.codigo AS codiva, c_categoria_iva.i_tipo_iva "
 				+ " 				FROM c_categoria_iva) cci ON cbp.c_categoria_iva_id = cci.c_categoria_iva_id "
-				+ " 	WHERE cdt.doctypekey::text <> ALL (ARRAY['RTR'::character varying, 'RTI'::character varying, 'RCR'::character varying, 'RCI'::character varying]::text[])"
-				+ "       AND (cdt.isfiscal is null OR cdt.isfiscal = 'N' OR (cdt.isfiscal = 'Y' AND inv.fiscalalreadyprinted = 'Y')) "
+				+ " 	WHERE cdt.doctypekey::text <> ALL (ARRAY['RTR'::character varying, 'RTI'::character varying, 'RCR'::character varying, 'RCI'::character varying]::text[]) "
+				+ LibroIVAUtils.getDocTypeFilter("cdt", "inv")
 				+ " 	ORDER BY date_trunc('day',inv.dateacct), puntodeventa, inv.documentno, cdt.c_doctype_id ");
 		return query.toString();
 	}
@@ -239,6 +236,11 @@ public class LibroIVANewDataSource implements JRDataSource {
 					ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE,
 					getQuery(), getTrxName(), true);
 			
+			Integer currencyID = Env.getContextAsInt(p_ctx, "$C_Currency_ID");
+			pstmt.setInt(j++, currencyID);
+			pstmt.setInt(j++, currencyID);
+			pstmt.setInt(j++, currencyID);
+			pstmt.setInt(j++, currencyID);
 			pstmt.setInt(j++, Env.getAD_Client_ID(Env.getCtx()));
 			pstmt.setTimestamp(j++, new Timestamp(this.p_dateFrom.getTime()));
 			pstmt.setTimestamp(j++, new Timestamp(this.p_dateTo.getTime()));
@@ -296,6 +298,7 @@ public class LibroIVANewDataSource implements JRDataSource {
 						.getString("nombrecli");
 				taxid = rs.getString("taxid");
 				ismanual = rs.getString("ismanual");
+				manualTax = ismanual.equals("Y");
 				if (Util.isEmpty(taxid, true)) {
 					String nroIdentificCliente = rs
 							.getString("nroidentificcliente");
@@ -305,7 +308,9 @@ public class LibroIVANewDataSource implements JRDataSource {
 				invoiceID = rs.getInt("c_invoice_id");
 				c_categoria_via_name = rs.getString("i_tipo_iva");
 				item = rs.getString("item");
-				if ((item.toLowerCase().indexOf("iva") > -1) && (rs.getBigDecimal("rate").compareTo(BigDecimal.ZERO) == 0) )
+				if ((item.toLowerCase().indexOf("iva") > -1) 
+						&& (rs.getBigDecimal("rate").compareTo(BigDecimal.ZERO) == 0) 
+						&& !manualTax )
 					item = "Exento";
 			/*	if (rs.getBigDecimal("rate").compareTo(BigDecimal.ZERO) == 0) {
 					item = "Exento";
@@ -386,7 +391,6 @@ public class LibroIVANewDataSource implements JRDataSource {
 						.add(total == null ? BigDecimal.ZERO : total);
 				totalIVA = totalIVA.add(importe);
 				categoriaIVA = rs.getString("c_categoria_iva_name");
-				manualTax = ismanual.equals("Y");
 				addTaxLine(categoriaIVA, item, allByCategoriaIVA, allTotalsTaxBaseAmtByCategoriaIVA, neto, importe,
 						rs.getBigDecimal("rate"), rs.getString("taxindicator"), rs.getString("sopotype"),
 						rs.getString("taxtype"), manualTax);

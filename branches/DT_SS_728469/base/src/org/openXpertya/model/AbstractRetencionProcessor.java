@@ -335,7 +335,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		// acorde a este porcentaje.
 		if (exceptionPercent.compareTo(Env.ZERO) > 0) {
 			BigDecimal rate = Env.ONE.subtract(exceptionPercent
-					.divide(Env.ONEHUNDRED));
+					.divide(Env.ONEHUNDRED, 2, BigDecimal.ROUND_HALF_EVEN));
 			newAmt = ammount.multiply(rate);
 		}
 
@@ -524,7 +524,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		for (int i = 0; i < invoices.size(); i++) {
 			MInvoiceLine[] lines = invoices.get(i).getLines();
 			for (int j = 0; j < lines.length; j++) {
-				amount = lines[j].getTaxAmt();
+				amount = amount.add(lines[j].getTaxAmt());
 			}
 		}
 		return amount;
@@ -772,7 +772,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		if (dateTo != null) {
 			sql += "			p.DateTrx::date <= ?::date AND ";
 		}
-		sql += "				EXISTS (SELECT c_payment_id "
+		sql += "				p.c_payment_id IN (SELECT c_payment_id "
 				+ "							FROM c_allocationhdr as ah "
 				+ "							INNER JOIN c_allocationline as al ON al.c_allocationhdr_id = ah.c_allocationhdr_id "
 				+ "							WHERE ah.isactive = 'Y' AND ah.docstatus in ('CO','CL') AND al.c_payment_id = p.c_payment_id AND allocationtype <> 'OPA') AND "
