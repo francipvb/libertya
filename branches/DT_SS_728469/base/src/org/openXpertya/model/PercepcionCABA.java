@@ -2,7 +2,6 @@ package org.openXpertya.model;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.Date;
 
 import org.openXpertya.util.Env;
 
@@ -104,8 +103,7 @@ public class PercepcionCABA extends PercepcionStandard {
 			return super.getPercepcionPercToApply();
 		}
 		String taxID = getPercepcionData().getBpartner().getTaxID();
-		Timestamp documentTrxDate = new Timestamp(getPercepcionData().getDocument().getDate().getTime());
-		return MBPartnerPadronBsAs.getBPartnerPerc("percepcion", taxID, documentTrxDate, padronType, null);
+		return MBPartnerPadronBsAs.getBPartnerPerc("percepcion", taxID, new Timestamp(getPercepcionData().getDocument().getDate().getTime()), padronType, null);
 	}
 
 	public BigDecimal getRegisterMinimumNetAmount(String padronType) {

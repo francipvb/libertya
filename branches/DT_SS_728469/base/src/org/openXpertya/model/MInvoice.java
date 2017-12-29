@@ -477,6 +477,33 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 										: " AND c_invoice_id <> "
 												+ excludedInvoiceID), docTypeID);
 	}
+	
+	/**
+	 * Obtener la fecha de facturación del último comprobante emitido
+	 * electrónicamente
+	 * 
+	 * @param ctx
+	 * @param docTypeID
+	 * @param excludedInvoiceID
+	 * @param trxName
+	 * @return
+	 */
+	public static Timestamp getLastFEDateIssued(
+			Properties ctx, Integer docTypeID, Integer excludedInvoiceID,
+			String trxName) {
+		// La fecha del comprobante no puede ser mayor al último electrónico
+		String sql = "select max(i.dateinvoiced) "
+				+ "from c_invoice i "
+				+ "inner join c_doctype dt on dt.c_doctype_id = i.c_doctypetarget_id "
+				+ "where i.c_doctypetarget_id = " + docTypeID
+				+ "			and dt.iselectronic = 'Y' "
+				+ "			and i.docstatus in ('CO','CL','VO','RE') "
+				+ "			and i.cae is not null "
+				+ "			and length(trim(i.cae)) > 0 "
+				+ (Util.isEmpty(excludedInvoiceID, true) ? "" : " AND i.c_invoice_id <> " + excludedInvoiceID);
+		
+		return DB.getSQLValueTimestamp( trxName,sql);
+	}
 
 	public void copyManualInvoiceTaxes(MInvoice from) throws Exception {
 		List<MInvoiceTax> invoiceTaxes = MInvoiceTax.getTaxesFromInvoice(from,
@@ -3312,6 +3339,41 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				return DocAction.STATUS_Invalid;
 			}
 			
+			// Si en el CompleteIt ya tenemos CAE asignado, validar que sea único no permitiendo completar la factura si ya existe otra Completa / Cerrada con el mismo CAE
+			// Esta validación logicamente no aplica para facturas "nuevas" ya que previo al completeIt todavía no tienen CAE
+			if (!Util.isEmpty(getcae(), true)) {
+				String documentNo = DB.getSQLValueString(get_TrxName(), " SELECT documentNo " +
+																		" FROM C_Invoice " +
+																		" WHERE cae = '" + getcae() + "' " +
+																		" AND C_Invoice_ID <> " + getC_Invoice_ID() +
+																		" AND AD_Client_ID = " + getAD_Client_ID() +
+																		" AND DocStatus IN ('CO', 'CL') "
+														);
+				if (documentNo != null) {
+					m_processMsg = "Ya existe una factura con CAE " + getcae() + ", registrado en la factura " + documentNo;
+					log.log(Level.SEVERE, m_processMsg);
+					return DocAction.STATUS_Invalid;
+				}
+			}
+			
+			// Si el usuario utilizó "Gestionar Factura Electrónica", validar unicidad del Nro de Documento.
+			// Para el mismo Tipo de Documento no pueden existir 2 facturas Completas / Cerradas con el mismo DocumentNo.
+			if (!Util.isEmpty(getcaeerror()) && getcaeerror().startsWith("Factura electronica editada manualmente")) {
+				int count = DB.getSQLValue(get_TrxName(), 	" SELECT count(1) " +
+															" FROM C_Invoice " +
+															" WHERE documentno = '" + getDocumentNo() + "' " +
+															" AND C_Invoice_ID <> " + getC_Invoice_ID() +
+															" AND AD_Client_ID = " + getAD_Client_ID() +
+															" AND C_DocTypeTarget_ID = " + getC_DocTypeTarget_ID() +
+															" AND DocStatus IN ('CO', 'CL') "
+											);
+				if (count > 0) {
+					m_processMsg = "Ya existe una factura con el numero de documento " + getDocumentNo();
+					log.log(Level.SEVERE, m_processMsg);
+					return DocAction.STATUS_Invalid;
+				}
+			}
+			
 		}
 		
 		// Fecha del CAI > que fecha de facturacion
@@ -3320,6 +3382,25 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				&& !TimeUtil.isSameDay(getDateInvoiced(), getDateCAI())){
 			setProcessMsg("@InvoicedDateAfterCAIDate@");
 			return DocAction.STATUS_Invalid;
+		}
+		
+		// Si el tipo de doc es electrónico, las fechas de comprobante y
+		// contable no pueden diferir. 
+		if(dt.iselectronic()){
+			if(!TimeUtil.isSameDay(getDateAcct(), getDateInvoiced())){
+				setProcessMsg("@DateInvoicedDateAcctNE@");
+				return DocAction.STATUS_Invalid;
+			}
+			
+			// Controlar que la fecha de facturación sea mayor o igual que la última emitida
+			// Sino error
+			Timestamp lastDateFE = getLastFEDateIssued(getCtx(), getC_DocTypeTarget_ID(), getID(), get_TrxName());
+			if (lastDateFE != null && lastDateFE.after(getDateInvoiced())
+					&& !TimeUtil.isSameDay(lastDateFE, getDateInvoiced())) {
+				setProcessMsg(
+						Msg.getMsg(getCtx(), "LastFEDateGreater", new Object[] { Env.getDateFormatted(lastDateFE) }));
+				return DocAction.STATUS_Invalid;
+			}
 		}
 		
 		return DocAction.STATUS_InProgress;

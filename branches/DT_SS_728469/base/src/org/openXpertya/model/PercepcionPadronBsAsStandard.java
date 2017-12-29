@@ -20,9 +20,8 @@ public class PercepcionPadronBsAsStandard extends PercepcionStandard {
 	@Override
 	public BigDecimal getPercepcionPercToApply() {
 		// Buscarlo por el cuit
-		Timestamp documentTrxDate = new Timestamp(getPercepcionData().getDocument().getDate().getTime());
 		BigDecimal perc = MBPartnerPadronBsAs.getBPartnerPerc("percepcion",
-				getPercepcionData().getBpartner().getTaxID(), documentTrxDate,
+				getPercepcionData().getBpartner().getTaxID(), new Timestamp(getPercepcionData().getDocument().getDate().getTime()),
 				MBPartnerPadronBsAs.PADRONTYPE_PadrónBsAs, null);
 		if(perc == null){
 			perc = super.getPercepcionPercToApply();
@@ -33,9 +32,8 @@ public class PercepcionPadronBsAsStandard extends PercepcionStandard {
 	@Override
 	public BigDecimal getMinimumNetAmount() {
 		// Buscarlo por el cuit
-		Timestamp documentTrxDate = new Timestamp(getPercepcionData().getDocument().getDate().getTime());
 		BigDecimal perc = MBPartnerPadronBsAs.getBPartnerPerc("percepcion",
-				getPercepcionData().getBpartner().getTaxID(), documentTrxDate,
+				getPercepcionData().getBpartner().getTaxID(), new Timestamp(getPercepcionData().getDocument().getDate().getTime()),
 				MBPartnerPadronBsAs.PADRONTYPE_PadrónBsAs, null);
 		if(perc == null){
 			return super.getMinimumNetAmount();

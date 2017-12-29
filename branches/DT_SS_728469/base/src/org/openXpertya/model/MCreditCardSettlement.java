@@ -664,9 +664,8 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 			return DocAction.STATUS_Invalid;
 		}
 
-		if (!MPeriod.isOpen(getCtx(), getPaymentDate(), MDocType.DOCBASETYPE_PaymentAllocation)) {
+		if (!MPeriod.isOpen(getCtx(), getPaymentDate(), MDocType.DOCBASETYPE_CreditCardSettlement)) {
 			m_processMsg = "@PeriodClosed@";
-
 			return DocAction.STATUS_Invalid;
 		}
 
@@ -717,7 +716,7 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 				sql.append("UPDATE ");
 				sql.append("	" + X_C_Payment.Table_Name + " ");
 				sql.append("SET ");
-				sql.append("	auditstatus = '" + status + "' ");
+				sql.append("	updated = now(), auditstatus = '" + status + "' ");
 				sql.append("WHERE ");
 				sql.append("	c_payment_id = " + rs.getInt(1));
 
@@ -907,6 +906,11 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 			return false;
 		}
 
+		if (!MPeriod.isOpen(getCtx(), getPaymentDate(), MDocType.DOCBASETYPE_CreditCardSettlement)) {
+			m_processMsg = "@PeriodClosed@";
+			return false;
+		}
+		
 		// Se revierte el estado de los cupones a "A verificar".
 		changeCouponsAuditStatus(X_C_Payment.AUDITSTATUS_ToVerify);
 
