@@ -2261,6 +2261,11 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		// Si es un débito, se aplican las percepciones
 		if (isDebit && !isProcessed()) {
 			setApplyPercepcion(true);
+		} 
+		
+		//Está separada la condición a propósito, porque sino no funciona combinado con las otras condiciones
+		if (isDiffCambio()) {
+			setApplyPercepcion(false);
 		}
 
 		/*
@@ -6456,6 +6461,21 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				|| docType.getDocTypeKey().equals(MDocType.DOCTYPE_Saldo_Inicial_Cliente_Credito)
 				|| docType.getDocTypeKey().equals(MDocType.DOCTYPE_Saldo_Inicial_Proveedor)
 				|| docType.getDocTypeKey().equals(MDocType.DOCTYPE_Saldo_Inicial_Proveedor_Credito);
+	}
+	
+	public boolean isDiffCambio() {
+		String valueProductDiffCambio = MPreference.GetCustomPreferenceValue("DIF_CAMBIO_ARTICULO");
+        String valueProductDiffCambioDeb = MPreference.GetCustomPreferenceValue("DIF_CAMBIO_ARTICULO_DEB");
+        String valueProductDiffCambioCred = MPreference.GetCustomPreferenceValue("DIF_CAMBIO_ARTICULO_CRED");
+        
+		int count = DB.getSQLValue(get_TrxName(), " SELECT count(1) FROM c_invoiceline il " +
+				" INNER JOIN m_product p ON il.m_product_id = p.m_product_id " +
+				" WHERE il.c_invoice_id = " + getID() +
+				" AND p.value IN ('" + valueProductDiffCambio + "',"
+						      + " '" + valueProductDiffCambioDeb + "',"
+							  + " '" + valueProductDiffCambioCred + "')");
+		
+		return count > 0;
 	}
 	
 } // MInvoice
