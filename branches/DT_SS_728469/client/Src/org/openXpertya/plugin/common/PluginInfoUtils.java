@@ -65,6 +65,7 @@ public class PluginInfoUtils extends PluginUtils {
 		}
 		catch (Exception e)
 		{
+			e.printStackTrace();
 			log.log( Level.WARNING," Imposible determinar pluginClassName para la ventana Info - aInfoClass:" + aInfoClass + " e.msg:" + e.getMessage());
 			return null;
 		}

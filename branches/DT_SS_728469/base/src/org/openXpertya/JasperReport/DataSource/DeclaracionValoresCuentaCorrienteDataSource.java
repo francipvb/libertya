@@ -22,7 +22,7 @@ public class DeclaracionValoresCuentaCorrienteDataSource extends
 	@Override
 	protected String getQuery() {
 		// Monto pendiente de la facturas
-		StringBuffer superSql = new StringBuffer("SELECT invoice_documentno, invoice_grandtotal, open as ingreso, egreso, open as total   FROM (");
+		StringBuffer superSql = new StringBuffer("SELECT invoice_documentno, invoice_grandtotal, description, open as ingreso, egreso, open as total   FROM (");
 		StringBuffer sql = new StringBuffer("SELECT dv.*,invoice_grandtotal-coalesce(ds.amount,0) as open  " +
 											"FROM "+getDSFunView("c_pos_declaracionvalores_ventas_filtered")+" as dv " +
 											"LEFT JOIN (select c_invoice_id as alloc_invoice_id, c_posjournal_id as alloc_journal_id, sum(amount+writeoffamt) as amount " +
@@ -37,7 +37,7 @@ public class DeclaracionValoresCuentaCorrienteDataSource extends
 		superSql.append(" WHERE (open > 0) ");
 		// NC libres
 		superSql.append(" UNION ALL ");
-		superSql.append(" SELECT invoice_documentno, invoice_grandtotal, ingreso, egreso, egreso * -1 as total ");
+		superSql.append(" SELECT invoice_documentno, invoice_grandtotal, description, ingreso, egreso, egreso * -1 as total ");
 		superSql.append(" FROM ");
 		superSql.append(getDSFunView("c_pos_declaracionvalores_v_filtered"));
 		superSql.append(" WHERE ");

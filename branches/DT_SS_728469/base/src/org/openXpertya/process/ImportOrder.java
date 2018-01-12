@@ -486,6 +486,10 @@ public class ImportOrder extends SvrProcess {
     					if( imp.getSalesRep_ID() != 0 ) {
     						order.setSalesRep_ID( imp.getSalesRep_ID());
     					}
+    					
+    					if ( imp.getM_Warehouse_ID() != 0) {
+    						order.setM_Warehouse_ID(imp.getM_Warehouse_ID());
+    					}
 
 //    					if( order.getSalesRep_ID() == 0 ) {
 //    						order.setSalesRep_ID( getAD_User_ID());

@@ -85,6 +85,9 @@ public class VCreateFromInvoice extends VCreateFrom {
     /** Tipo de Documento a crear */
     private MDocType docType;
     
+    /** Helper para centralizar lógica de modelo */
+	protected CreateFromInvoiceModel helper = new CreateFromInvoiceModel();
+    
 	@Override
 	protected CreateFromModel createHelper(){
     	return new CreateFromInvoiceModel();
@@ -388,7 +391,11 @@ public class VCreateFromInvoice extends VCreateFrom {
         }
 	}
 	
-	
+	protected CreateFromInvoiceModel getHelper() {
+		if (helper == null)
+			helper = new CreateFromInvoiceModel();
+		return helper;
+	}
 
 	
     /**
