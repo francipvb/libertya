@@ -129,17 +129,6 @@
 					</textElement>
 				<textFieldExpression   class="java.lang.String"><![CDATA["Domicilio: " + $P{BPARTNER_LOCATION}]]></textFieldExpression>
 				</textField>
-				<image  scaleImage="FillFrame" onErrorType="Blank" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-						x="4"
-						y="5"
-						width="198"
-						height="68"
-						key="image-1"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<graphicElement stretchType="NoStretch"/>
-					<imageExpression class="java.io.InputStream"><![CDATA[new java.io.StringBufferInputStream( new org.w3c.tools.codec.Base64Decoder($P{LOGO}).processString() )]]></imageExpression>
-				</image>
 			</band>
 		</title>
 		<pageHeader>
@@ -199,27 +188,6 @@
 						positionType="Float"/>
 					<dataSourceExpression><![CDATA[$P{SUBREPORT_OTHER_PAYMENTS_DATASOURCE}]]></dataSourceExpression>
 					<subreportExpression  class="java.io.InputStream"><![CDATA[$P{COMPILED_SUBREPORT_OTHER_PAYMENTS}]]></subreportExpression>
-				</subreport>
-				<subreport  isUsingCache="true">
-					<reportElement
-						mode="Transparent"
-						x="0"
-						y="58"
-						width="535"
-						height="30"
-						key="subreport-3"
-						positionType="Float"/>
-					<subreportParameter  name="OP_NUMBER">
-						<subreportParameterExpression><![CDATA[$P{OP_NUMBER}]]></subreportParameterExpression>
-					</subreportParameter>
-					<subreportParameter  name="OP_AMOUNT">
-						<subreportParameterExpression><![CDATA[$P{OP_AMOUNT}]]></subreportParameterExpression>
-					</subreportParameter>
-					<subreportParameter  name="RETENCIONES_AMOUNT">
-						<subreportParameterExpression><![CDATA[$P{RETENCIONES_AMOUNT}]]></subreportParameterExpression>
-					</subreportParameter>
-					<dataSourceExpression><![CDATA[$P{SUBREPORT_DOCS_DATASOURCE}]]></dataSourceExpression>
-					<subreportExpression  class="java.io.InputStream"><![CDATA[$P{COMPILED_SUBREPORT_DOCS}]]></subreportExpression>
 				</subreport>
 				<elementGroup><!--  Start: 1 !-->
 				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
@@ -333,8 +301,8 @@
 				</textField>
 				<staticText>
 					<reportElement
-						x="400"
-						y="439"
+						x="402"
+						y="453"
 						width="131"
 						height="23"
 						key="staticText-13"
@@ -343,7 +311,7 @@
 					<textElement textAlignment="Right" verticalAlignment="Middle">
 						<font size="12"/>
 					</textElement>
-				<text><![CDATA[LUIS IGNACIO AITA]]></text>
+				<text><![CDATA[Aclaración]]></text>
 				</staticText>
 				<staticText>
 					<reportElement
@@ -361,8 +329,8 @@
 				</staticText>
 				<line direction="TopDown">
 					<reportElement
-						x="400"
-						y="431"
+						x="402"
+						y="415"
 						width="131"
 						height="0"
 						forecolor="#666666"
@@ -372,7 +340,7 @@
 				</line>
 				<line direction="TopDown">
 					<reportElement
-						x="392"
+						x="402"
 						y="453"
 						width="131"
 						height="0"
@@ -459,17 +427,40 @@
 					</textElement>
 				<text><![CDATA[Notas de Crédito]]></text>
 				</staticText>
-				<image  scaleImage="FillFrame" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
+				<staticText>
 					<reportElement
-						x="449"
-						y="369"
-						width="54"
-						height="98"
-						key="image-2"/>
+						x="402"
+						y="415"
+						width="131"
+						height="23"
+						key="staticText-18"
+						positionType="Float"/>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<graphicElement stretchType="NoStretch"/>
-					<imageExpression class="java.io.InputStream"><![CDATA[new java.io.StringBufferInputStream( new org.w3c.tools.codec.Base64Decoder($P{FIRMA}).processString() )]]></imageExpression>
-				</image>
+					<textElement textAlignment="Right" verticalAlignment="Middle">
+						<font size="12"/>
+					</textElement>
+				<text><![CDATA[Firma]]></text>
+				</staticText>
+				<subreport  isUsingCache="true">
+					<reportElement
+						x="0"
+						y="56"
+						width="535"
+						height="30"
+						key="subreport-5"
+						positionType="Float"/>
+					<subreportParameter  name="OP_NUMBRE">
+						<subreportParameterExpression><![CDATA[$P{OP_NUMBER}]]></subreportParameterExpression>
+					</subreportParameter>
+					<subreportParameter  name="OP_AMOUNT">
+						<subreportParameterExpression><![CDATA[$P{OP_AMOUNT}]]></subreportParameterExpression>
+					</subreportParameter>
+					<subreportParameter  name="RETENCIONES_AMOUNT">
+						<subreportParameterExpression><![CDATA[$P{RETENCIONES_AMOUNT}]]></subreportParameterExpression>
+					</subreportParameter>
+					<dataSourceExpression><![CDATA[$P{SUBREPORT_DOCS_DATASOURCE}]]></dataSourceExpression>
+					<subreportExpression  class="java.io.InputStream"><![CDATA[$P{COMPILED_SUBREPORT_DOCS}]]></subreportExpression>
+				</subreport>
 			</band>
 		</summary>
 </jasperReport>
