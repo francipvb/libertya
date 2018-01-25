@@ -1522,7 +1522,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		for (int i = 0; i < fromLines.length; i++) {
 			MInvoiceLine line = new MInvoiceLine(getCtx(), 0, get_TrxName());
 
-			PO.copyValues(fromLines[i], line, getAD_Client_ID(), getAD_Org_ID());
+			PO.copyValues(fromLines[i], line, line.getAD_Client_ID(), line.getAD_Org_ID());
 			line.setC_Invoice_ID(getC_Invoice_ID());
 			line.setInvoice(this);
 			line.setC_InvoiceLine_ID(0); // new
@@ -2229,8 +2229,8 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				return false;
 			}
 			
-			// Validar CAI Obligatorio
-			if(partner.isMandatoryCAI() && Util.isEmpty(getCAI())){
+			// Validar CAI Obligatorio  --NACHO: Agrego validación solo si es factura de proveedores.
+			if(!isSOTrx() && partner.isMandatoryCAI() && Util.isEmpty(getCAI())){
 				log.saveError("MandatoryCAIValidationMsg", "");
 				return false;
 			}
@@ -2261,7 +2261,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		// Si es un débito, se aplican las percepciones
 		if (isDebit && !isProcessed()) {
 			setApplyPercepcion(true);
-		} 
+		}
 		
 		//Está separada la condición a propósito, porque sino no funciona combinado con las otras condiciones
 		if (isDiffCambio()) {
@@ -4892,8 +4892,9 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		setSkipExtraValidations(true);
 		
 		// Deep Copy
+		Timestamp dateDoc = isSOTrx()?Env.getDate():getDateAcct();
 
-		MInvoice reversal = copyFrom(this, Env.getDate(),
+		MInvoice reversal = copyFrom(this, dateDoc,
 				reversalDocType.getC_DocType_ID(), isSOTrx(), false,
 				get_TrxName(), true, true, true, !isSOTrx());
 
@@ -4915,6 +4916,11 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			setAuthorizationChainStatus(null);
 			reversal.setM_AuthorizationChain_ID(0);
 			reversal.setAuthorizationChainStatus(null);
+		}
+		
+		if(!isSOTrx()){
+			reversal.setDateAcct(getDateAcct());
+			reversal.setDateInvoiced(getDateInvoiced());
 		}
 		
 		// Seteo la bandera que indica si se trata de una anulación.
@@ -6462,7 +6468,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				|| docType.getDocTypeKey().equals(MDocType.DOCTYPE_Saldo_Inicial_Proveedor)
 				|| docType.getDocTypeKey().equals(MDocType.DOCTYPE_Saldo_Inicial_Proveedor_Credito);
 	}
-	
+
 	public boolean isDiffCambio() {
 		String valueProductDiffCambio = MPreference.GetCustomPreferenceValue("DIF_CAMBIO_ARTICULO");
         String valueProductDiffCambioDeb = MPreference.GetCustomPreferenceValue("DIF_CAMBIO_ARTICULO_DEB");
@@ -6477,7 +6483,6 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		
 		return count > 0;
 	}
-	
 } // MInvoice
 
 /*
