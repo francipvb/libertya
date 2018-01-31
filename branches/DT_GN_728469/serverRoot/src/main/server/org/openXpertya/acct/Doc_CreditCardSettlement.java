@@ -78,6 +78,9 @@ public class Doc_CreditCardSettlement extends Doc {
 			loadComissions();
 			loadExpenses();
 			
+			/*Agregado por Ibrian para setear correctamente el documentNo*/
+			p_vo.DocumentNo = ccs.getSettlementNo();
+			
 		} catch (Exception e) {
 			log.severe(e.getMessage());
 		}

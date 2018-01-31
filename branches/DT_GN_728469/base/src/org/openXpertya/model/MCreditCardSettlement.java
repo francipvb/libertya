@@ -831,6 +831,13 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 
 			boolean saveOk = true;
 
+			/*
+			 * Se carga la cuenta contable que debe utilizarse en la contabilidad 
+			 */
+			if(getACCOUNTING_C_Charge_ID() > 0) {
+				payment.setACCOUNTING_C_Charge_ID(getACCOUNTING_C_Charge_ID());
+			}
+			
 			// Guarda el pago
 			if (!payment.save()) {
 				m_processMsg = CLogger.retrieveErrorAsString();
