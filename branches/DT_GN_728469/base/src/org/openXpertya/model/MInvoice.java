@@ -219,8 +219,6 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 
 	/**
 	 * Descripción de Método
-	 * 
-	 * 
 	 * @param from
 	 * @param dateDoc
 	 * @param C_DocTypeTarget_ID
@@ -231,14 +229,39 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 	 * 
 	 * @return
 	 */
-
 	public static MInvoice copyFrom(MInvoice from, Timestamp dateDoc,
 			int C_DocTypeTarget_ID, boolean isSOTrx, boolean counter,
 			String trxName, boolean setOrder, boolean setInOut) {
 		return copyFrom(from, dateDoc, C_DocTypeTarget_ID, isSOTrx, counter,
 				trxName, setOrder, setInOut, false, !isSOTrx);
 	} // copyFrom
+	/**
+	 * Descripción de Método
+	 * @param from
+	 * @param dateDoc
+	 * @param C_DocTypeTarget_ID
+	 * @param isSOTrx
+	 * @param counter
+	 * @param trxName
+	 * @param setOrder
+	 * 
+	 * Se agregó un parametro booleano al método original, que indica si se está
+	 * copiando un documneto durante una anulación.
+	 * Se hizo porque se necesitaba evitar la validacion de fecha de CAI cuando el
+	 * documento es una anulación.
+	 * @return
+	 */
+	public static MInvoice copyFrom(MInvoice from, Timestamp dateDoc,
+			int C_DocTypeTarget_ID, boolean isSOTrx, boolean counter,
+			String trxName, boolean setOrder, boolean setInOut, 
+			boolean copyDocumentDiscounts, boolean copyManualInvoiceTaxes) {
+		return copyFrom( from,  dateDoc,
+				 C_DocTypeTarget_ID,  isSOTrx,  counter,
+				 trxName,  setOrder,  setInOut, 
+				 copyDocumentDiscounts, copyManualInvoiceTaxes,false);
+	}
 
+	// copyFrom
 	/**
 	 * 
 	 * @param from
@@ -249,12 +272,13 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 	 * @param trxName
 	 * @param setOrder
 	 * @param copyDocumentDiscounts
+	 * @param voiding (indica si se esta en proceso de anulación)
 	 * @return
 	 */
 	public static MInvoice copyFrom(MInvoice from, Timestamp dateDoc,
 			int C_DocTypeTarget_ID, boolean isSOTrx, boolean counter,
 			String trxName, boolean setOrder, boolean setInOut, 
-			boolean copyDocumentDiscounts, boolean copyManualInvoiceTaxes) {
+			boolean copyDocumentDiscounts, boolean copyManualInvoiceTaxes, boolean voiding) {
 		MInvoice to = new MInvoice(from.getCtx(), 0, trxName);
 
 		PO.copyValues(from, to, from.getAD_Client_ID(), from.getAD_Org_ID());
@@ -334,6 +358,9 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		} else {
 			to.setRef_Invoice_ID(0);
 		}
+		
+		// Seteo la bandera que indica si se trata de una anulación.
+		to.setVoidProcess(voiding);
 
 		if (!to.save(trxName)) {
 			throw new IllegalStateException("Could not create Invoice: " + CLogger.retrieveErrorAsString());
@@ -2243,11 +2270,13 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			}
 
 			// Fecha del CAI > que fecha de facturacion
-			if (getDateCAI() != null
-					&& getDateInvoiced().compareTo(getDateCAI()) > 0 
-					&& !TimeUtil.isSameDay(getDateInvoiced(), getDateCAI())){
-				log.saveError("InvoicedDateAfterCAIDate", "");
-				return false;
+			if(!this.voidProcess) {
+				if (getDateCAI() != null
+						&& getDateInvoiced().compareTo(getDateCAI()) > 0 
+						&& !TimeUtil.isSameDay(getDateInvoiced(), getDateCAI())){
+					log.saveError("InvoicedDateAfterCAIDate", "");
+					return false;
+				}
 			}
 			
 		}
@@ -3382,11 +3411,13 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		}
 		
 		// Fecha del CAI > que fecha de facturacion
-		if (getDateCAI() != null
+		if(!voidProcess) {
+			if (getDateCAI() != null
 				&& getDateInvoiced().compareTo(getDateCAI()) > 0 
 				&& !TimeUtil.isSameDay(getDateInvoiced(), getDateCAI())){
-			setProcessMsg("@InvoicedDateAfterCAIDate@");
-			return DocAction.STATUS_Invalid;
+				setProcessMsg("@InvoicedDateAfterCAIDate@");
+				return DocAction.STATUS_Invalid;
+			}
 		}
 		
 		// Si el tipo de doc es electrónico, las fechas de comprobante y
@@ -4892,10 +4923,15 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		setSkipExtraValidations(true);
 		
 		// Deep Copy
-
+		/*
+		 * Notar que cuando llamo al copyFrom le mando un parámetro booleano al final
+		 * que indica que estoy realizando una copia durante una anulación
+		 * Esto se hizo para luego poder esquivar la validación de fecha de vencimiento
+		 * del CAI durante el beforeSave 
+		 */
 		MInvoice reversal = copyFrom(this, Env.getDate(),
 				reversalDocType.getC_DocType_ID(), isSOTrx(), false,
-				get_TrxName(), true, true, true, !isSOTrx());
+				get_TrxName(), true, true, true, !isSOTrx(), voidProcess);
 
 		if (reversal == null) {
 			m_processMsg = "Could not create Invoice Reversal";
@@ -4916,9 +4952,6 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			reversal.setM_AuthorizationChain_ID(0);
 			reversal.setAuthorizationChainStatus(null);
 		}
-		
-		// Seteo la bandera que indica si se trata de una anulación.
-		reversal.setVoidProcess(voidProcess);
 
 		// ////////////////////////////////////////////////////////////////
 		// LOCALIZACIÓN ARGENTINA
