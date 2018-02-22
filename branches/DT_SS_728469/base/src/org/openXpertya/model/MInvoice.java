@@ -2229,7 +2229,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				return false;
 			}
 			
-			// Validar CAI Obligatorio  --NACHO: Agrego validación solo si es factura de proveedores.
+			// Validar CAI Obligatorio
 			if(!isSOTrx() && partner.isMandatoryCAI() && Util.isEmpty(getCAI())){
 				log.saveError("MandatoryCAIValidationMsg", "");
 				return false;
@@ -4827,9 +4827,8 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		boolean isCredit = docType.getDocBaseType().equals(
 				MDocType.DOCBASETYPE_ARCreditMemo);
 		
-		// Si el período está cerrado no se puede anular una factura de proveedor
-		if (!isSOTrx() && MDocType.DOCBASETYPE_APInvoice.equals(docType.getDocBaseType()) 
-				&& !MPeriod.isOpen(getCtx(), getDateAcct(), docType.getDocBaseType(), docType)) {
+		// Si el período está cerrado no se puede anular un comprobante de compras
+		if (!isSOTrx() && !MPeriod.isOpen(getCtx(), getDateAcct(), docType.getDocBaseType(), docType)) {
 			m_processMsg = "@PeriodClosed@";
 			return false;
 		}

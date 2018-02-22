@@ -114,7 +114,7 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 		int found = 0;
 
 		// Validación de unicidad mediante Entidad Comercial y número de liquidación.
-		if (newRecord) {
+		if (!Util.isEmpty(getC_BPartner_ID()) && !Util.isEmpty(getSettlementNo(), true)) {
 			StringBuffer sql = new StringBuffer();
 	
 			sql.append("SELECT ");
@@ -156,6 +156,16 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 		if (!Util.isEmpty(getSettlementNo(), true) && !getSettlementNo().matches("\\^?\\d*\\^?")) {
 			log.saveError("SaveError", Msg.getMsg(getCtx(), "SettlementNumberMustBeNumeric"));
 			found = 1;
+		}
+		
+		/*
+		 * Si cambio la cuenta contable de la liquidación y tengo un pago
+		 * asociado, también actualizo la cuenta del pago
+		 */
+		if(getACCOUNTING_C_Charge_ID() != 0) {
+			MPayment payment = new MPayment(getCtx(), getC_Payment_ID(), get_TrxName());
+			payment.setACCOUNTING_C_Charge_ID(getACCOUNTING_C_Charge_ID());
+			payment.save();
 		}
 		
 		return found == 0;
@@ -831,6 +841,13 @@ public class MCreditCardSettlement extends X_C_CreditCardSettlement implements D
 
 			boolean saveOk = true;
 
+			/*
+			 * Se carga la cuenta contable que debe utilizarse en la contabilidad 
+			 */
+			if(getACCOUNTING_C_Charge_ID() > 0) {
+				payment.setACCOUNTING_C_Charge_ID(getACCOUNTING_C_Charge_ID());
+			}
+			
 			// Guarda el pago
 			if (!payment.save()) {
 				m_processMsg = CLogger.retrieveErrorAsString();

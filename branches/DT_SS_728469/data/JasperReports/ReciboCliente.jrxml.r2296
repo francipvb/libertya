@@ -122,25 +122,6 @@
 						y="99"
 						width="535"
 						height="18"
-<<<<<<< .mine
-						key="textField-6"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement>
-						<font size="12"/>
-					</textElement>
-				<textFieldExpression   class="java.lang.String"><![CDATA["Domicilio: " + $P{BPARTNER_LOCATION}]]></textFieldExpression>
-				</textField>
-				<image  scaleImage="FillFrame" onErrorType="Blank" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-||||||| .r2284
-						key="textField-6"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement>
-						<font size="12"/>
-					</textElement>
-				<textFieldExpression   class="java.lang.String"><![CDATA["Domicilio: " + $P{BPARTNER_LOCATION}]]></textFieldExpression>
-				</textField>
-				<image  scaleImage="FillFrame" onErrorType="Blank" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-=======
 						key="textField-6"/>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 					<textElement>
@@ -173,96 +154,7 @@
 		<summary>
 			<band height="504"  isSplitAllowed="true" >
 				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
->>>>>>> .r2296
 					<reportElement
-<<<<<<< .mine
-						x="4"
-						y="5"
-						width="198"
-						height="68"
-						key="image-1"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<graphicElement stretchType="NoStretch"/>
-					<imageExpression class="java.io.InputStream"><![CDATA[new java.io.StringBufferInputStream( new org.w3c.tools.codec.Base64Decoder($P{LOGO}).processString() )]]></imageExpression>
-				</image>
-			</band>
-		</title>
-		<pageHeader>
-			<band height="0"  isSplitAllowed="true" >
-			</band>
-		</pageHeader>
-		<columnHeader>
-			<band height="0"  isSplitAllowed="true" >
-			</band>
-		</columnHeader>
-		<detail>
-			<band height="0"  isSplitAllowed="true" >
-			</band>
-		</detail>
-		<columnFooter>
-			<band height="0"  isSplitAllowed="true" >
-			</band>
-		</columnFooter>
-		<pageFooter>
-			<band height="0"  isSplitAllowed="true" >
-			</band>
-		</pageFooter>
-		<summary>
-			<band height="504"  isSplitAllowed="true" >
-				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-||||||| .r2284
-						x="4"
-						y="5"
-						width="130"
-						height="37"
-						key="image-1"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<graphicElement stretchType="NoStretch"/>
-					<imageExpression class="java.lang.String"><![CDATA[$P{URL_IMAGE_TITLE}]]></imageExpression>
-				</image>
-			</band>
-		</title>
-		<pageHeader>
-			<band height="0"  isSplitAllowed="true" >
-			</band>
-		</pageHeader>
-		<columnHeader>
-			<band height="0"  isSplitAllowed="true" >
-			</band>
-		</columnHeader>
-		<detail>
-			<band height="0"  isSplitAllowed="true" >
-			</band>
-		</detail>
-		<columnFooter>
-			<band height="0"  isSplitAllowed="true" >
-			</band>
-		</columnFooter>
-		<pageFooter>
-			<band height="0"  isSplitAllowed="true" >
-			</band>
-		</pageFooter>
-		<summary>
-			<band height="504"  isSplitAllowed="true" >
-				<staticText>
-					<reportElement
-						x="392"
-						y="402"
-						width="131"
-						height="23"
-						key="staticText-4"
-						positionType="Float"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement textAlignment="Right" verticalAlignment="Middle">
-						<font size="12"/>
-					</textElement>
-				<text><![CDATA[Firma]]></text>
-				</staticText>
-				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-=======
->>>>>>> .r2296
 						x="0"
 						y="486"
 						width="535"
@@ -293,75 +185,13 @@
 						width="535"
 						height="30"
 						key="subreport-2"
-<<<<<<< .mine
-						positionType="Float"/>
-					<dataSourceExpression><![CDATA[$P{SUBREPORT_OTHER_PAYMENTS_DATASOURCE}]]></dataSourceExpression>
-					<subreportExpression  class="java.io.InputStream"><![CDATA[$P{COMPILED_SUBREPORT_OTHER_PAYMENTS}]]></subreportExpression>
-				</subreport>
-				<subreport  isUsingCache="true">
-||||||| .r2284
-						positionType="Float"/>
-					<dataSourceExpression><![CDATA[$P{SUBREPORT_OTHER_PAYMENTS_DATASOURCE}]]></dataSourceExpression>
-					<subreportExpression  class="java.io.InputStream"><![CDATA[$P{COMPILED_SUBREPORT_OTHER_PAYMENTS}]]></subreportExpression>
-				</subreport>
-				<subreport  isUsingCache="true">
-=======
 						positionType="Float"/>
 					<dataSourceExpression><![CDATA[$P{SUBREPORT_OTHER_PAYMENTS_DATASOURCE}]]></dataSourceExpression>
 					<subreportExpression  class="java.io.InputStream"><![CDATA[$P{COMPILED_SUBREPORT_OTHER_PAYMENTS}]]></subreportExpression>
 				</subreport>
 				<elementGroup><!--  Start: 1 !-->
 				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
->>>>>>> .r2296
 					<reportElement
-<<<<<<< .mine
-						mode="Transparent"
-						x="0"
-						y="58"
-						width="535"
-						height="30"
-						key="subreport-3"
-						positionType="Float"/>
-					<subreportParameter  name="OP_NUMBER">
-						<subreportParameterExpression><![CDATA[$P{OP_NUMBER}]]></subreportParameterExpression>
-					</subreportParameter>
-					<subreportParameter  name="OP_AMOUNT">
-						<subreportParameterExpression><![CDATA[$P{OP_AMOUNT}]]></subreportParameterExpression>
-					</subreportParameter>
-					<subreportParameter  name="RETENCIONES_AMOUNT">
-						<subreportParameterExpression><![CDATA[$P{RETENCIONES_AMOUNT}]]></subreportParameterExpression>
-					</subreportParameter>
-					<dataSourceExpression><![CDATA[$P{SUBREPORT_DOCS_DATASOURCE}]]></dataSourceExpression>
-					<subreportExpression  class="java.io.InputStream"><![CDATA[$P{COMPILED_SUBREPORT_DOCS}]]></subreportExpression>
-				</subreport>
-				<elementGroup><!--  Start: 1 !-->
-				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-||||||| .r2284
-						mode="Transparent"
-						x="0"
-						y="58"
-						width="535"
-						height="30"
-						key="subreport-3"
-						positionType="Float"/>
-					<subreportParameter  name="OP_NUMBER">
-						<subreportParameterExpression><![CDATA[$P{OP_NUMBER}]]></subreportParameterExpression>
-					</subreportParameter>
-					<subreportParameter  name="OP_AMOUNT">
-						<subreportParameterExpression><![CDATA[$P{OP_AMOUNT}]]></subreportParameterExpression>
-					</subreportParameter>
-					<subreportParameter  name="RETENCIONES_AMOUNT">
-						<subreportParameterExpression><![CDATA[$P{RETENCIONES_AMOUNT}]]></subreportParameterExpression>
-					</subreportParameter>
-					<dataSourceExpression><![CDATA[$P{SUBREPORT_DOCS_DATASOURCE}]]></dataSourceExpression>
-					<subreportExpression  class="java.io.InputStream"><![CDATA[$P{COMPILED_SUBREPORT_DOCS}]]></subreportExpression>
-				</subreport>
-				<elementGroup><!--  Start: 1 !-->
-				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-=======
->>>>>>> .r2296
 						x="86"
 						y="92"
 						width="214"
@@ -471,29 +301,11 @@
 				</textField>
 				<staticText>
 					<reportElement
-<<<<<<< .mine
-						x="400"
-						y="439"
-||||||| .r2284
-						x="392"
-						y="453"
-=======
 						x="402"
 						y="453"
->>>>>>> .r2296
 						width="131"
 						height="23"
 						key="staticText-13"
-<<<<<<< .mine
-						positionType="Float"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement textAlignment="Right" verticalAlignment="Middle">
-						<font size="12"/>
-					</textElement>
-				<text><![CDATA[LUIS IGNACIO AITA]]></text>
-				</staticText>
-				<staticText>
-||||||| .r2284
 						positionType="Float"/>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 					<textElement textAlignment="Right" verticalAlignment="Middle">
@@ -502,16 +314,6 @@
 				<text><![CDATA[Aclaración]]></text>
 				</staticText>
 				<staticText>
-=======
-						positionType="Float"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement textAlignment="Right" verticalAlignment="Middle">
-						<font size="12"/>
-					</textElement>
-				<text><![CDATA[Aclaración]]></text>
-				</staticText>
-				<staticText>
->>>>>>> .r2296
 					<reportElement
 						x="0"
 						y="32"
@@ -527,16 +329,8 @@
 				</staticText>
 				<line direction="TopDown">
 					<reportElement
-<<<<<<< .mine
-						x="400"
-						y="431"
-||||||| .r2284
-						x="392"
-						y="402"
-=======
 						x="402"
 						y="415"
->>>>>>> .r2296
 						width="131"
 						height="0"
 						forecolor="#666666"
@@ -626,40 +420,6 @@
 						width="535"
 						height="18"
 						key="staticText-17"
-<<<<<<< .mine
-						positionType="Float"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement>
-						<font size="12"/>
-					</textElement>
-				<text><![CDATA[Notas de Crédito]]></text>
-				</staticText>
-				<image  scaleImage="FillFrame" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-						x="449"
-						y="369"
-						width="54"
-						height="98"
-						key="image-2"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<graphicElement stretchType="NoStretch"/>
-					<imageExpression class="java.io.InputStream"><![CDATA[new java.io.StringBufferInputStream( new org.w3c.tools.codec.Base64Decoder($P{FIRMA}).processString() )]]></imageExpression>
-				</image>
-			</band>
-		</summary>
-</jasperReport>
-||||||| .r2284
-						positionType="Float"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement>
-						<font size="12"/>
-					</textElement>
-				<text><![CDATA[Notas de Crédito]]></text>
-				</staticText>
-			</band>
-		</summary>
-</jasperReport>
-=======
 						positionType="Float"/>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 					<textElement>
@@ -704,4 +464,3 @@
 			</band>
 		</summary>
 </jasperReport>
->>>>>>> .r2296

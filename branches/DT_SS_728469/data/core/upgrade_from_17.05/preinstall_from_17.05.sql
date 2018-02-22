@@ -2032,3 +2032,1568 @@ $BODY$
   ROWS 1000;
 ALTER FUNCTION c_pos_declaracionvalores_payments_filtered(anyarray)
   OWNER TO libertya; 
+  
+--20180105-1030 Incorporación de currencyconverts en el informe Resumen de Ventas
+﻿CREATE OR REPLACE FUNCTION v_dailysales_current_account_filtered(
+    orgid integer,
+    posid integer,
+    userid integer,
+    datefrom date,
+    dateto date,
+    invoicedatefrom date,
+    invoicedateto date,
+    addinvoicedate boolean)
+  RETURNS SETOF v_dailysales_type AS
+$BODY$
+declare
+	consulta varchar;
+	whereDateInvoices varchar;
+	whereInvoiceDate varchar;
+	wherePOSInvoices varchar;
+	whereUserInvoices varchar;
+	whereOrg varchar;
+	whereClauseStd varchar;
+	posJournalPaymentsFrom varchar;
+	dateFromPOSJournalPayments varchar;
+	dateToPOSJournalPayments varchar;
+	orgIDPOSJournalPayments integer;
+	adocument v_dailysales_type;
+BEGIN
+	-- Armado de las condiciones en base a los parámetros
+	-- Organización
+	whereOrg = '';
+	if orgID is not null AND orgID > 0 THEN
+		whereOrg = ' AND i.ad_org_id = ' || orgID;
+	END IF;
+	
+	-- Fecha de factura
+	whereInvoiceDate = '';
+	if addInvoiceDate then
+		if invoiceDateFrom is not null then
+			whereInvoiceDate = ' AND date_trunc(''day'', i.dateacct) >= date_trunc(''day'', '''|| invoiceDateFrom || '''::date)';
+		end if;
+		if invoiceDateTo is not null then
+			whereInvoiceDate = whereInvoiceDate || ' AND date_trunc(''day'', i.dateacct) <= date_trunc(''day'', ''' || invoiceDateTo || '''::date) ';
+		end if;
+	end if;
+
+	-- Fechas para allocations y facturas
+	whereDateInvoices = '';
+	if dateFrom is not null then
+		whereDateInvoices = ' AND date_trunc(''day''::text, i.dateinvoiced) >= date_trunc(''day'', ''' || dateFrom || '''::date)';
+	end if;
+
+	if dateTo is not null then
+		whereDateInvoices = whereDateInvoices || ' AND date_trunc(''day''::text, i.dateinvoiced) <= date_trunc(''day'', ''' || dateTo || '''::date) ';
+	end if;
+	
+	-- TPV
+	wherePOSInvoices = ' AND (' || posID || ' = -1 OR pj.c_pos_id = ' || posID || ')';
+
+	-- Usuario
+	whereUserInvoices = ' AND (' || userID || ' = -1 OR pj.ad_user_id = ' || userID || ')';
+
+	-- Condiciones básicas del reporte
+	whereClauseStd = ' ( i.issotrx = ''Y'' ' ||
+			 whereOrg || 
+			 ' AND (i.docstatus = ''CO'' or i.docstatus = ''CL'' or i.docstatus = ''RE'' or i.docstatus = ''VO'' OR i.docstatus = ''??'') ' ||
+			 ' AND dt.isfiscaldocument = ''Y'' ' || 
+			 ' AND (dt.isfiscal is null OR dt.isfiscal = ''N'' OR (dt.isfiscal = ''Y'' AND i.fiscalalreadyprinted = ''Y'')) ' ||
+			 ' AND dt.doctypekey not in (''RTR'', ''RTI'', ''RCR'', ''RCI'') ' || 
+			 ' AND (dt.transactiontypefrontliva is null OR dt.transactiontypefrontliva = ''S'') ' || 
+			 ' ) ';
+
+	-- Agregar las condiciones anteriores
+	whereClauseStd = whereClauseStd || whereInvoiceDate;
+
+	-- Armado del llamado a la función que ejecuta la vista filtrada c_posjournalpayments_v
+	dateFromPOSJournalPayments = (CASE WHEN dateFrom is null THEN 'null::date' ELSE '''' || dateFrom || '''::date' END);
+	dateToPOSJournalPayments = (CASE WHEN dateTo is null THEN 'null::date' ELSE '''' || dateTo || '''::date' END);
+	orgIDPOSJournalPayments = (CASE WHEN orgID is null THEN -1 ELSE orgID END);
+	posJournalPaymentsFrom = 'c_posjournalpayments_v_filtered(' || orgIDPOSJournalPayments || ', ' || dateFromPOSJournalPayments || ', ' || dateToPOSJournalPayments || ')';
+
+	-- Armar la consulta
+	consulta = 'SELECT ''CAI''::character varying AS trxtype, i.ad_client_id, i.ad_org_id, i.c_invoice_id, date_trunc(''day''::text, i.dateinvoiced) AS datetrx, NULL::integer AS c_payment_id, NULL::integer AS c_cashline_id, NULL::integer AS c_invoice_credit_id, ''CC'' AS tendertype, i.documentno, i.description, NULL::unknown AS info, (currencybase(i.grandtotal, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id)::numeric(20,2) - COALESCE(cobros.amount, 0::numeric))::numeric(20,2) AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, NULL::unknown AS c_pospaymentmedium_id, NULL::unknown AS pospaymentmediumname, NULL::integer AS m_entidadfinanciera_id, NULL::unknown AS entidadfinancieraname, NULL::unknown AS entidadfinancieravalue, NULL::integer AS m_entidadfinancieraplan_id, NULL::unknown AS planname, i.docstatus, i.issotrx, i.dateacct::date AS dateacct, i.dateacct::date AS invoicedateacct, pj.c_posjournal_id, pj.ad_user_id, pj.c_pos_id, dt.isfiscal, i.fiscalalreadyprinted
+           FROM c_invoice i
+      LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+   LEFT JOIN ( SELECT c.c_invoice_id, sum(c.amount) AS amount
+         FROM ( SELECT 
+                      CASE
+                          WHEN (dt.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN pjp.c_invoice_credit_id
+                          ELSE i.c_invoice_id
+                      END AS c_invoice_id, currencybase(pjp.amount, i.c_currency_id, pjp.dateacct, pjp.ad_client_id, pjp.ad_org_id)::numeric(20,2) as amount
+                 FROM ' || posJournalPaymentsFrom || ' pjp
+            JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+       JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   JOIN c_allocationhdr hdr ON hdr.c_allocationhdr_id = pjp.c_allocationhdr_id
+   LEFT JOIN c_posjournal as pj on pj.c_posjournal_id = i.c_posjournal_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+   LEFT JOIN c_payment p ON p.c_payment_id = pjp.c_payment_id
+   LEFT JOIN c_pospaymentmedium ppm ON ppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+   LEFT JOIN c_cashline c ON c.c_cashline_id = pjp.c_cashline_id
+   LEFT JOIN c_pospaymentmedium ppmc ON ppmc.c_pospaymentmedium_id = c.c_pospaymentmedium_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = pjp.m_entidadfinanciera_id
+   LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = pjp.m_entidadfinancieraplan_id
+   LEFT JOIN c_invoice cc ON cc.c_invoice_id = pjp.c_invoice_credit_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND date_trunc(''day''::text, i.dateacct) = date_trunc(''day''::text, pjp.dateacct::timestamp with time zone) AND ((i.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar])) AND hdr.isactive = ''Y''::bpchar OR (i.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar])) AND hdr.isactive = ''N''::bpchar)) c
+        GROUP BY c.c_invoice_id) cobros ON cobros.c_invoice_id = i.c_invoice_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND (cobros.amount IS NULL OR i.grandtotal <> cobros.amount) AND i.initialcurrentaccountamt > 0::numeric AND (dt.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND "position"(dt.doctypekey::text, ''CDN''::text) < 1
+UNION ALL 
+         SELECT ''CAIA''::character varying AS trxtype, i.ad_client_id, i.ad_org_id, i.c_invoice_id, date_trunc(''day''::text, i.dateinvoiced) AS datetrx, NULL::integer AS c_payment_id, NULL::integer AS c_cashline_id, NULL::integer AS c_invoice_credit_id, ''CC'' AS tendertype, i.documentno, i.description, NULL::unknown AS info, (currencybase(i.grandtotal, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id)::numeric(20,2) - COALESCE(cobros.amount, 0::numeric))::numeric(20,2) * (-1)::numeric AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, NULL::integer AS c_pospaymentmedium_id, NULL::unknown AS pospaymentmediumname, NULL::integer AS m_entidadfinanciera_id, NULL::unknown AS entidadfinancieraname, NULL::unknown AS entidadfinancieravalue, NULL::integer AS m_entidadfinancieraplan_id, NULL::unknown AS planname, i.docstatus, i.issotrx, i.dateacct::date AS dateacct, i.dateacct::date AS invoicedateacct, pj.c_posjournal_id, pj.ad_user_id, pj.c_pos_id, dt.isfiscal, i.fiscalalreadyprinted
+           FROM c_invoice i
+      LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+   LEFT JOIN ( SELECT c.c_invoice_id, sum(c.amount) AS amount
+         FROM ( SELECT 
+                      CASE
+                          WHEN (dt.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN pjp.c_invoice_credit_id
+                          ELSE i.c_invoice_id
+                      END AS c_invoice_id, currencybase(pjp.amount, i.c_currency_id, pjp.dateacct, pjp.ad_client_id, pjp.ad_org_id)::numeric(20,2) as amount
+                 FROM ' || posJournalPaymentsFrom || ' pjp
+            JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+       JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   JOIN c_allocationhdr hdr ON hdr.c_allocationhdr_id = pjp.c_allocationhdr_id
+   LEFT JOIN c_posjournal as pj on pj.c_posjournal_id = i.c_posjournal_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+   LEFT JOIN c_payment p ON p.c_payment_id = pjp.c_payment_id
+   LEFT JOIN c_pospaymentmedium ppm ON ppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+   LEFT JOIN c_cashline c ON c.c_cashline_id = pjp.c_cashline_id
+   LEFT JOIN c_pospaymentmedium ppmc ON ppmc.c_pospaymentmedium_id = c.c_pospaymentmedium_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = pjp.m_entidadfinanciera_id
+   LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = pjp.m_entidadfinancieraplan_id
+   LEFT JOIN c_invoice cc ON cc.c_invoice_id = pjp.c_invoice_credit_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND date_trunc(''day''::text, i.dateacct) = date_trunc(''day''::text, pjp.dateacct::timestamp with time zone) AND ((i.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar])) AND hdr.isactive = ''Y''::bpchar OR (i.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar])) AND hdr.isactive = ''N''::bpchar)) c
+        GROUP BY c.c_invoice_id) cobros ON cobros.c_invoice_id = i.c_invoice_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND (cobros.amount IS NULL OR i.grandtotal <> cobros.amount) AND i.initialcurrentaccountamt > 0::numeric AND (dt.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND "position"(dt.doctypekey::text, ''CDN''::text) < 1 AND (i.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar]));';
+
+-- raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_dailysales_current_account_filtered(integer, integer, integer, date, date, date, date, boolean)
+  OWNER TO libertya;
+
+--funview v_dailysales_current_account_payments_filtered
+CREATE OR REPLACE FUNCTION v_dailysales_current_account_payments_filtered(
+    orgid integer,
+    posid integer,
+    userid integer,
+    datefrom date,
+    dateto date)
+  RETURNS SETOF v_dailysales_type AS
+$BODY$
+declare
+	consulta varchar;
+	whereDatePayments varchar;
+	wherePOSPayments varchar;
+	whereUserPayments varchar;
+	whereOrg varchar;
+	whereClauseStd varchar;
+	posJournalPaymentsFrom varchar;
+	dateFromPOSJournalPayments varchar;
+	dateToPOSJournalPayments varchar;
+	orgIDPOSJournalPayments integer;
+	adocument v_dailysales_type;
+BEGIN
+	-- Armado de las condiciones en base a los parámetros
+	-- Organización
+	whereOrg = '';
+	if orgID is not null AND orgID > 0 THEN
+		whereOrg = ' AND i.ad_org_id = ' || orgID;
+	END IF;
+
+	-- Fechas para allocations y facturas
+	whereDatePayments = '';
+	if dateFrom is not null then
+		whereDatePayments = ' AND date_trunc(''day'', pjp.allocationdate) >= date_trunc(''day'', ''' || dateFrom || '''::date)';
+	end if;
+
+	if dateTo is not null then
+		whereDatePayments = whereDatePayments || ' AND date_trunc(''day'', pjp.allocationdate) <= date_trunc(''day'', ''' || dateTo || '''::date) ';
+	end if;
+	
+	-- TPV
+	wherePOSPayments = ' AND (' || posID || ' = -1 OR COALESCE(pjh.c_pos_id, pj.c_pos_id) = ' || posID || ')';
+
+	-- Usuario
+	whereUserPayments = ' AND (' || userID || ' = -1 OR COALESCE(pjh.ad_user_id, pj.ad_user_id) = ' || userID || ')';
+
+	-- Condiciones básicas del reporte
+	whereClauseStd = ' ( i.issotrx = ''Y'' ' ||
+			 whereOrg || 
+			 ' AND (i.docstatus = ''CO'' or i.docstatus = ''CL'' or i.docstatus = ''RE'' or i.docstatus = ''VO'' OR i.docstatus = ''??'') ' ||
+			 ' AND dtc.isfiscaldocument = ''Y'' ' || 
+			 ' AND (dtc.isfiscal is null OR dtc.isfiscal = ''N'' OR (dtc.isfiscal = ''Y'' AND i.fiscalalreadyprinted = ''Y'')) ' ||
+			 ' AND dtc.doctypekey not in (''RTR'', ''RTI'', ''RCR'', ''RCI'') ' || 
+			 ' AND (dtc.transactiontypefrontliva is null OR dtc.transactiontypefrontliva = ''S'') ' || 
+			 ' ) ';
+
+	-- Armado del llamado a la función que ejecuta la vista filtrada c_posjournalpayments_v
+	dateFromPOSJournalPayments = (CASE WHEN dateFrom is null THEN 'null::date' ELSE '''' || dateFrom || '''::date' END);
+	dateToPOSJournalPayments = (CASE WHEN dateTo is null THEN 'null::date' ELSE '''' || dateTo || '''::date' END);
+	orgIDPOSJournalPayments = (CASE WHEN orgID is null THEN -1 ELSE orgID END);
+	posJournalPaymentsFrom = 'c_posjournalpayments_v_filtered(' || orgIDPOSJournalPayments || ', ' || dateFromPOSJournalPayments || ', ' || dateToPOSJournalPayments || ')';
+
+	-- Armar la consulta
+	consulta = 'SELECT ''PCA''::character varying AS trxtype, pjp.ad_client_id, pjp.ad_org_id, 
+        CASE
+            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN pjp.c_invoice_credit_id
+            ELSE i.c_invoice_id
+        END AS c_invoice_id, pjp.allocationdate AS datetrx, pjp.c_payment_id, pjp.c_cashline_id, 
+        CASE
+            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN i.c_invoice_id
+            ELSE pjp.c_invoice_credit_id
+        END AS c_invoice_credit_id, pjp.tendertype, pjp.documentno, pjp.description, pjp.info, currencybase(pjp.amount, i.c_currency_id, pjp.dateacct, pjp.ad_client_id, pjp.ad_org_id)::numeric(20,2) as amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, 
+        CASE
+            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.c_doctype_id
+            WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.c_doctype_id
+            WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.c_pospaymentmedium_id
+            ELSE p.c_pospaymentmedium_id
+        END AS c_pospaymentmedium_id, 
+        CASE
+            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.docbasetype::character varying
+            WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.docbasetype::character varying
+            WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.name
+            ELSE ppm.name
+        END AS pospaymentmediumname, pjp.m_entidadfinanciera_id, ef.name AS entidadfinancieraname, ef.value AS entidadfinancieravalue, pjp.m_entidadfinancieraplan_id, efp.name AS planname, pjp.docstatus, i.issotrx, pjp.dateacct, i.dateacct::date AS invoicedateacct, COALESCE(pjh.c_posjournal_id, pj.c_posjournal_id) AS c_posjournal_id, COALESCE(pjh.ad_user_id, pj.ad_user_id) AS ad_user_id, COALESCE(pjh.c_pos_id, pj.c_pos_id) AS c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+   FROM ' || posJournalPaymentsFrom || ' pjp
+   JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+   LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   JOIN c_allocationhdr hdr ON hdr.c_allocationhdr_id = pjp.c_allocationhdr_id
+   LEFT JOIN c_posjournal pjh ON pjh.c_posjournal_id = hdr.c_posjournal_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+   LEFT JOIN c_payment p ON p.c_payment_id = pjp.c_payment_id
+   LEFT JOIN c_pospaymentmedium ppm ON ppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+   LEFT JOIN c_cashline c ON c.c_cashline_id = pjp.c_cashline_id
+   LEFT JOIN c_pospaymentmedium ppmc ON ppmc.c_pospaymentmedium_id = c.c_pospaymentmedium_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = pjp.m_entidadfinanciera_id
+   LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = pjp.m_entidadfinancieraplan_id
+   LEFT JOIN c_invoice cc ON cc.c_invoice_id = pjp.c_invoice_credit_id
+   LEFT JOIN c_doctype dt ON cc.c_doctypetarget_id = dt.c_doctype_id
+  WHERE ' || whereClauseStd || whereDatePayments || whereUserPayments || wherePOSPayments ||
+  ' AND date_trunc(''day''::text, i.dateacct) <> date_trunc(''day''::text, pjp.allocationdateacct::timestamp with time zone) AND i.initialcurrentaccountamt > 0::numeric AND hdr.isactive = ''Y''::bpchar AND ((dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) OR (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL);';
+
+-- raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_dailysales_current_account_payments_filtered(integer, integer, integer, date, date)
+  OWNER TO libertya;
+
+--funview v_dailysales_invoices_filtered
+CREATE OR REPLACE FUNCTION v_dailysales_invoices_filtered(
+    orgid integer,
+    posid integer,
+    userid integer,
+    datefrom date,
+    dateto date,
+    invoicedatefrom date,
+    invoicedateto date,
+    addinvoicedate boolean)
+  RETURNS SETOF v_dailysales_type AS
+$BODY$
+declare
+	consulta varchar;
+	whereDateInvoices varchar;
+	whereInvoiceDate varchar;
+	wherePOSInvoices varchar;
+	whereUserInvoices varchar;
+	whereOrg varchar;
+	whereClauseStd varchar;
+	adocument v_dailysales_type;
+BEGIN
+	-- Armado de las condiciones en base a los parámetros
+	-- Organización
+	whereOrg = '';
+	if orgID is not null AND orgID > 0 THEN
+		whereOrg = ' AND i.ad_org_id = ' || orgID;
+	END IF;
+	
+	-- Fecha de factura
+	whereInvoiceDate = '';
+	if addInvoiceDate then
+		if invoiceDateFrom is not null then
+			whereInvoiceDate = ' AND date_trunc(''day'', i.dateacct) >= date_trunc(''day'', '''|| invoiceDateFrom || '''::date)';
+		end if;
+		if invoiceDateTo is not null then
+			whereInvoiceDate = whereInvoiceDate || ' AND date_trunc(''day'', i.dateacct) <= date_trunc(''day'', ''' || invoiceDateTo || '''::date) ';
+		end if;
+	end if;
+
+	-- Fechas para allocations y facturas
+	whereDateInvoices = '';
+	if dateFrom is not null then
+		whereDateInvoices = ' AND date_trunc(''day''::text, i.dateinvoiced) >= date_trunc(''day'', ''' || dateFrom || '''::date)';
+	end if;
+
+	if dateTo is not null then
+		whereDateInvoices = whereDateInvoices || ' AND date_trunc(''day''::text, i.dateinvoiced) <= date_trunc(''day'', ''' || dateTo || '''::date) ';
+	end if;
+	
+	-- TPV
+	wherePOSInvoices = ' AND (' || posID || ' = -1 OR pj.c_pos_id = ' || posID || ')';
+
+	-- Usuario
+	whereUserInvoices = ' AND (' || userID || ' = -1 OR pj.ad_user_id = ' || userID || ')';
+
+	-- Condiciones básicas del reporte
+	whereClauseStd = ' ( i.issotrx = ''Y'' ' ||
+			 whereOrg || 
+			 ' AND (i.docstatus = ''CO'' or i.docstatus = ''CL'' or i.docstatus = ''RE'' or i.docstatus = ''VO'' OR i.docstatus = ''??'') ' ||
+			 ' AND dtc.isfiscaldocument = ''Y'' ' || 
+			 ' AND (dtc.isfiscal is null OR dtc.isfiscal = ''N'' OR (dtc.isfiscal = ''Y'' AND i.fiscalalreadyprinted = ''Y'')) ' ||
+			 ' AND dtc.doctypekey not in (''RTR'', ''RTI'', ''RCR'', ''RCI'') ' || 
+			 ' AND (dtc.transactiontypefrontliva is null OR dtc.transactiontypefrontliva = ''S'') ' || 
+			 ' ) ';
+
+	-- Agregar las condiciones anteriores
+	whereClauseStd = whereClauseStd || whereInvoiceDate || whereDateInvoices || wherePOSInvoices || whereUserInvoices;
+
+	-- Armar la consulta
+	consulta = 'SELECT ''I''::character varying AS trxtype, i.ad_client_id, i.ad_org_id, i.c_invoice_id, date_trunc(''day''::text, i.dateinvoiced) AS datetrx, NULL::integer AS c_payment_id, NULL::integer AS c_cashline_id, NULL::integer AS c_invoice_credit_id, dtc.docbasetype AS tendertype, i.documentno, i.description, NULL::unknown AS info, currencybase(i.grandtotal, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id)::numeric(20,2) * dtc.signo_issotrx::numeric AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, dtc.c_doctype_id AS c_pospaymentmedium_id, dtc.name AS pospaymentmediumname, NULL::integer AS m_entidadfinanciera_id, NULL::unknown AS entidadfinancieraname, NULL::unknown AS entidadfinancieravalue, NULL::integer AS m_entidadfinancieraplan_id, NULL::unknown AS planname, i.docstatus, i.issotrx, i.dateacct::date AS dateacct, i.dateacct::date AS invoicedateacct, pj.c_posjournal_id, pj.ad_user_id, pj.c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+   FROM c_invoice i
+   LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+  WHERE ' || whereClauseStd ||
+  ' AND NOT (
+  		EXISTS (
+			SELECT * FROM (
+				SELECT *
+				FROM c_allocationline al
+				WHERE i.c_invoice_id = al.c_invoice_id AND i.isvoidable = ''Y''::bpchar 
+			) as FOO
+			JOIN c_payment p ON p.c_payment_id = foo.c_payment_id
+			JOIN c_cashline cl ON cl.c_payment_id = p.c_payment_id
+		)
+	);';
+
+-- raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_dailysales_invoices_filtered(integer, integer, integer, date, date, date, date, boolean)
+  OWNER TO libertya;
+
+--funview v_dailysales_v2_filtered
+CREATE OR REPLACE FUNCTION v_dailysales_v2_filtered(
+    orgid integer,
+    posid integer,
+    userid integer,
+    datefrom date,
+    dateto date,
+    invoicedatefrom date,
+    invoicedateto date,
+    addinvoicedate boolean)
+  RETURNS SETOF v_dailysales_type AS
+$BODY$
+declare
+	consulta varchar;
+	whereDateInvoices varchar;
+	whereDatePayments varchar;
+	whereInvoiceDate varchar;
+	wherePOSInvoices varchar;
+	wherePOSPayments varchar;
+	whereUserInvoices varchar;
+	whereUserPayments varchar;
+	whereOrg varchar;
+	whereClauseStd varchar;
+	posJournalPaymentsFrom varchar;
+	dateFromPOSJournalPayments varchar;
+	dateToPOSJournalPayments varchar;
+	orgIDPOSJournalPayments integer;
+	adocument v_dailysales_type;
+BEGIN
+	-- Armado de las condiciones en base a los parámetros
+	-- Organización
+	whereOrg = '';
+	if orgID is not null AND orgID > 0 THEN
+		whereOrg = ' AND i.ad_org_id = ' || orgID;
+	END IF;
+	
+	-- Fecha de factura
+	whereInvoiceDate = '';
+	if addInvoiceDate then
+		if invoiceDateFrom is not null then
+			whereInvoiceDate = ' AND date_trunc(''day'', i.dateacct) >= date_trunc(''day'', '''|| invoiceDateFrom || '''::date)';
+		end if;
+		if invoiceDateTo is not null then
+			whereInvoiceDate = whereInvoiceDate || ' AND date_trunc(''day'', i.dateacct) <= date_trunc(''day'', ''' || invoiceDateTo || '''::date) ';
+		end if;
+	end if;
+
+	-- Fechas para allocations y facturas
+	whereDatePayments = '';
+	whereDateInvoices = '';
+	if dateFrom is not null then
+		whereDatePayments = ' AND date_trunc(''day'', pjp.allocationdate) >= date_trunc(''day'', ''' || dateFrom || '''::date)';
+		whereDateInvoices = ' AND date_trunc(''day''::text, i.dateinvoiced) >= date_trunc(''day'', ''' || dateFrom || '''::date)';
+	end if;
+
+	if dateTo is not null then
+		whereDatePayments = whereDatePayments || ' AND date_trunc(''day'', pjp.allocationdate) <= date_trunc(''day'', ''' || dateTo || '''::date) ';
+		whereDateInvoices = whereDateInvoices || ' AND date_trunc(''day''::text, i.dateinvoiced) <= date_trunc(''day'', ''' || dateTo || '''::date) ';
+	end if;
+	
+	-- TPV
+	wherePOSPayments = ' AND (' || posID || ' = -1 OR COALESCE(pjh.c_pos_id, pj.c_pos_id) = ' || posID || ')';
+	wherePOSInvoices = ' AND (' || posID || ' = -1 OR pj.c_pos_id = ' || posID || ')';
+
+	-- Usuario
+	whereUserPayments = ' AND (' || userID || ' = -1 OR COALESCE(pjh.ad_user_id, pj.ad_user_id) = ' || userID || ')';
+	whereUserInvoices = ' AND (' || userID || ' = -1 OR pj.ad_user_id = ' || userID || ')';
+
+	-- Condiciones básicas del reporte
+	whereClauseStd = ' ( i.issotrx = ''Y'' ' ||
+			 whereOrg || 
+			 ' AND (i.docstatus = ''CO'' or i.docstatus = ''CL'' or i.docstatus = ''RE'' or i.docstatus = ''VO'' OR i.docstatus = ''??'') ' ||
+			 ' AND dtc.isfiscaldocument = ''Y'' ' || 
+			 ' AND (dtc.isfiscal is null OR dtc.isfiscal = ''N'' OR (dtc.isfiscal = ''Y'' AND i.fiscalalreadyprinted = ''Y'')) ' ||
+			 ' AND dtc.doctypekey not in (''RTR'', ''RTI'', ''RCR'', ''RCI'') ' || 
+			 ' AND (dtc.transactiontypefrontliva is null OR dtc.transactiontypefrontliva = ''S'') ' || 
+			 ' ) ';
+
+	-- Agregar las condiciones anteriores
+	whereClauseStd = whereClauseStd || whereInvoiceDate;
+
+	-- Armado del llamado a la función que ejecuta la vista filtrada c_posjournalpayments_v
+	dateFromPOSJournalPayments = (CASE WHEN dateFrom is null THEN 'null::date' ELSE '''' || dateFrom || '''::date' END);
+	dateToPOSJournalPayments = (CASE WHEN dateTo is null THEN 'null::date' ELSE '''' || dateTo || '''::date' END);
+	orgIDPOSJournalPayments = (CASE WHEN orgID is null THEN -1 ELSE orgID END);
+	posJournalPaymentsFrom = 'c_posjournalpayments_v_filtered(' || orgIDPOSJournalPayments || ', ' || dateFromPOSJournalPayments || ', ' || dateToPOSJournalPayments || ')';
+
+	-- Armar la consulta
+	consulta = '(        (         SELECT ''P''::character varying AS trxtype, pjp.ad_client_id, pjp.ad_org_id, 
+                                CASE
+                                    WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN pjp.c_invoice_credit_id
+                                    ELSE i.c_invoice_id
+                                END AS c_invoice_id, pjp.allocationdate AS datetrx, pjp.c_payment_id, pjp.c_cashline_id, 
+                                CASE
+                                    WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN i.c_invoice_id
+                                    ELSE pjp.c_invoice_credit_id
+                                END AS c_invoice_credit_id, pjp.tendertype, pjp.documentno, pjp.description, pjp.info, currencybase(pjp.amount, i.c_currency_id, pjp.dateacct, pjp.ad_client_id, pjp.ad_org_id)::numeric(20,2) as amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, 
+                                CASE
+                                    WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.c_doctype_id
+                                    WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.c_doctype_id
+                                    WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.c_pospaymentmedium_id
+                                    ELSE p.c_pospaymentmedium_id
+                                END AS c_pospaymentmedium_id, 
+                                CASE
+                                    WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.docbasetype::character varying
+                                    WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.docbasetype::character varying
+                                    WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.name
+                                    ELSE ppm.name
+                                END AS pospaymentmediumname, pjp.m_entidadfinanciera_id, ef.name AS entidadfinancieraname, ef.value AS entidadfinancieravalue, pjp.m_entidadfinancieraplan_id, efp.name AS planname, pjp.docstatus, i.issotrx, pjp.dateacct, i.dateacct::date AS invoicedateacct, COALESCE(pjh.c_posjournal_id, pj.c_posjournal_id) AS c_posjournal_id, COALESCE(pjh.ad_user_id, pj.ad_user_id) AS ad_user_id, COALESCE(pjh.c_pos_id, pj.c_pos_id) AS c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+                           FROM ' || posJournalPaymentsFrom || ' pjp
+                      JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+                 LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+            JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+       JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   JOIN c_allocationhdr hdr ON hdr.c_allocationhdr_id = pjp.c_allocationhdr_id
+   LEFT JOIN c_posjournal pjh ON pjh.c_posjournal_id = hdr.c_posjournal_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+   LEFT JOIN c_payment p ON p.c_payment_id = pjp.c_payment_id
+   LEFT JOIN c_pospaymentmedium ppm ON ppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+   LEFT JOIN c_cashline c ON c.c_cashline_id = pjp.c_cashline_id
+   LEFT JOIN c_pospaymentmedium ppmc ON ppmc.c_pospaymentmedium_id = c.c_pospaymentmedium_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = pjp.m_entidadfinanciera_id
+   LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = pjp.m_entidadfinancieraplan_id
+   LEFT JOIN c_invoice cc ON cc.c_invoice_id = pjp.c_invoice_credit_id
+   LEFT JOIN c_doctype dt ON cc.c_doctypetarget_id = dt.c_doctype_id
+  WHERE ' || whereClauseStd || whereDatePayments || whereUserPayments || wherePOSPayments ||
+  ' AND (date_trunc(''day''::text, i.dateacct) = date_trunc(''day''::text, pjp.dateacct::timestamp with time zone) OR i.initialcurrentaccountamt = 0::numeric) AND ((dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) OR (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL) AND (pjp.c_invoice_credit_id IS NULL OR pjp.c_invoice_credit_id IS NOT NULL AND (cc.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar]))) AND NOT (EXISTS ( SELECT c2.c_payment_id
+   FROM c_cashline c2
+  WHERE c2.c_payment_id = pjp.c_payment_id AND i.isvoidable = ''Y''::bpchar))
+                UNION ALL 
+                         SELECT ''NCC''::character varying AS trxtype, i.ad_client_id, i.ad_org_id, i.c_invoice_id, date_trunc(''day''::text, i.dateinvoiced) AS datetrx, NULL::unknown AS c_payment_id, NULL::unknown AS c_cashline_id, NULL::unknown AS c_invoice_credit_id, 
+                                CASE
+                                    WHEN i.paymentrule::text = ''T''::text OR i.paymentrule::text = ''Tr''::text THEN ''A''::character varying
+                                    WHEN i.paymentrule::text = ''B''::text THEN ''CA''::character varying
+                                    WHEN i.paymentrule::text = ''K''::text THEN ''C''::character varying
+                                    WHEN i.paymentrule::text = ''P''::text THEN ''CC''::character varying
+                                    WHEN i.paymentrule::text = ''S''::text THEN ''K''::character varying
+                                    ELSE i.paymentrule
+                                END AS tendertype, i.documentno, i.description, NULL::unknown AS info, currencybase(i.grandtotal, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id)::numeric(20,2) * dtc.signo_issotrx::numeric AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, 
+                                CASE
+                                    WHEN i.paymentrule::text = ''P''::text THEN NULL::integer
+                                    ELSE ( SELECT ad_ref_list.ad_ref_list_id
+                                       FROM ad_ref_list
+                                      WHERE ad_ref_list.ad_reference_id = 195 AND ad_ref_list.value::text = i.paymentrule::text
+                                     LIMIT 1)
+                                END AS c_pospaymentmedium_id, 
+                                CASE
+                                    WHEN i.paymentrule::text = ''T''::text OR i.paymentrule::text = ''Tr''::text THEN ''A''::character varying
+                                    WHEN i.paymentrule::text = ''B''::text THEN ''CA''::character varying
+                                    WHEN i.paymentrule::text = ''K''::text THEN ''C''::character varying
+                                    WHEN i.paymentrule::text = ''P''::text THEN NULL::character varying
+                                    WHEN i.paymentrule::text = ''S''::text THEN ''K''::character varying
+                                    ELSE i.paymentrule
+                                END AS pospaymentmediumname, NULL::unknown AS m_entidadfinanciera_id, NULL::unknown AS entidadfinancieraname, NULL::unknown AS entidadfinancieravalue, NULL::unknown AS m_entidadfinancieraplan_id, NULL::unknown AS planname, i.docstatus, i.issotrx, i.dateacct::date AS dateacct, i.dateacct::date AS invoicedateacct, pj.c_posjournal_id, pj.ad_user_id, pj.c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+                           FROM c_invoice i
+                      LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+                 JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+            JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+       JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND dtc.docbasetype = ''ARC''::bpchar AND ((i.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar])) OR (i.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar])) AND (EXISTS ( SELECT al.c_allocationline_id
+          FROM c_allocationline al
+         WHERE al.c_invoice_id = i.c_invoice_id))) AND NOT (EXISTS ( SELECT al.c_allocationline_id
+          FROM c_allocationline al
+         WHERE al.c_invoice_credit_id = i.c_invoice_id)))
+        UNION ALL 
+                 SELECT ''PA''::character varying AS trxtype, pjp.ad_client_id, pjp.ad_org_id, 
+                        CASE
+                            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN pjp.c_invoice_credit_id
+                            ELSE i.c_invoice_id
+                        END AS c_invoice_id, pjp.allocationdate AS datetrx, pjp.c_payment_id, pjp.c_cashline_id, 
+                        CASE
+                            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN i.c_invoice_id
+                            ELSE pjp.c_invoice_credit_id
+                        END AS c_invoice_credit_id, pjp.tendertype, pjp.documentno, pjp.description, pjp.info, currencybase(pjp.amount, i.c_currency_id, pjp.dateacct, pjp.ad_client_id, pjp.ad_org_id)::numeric(20,2) * (-1)::numeric AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, 
+                        CASE
+                            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.c_doctype_id
+                            WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.c_doctype_id
+                            WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.c_pospaymentmedium_id
+                            ELSE p.c_pospaymentmedium_id
+                        END AS c_pospaymentmedium_id, 
+                        CASE
+                            WHEN (dtc.docbasetype = ANY (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dtc.docbasetype::character varying
+                            WHEN (dtc.docbasetype <> ALL (ARRAY[''ARC''::bpchar, ''APC''::bpchar])) AND pjp.c_invoice_credit_id IS NOT NULL THEN dt.docbasetype::character varying
+                            WHEN pjp.c_cashline_id IS NOT NULL THEN ppmc.name
+                            ELSE ppm.name
+                        END AS pospaymentmediumname, pjp.m_entidadfinanciera_id, ef.name AS entidadfinancieraname, ef.value AS entidadfinancieravalue, pjp.m_entidadfinancieraplan_id, efp.name AS planname, pjp.docstatus, i.issotrx, pjp.dateacct, i.dateacct::date AS invoicedateacct, COALESCE(pjh.c_posjournal_id, pj.c_posjournal_id) AS c_posjournal_id, COALESCE(pjh.ad_user_id, pj.ad_user_id) AS ad_user_id, COALESCE(pjh.c_pos_id, pj.c_pos_id) AS c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+                   FROM ' || posJournalPaymentsFrom || ' pjp
+              JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+         LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+    JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   JOIN c_allocationhdr hdr ON hdr.c_allocationhdr_id = pjp.c_allocationhdr_id
+   LEFT JOIN c_posjournal pjh ON pjh.c_posjournal_id = hdr.c_posjournal_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+   LEFT JOIN c_payment p ON p.c_payment_id = pjp.c_payment_id
+   LEFT JOIN c_pospaymentmedium ppm ON ppm.c_pospaymentmedium_id = p.c_pospaymentmedium_id
+   LEFT JOIN c_cashline c ON c.c_cashline_id = pjp.c_cashline_id
+   LEFT JOIN c_pospaymentmedium ppmc ON ppmc.c_pospaymentmedium_id = c.c_pospaymentmedium_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = pjp.m_entidadfinanciera_id
+   LEFT JOIN m_entidadfinancieraplan efp ON efp.m_entidadfinancieraplan_id = pjp.m_entidadfinancieraplan_id
+   LEFT JOIN c_invoice cc ON cc.c_invoice_id = pjp.c_invoice_credit_id
+   LEFT JOIN c_doctype dt ON cc.c_doctypetarget_id = dt.c_doctype_id
+  WHERE ' || whereClauseStd || whereDatePayments || whereUserPayments || wherePOSPayments ||
+  ' AND (date_trunc(''day''::text, i.dateacct) = date_trunc(''day''::text, pjp.dateacct::timestamp with time zone) OR i.initialcurrentaccountamt = 0::numeric) AND hdr.isactive = ''N''::bpchar AND NOT (EXISTS ( SELECT c2.c_payment_id
+   FROM c_cashline c2
+  WHERE c2.c_payment_id = pjp.c_payment_id AND i.isvoidable = ''Y''::bpchar)))
+UNION ALL 
+         SELECT ''ND''::character varying AS trxtype, i.ad_client_id, i.ad_org_id, i.c_invoice_id, date_trunc(''day''::text, i.dateinvoiced) AS datetrx, NULL::unknown AS c_payment_id, NULL::unknown AS c_cashline_id, NULL::unknown AS c_invoice_credit_id, 
+                CASE
+                    WHEN i.paymentrule::text = ''T''::text OR i.paymentrule::text = ''Tr''::text THEN ''A''::character varying
+                    WHEN i.paymentrule::text = ''B''::text THEN ''CA''::character varying
+                    WHEN i.paymentrule::text = ''K''::text THEN ''C''::character varying
+                    WHEN i.paymentrule::text = ''P''::text THEN ''CC''::character varying
+                    WHEN i.paymentrule::text = ''S''::text THEN ''K''::character varying
+                    ELSE i.paymentrule
+                END AS tendertype, i.documentno, i.description, NULL::unknown AS info, currencybase(i.grandtotal, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id)::numeric(20,2) * dtc.signo_issotrx::numeric AS amount, bp.c_bpartner_id, bp.name, bp.c_bp_group_id, bpg.name AS groupname, bp.c_categoria_iva_id, ci.name AS categorianame, ( SELECT ad_ref_list.ad_ref_list_id
+                   FROM ad_ref_list
+                  WHERE ad_ref_list.ad_reference_id = 195 AND ad_ref_list.value::text = i.paymentrule::text
+                 LIMIT 1) AS c_pospaymentmedium_id, 
+                CASE
+                    WHEN i.paymentrule::text = ''T''::text OR i.paymentrule::text = ''Tr''::text THEN ''A''::character varying
+                    WHEN i.paymentrule::text = ''B''::text THEN ''CA''::character varying
+                    WHEN i.paymentrule::text = ''K''::text THEN ''C''::character varying
+                    WHEN i.paymentrule::text = ''P''::text THEN ''CC''::character varying
+                    WHEN i.paymentrule::text = ''S''::text THEN ''K''::character varying
+                    ELSE i.paymentrule
+                END AS pospaymentmediumname, NULL::unknown AS m_entidadfinanciera_id, NULL::unknown AS entidadfinancieraname, NULL::unknown AS entidadfinancieravalue, NULL::unknown AS m_entidadfinancieraplan_id, NULL::unknown AS planname, i.docstatus, i.issotrx, i.dateacct::date AS dateacct, i.dateacct::date AS invoicedateacct, pj.c_posjournal_id, pj.ad_user_id, pj.c_pos_id, dtc.isfiscal, i.fiscalalreadyprinted
+           FROM c_invoice i
+      LEFT JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_doctype dtc ON i.c_doctypetarget_id = dtc.c_doctype_id
+   JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id
+   JOIN c_bp_group bpg ON bpg.c_bp_group_id = bp.c_bp_group_id
+   LEFT JOIN c_categoria_iva ci ON ci.c_categoria_iva_id = bp.c_categoria_iva_id
+  WHERE ' || whereClauseStd || whereDateInvoices || whereUserInvoices || wherePOSInvoices ||
+  ' AND "position"(dtc.doctypekey::text, ''CDN''::text) = 1 AND ((i.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar])) OR (i.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar])) AND (EXISTS ( SELECT al.c_allocationline_id
+   FROM c_allocationline al
+  WHERE al.c_invoice_credit_id = i.c_invoice_id))) AND NOT (EXISTS ( SELECT al.c_allocationline_id
+   FROM c_allocationline al
+  WHERE al.c_invoice_id = i.c_invoice_id));';
+
+--raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_dailysales_v2_filtered(integer, integer, integer, date, date, date, date, boolean)
+  OWNER TO libertya;
+  
+--20180112-1428 Mejoras al informe de Declaración de Valores incorporando currencyconvert
+--Eliminación de dependencias
+DROP VIEW c_pos_declaracionvalores_cash;
+DROP VIEW c_pos_declaracionvalores_credit;
+DROP VIEW c_pos_declaracionvalores_payments;
+DROP VIEW c_pos_declaracionvalores_ventas;
+DROP VIEW c_pos_declaracionvalores_voided;
+
+DROP FUNCTION c_pos_declaracionvalores_cash_filtered(anyarray);
+DROP FUNCTION c_pos_declaracionvalores_credit_filtered(anyarray);
+DROP FUNCTION c_pos_declaracionvalores_payments_filtered(anyarray);
+DROP FUNCTION c_pos_declaracionvalores_ventas_filtered(anyarray);
+DROP FUNCTION c_pos_declaracionvalores_voided_filtered(anyarray);
+
+DROP VIEW c_posjournal_c_cash_v;
+DROP VIEW c_posjournal_c_invoice_credit_v;
+DROP VIEW c_posjournal_c_payment_v;
+
+drop function c_posjournal_c_cash_v_filtered(anyarray);
+drop function c_posjournal_c_invoice_credit_v_filtered(anyarray);
+drop function c_posjournal_c_payment_v_filtered(anyarray);
+
+DROP TYPE c_posjournal_v_type;
+DROP TYPE c_posjournal_c_payment_v_type;
+
+--Mejora tipos de datos c_posjournal_c_payment_v_type y c_posjournal_v_type 
+CREATE TYPE c_posjournal_c_payment_v_type AS (c_allocationhdr_id integer, c_allocationline_id integer, ad_client_id integer, ad_org_id integer, 
+					isactive character(1), created timestamp without time zone, createdby integer, updated timestamp without time zone, 
+					updatedby integer, c_invoice_id integer, c_payment_id integer, c_cashline_id integer, 
+					c_invoice_credit_id integer, tendertype character varying, documentno character varying, 
+					description character varying(255), info character varying, amount numeric(20,2), c_cash_id integer, 
+					line numeric(18,0), c_doctype_id integer, checkno character varying, a_bank character varying, 
+					transferno character varying, creditcardtype character(1), m_entidadfinancieraplan_id integer, 
+					m_entidadfinanciera_id integer,  couponnumber character varying, allocationdate timestamp without time zone, 
+					docstatus character(2), dateacct date, invoice_documentno character varying(30), invoice_grandtotal numeric(20,2), 
+					entidadfinanciera_value character varying, entidadfinanciera_name character varying, 
+					bp_entidadfinanciera_value character varying, bp_entidadfinanciera_name character varying, 
+					cupon character varying, creditcard character varying, isfiscaldocument character(1), 
+					isfiscal character(1), fiscalalreadyprinted character(1), changeamt numeric, c_currency_id integer);
+
+CREATE TYPE c_posjournal_v_type AS (c_allocationhdr_id integer, c_allocationline_id integer, ad_client_id integer, ad_org_id integer, 
+					isactive character(1), created timestamp without time zone, createdby integer, updated timestamp without time zone, 
+					updatedby integer, c_invoice_id integer, c_payment_id integer, c_cashline_id integer, 
+					c_invoice_credit_id integer, tendertype character varying, documentno character varying, 
+					description character varying(255), info character varying, amount numeric(20,2), c_cash_id integer, 
+					line numeric(18,0), c_doctype_id integer, checkno character varying, a_bank character varying, 
+					transferno character varying, creditcardtype character(1), m_entidadfinancieraplan_id integer, 
+					m_entidadfinanciera_id integer,  couponnumber character varying, allocationdate timestamp without time zone, 
+					docstatus character(2), dateacct date, invoice_documentno character varying(30), invoice_grandtotal numeric(20,2), 
+					entidadfinanciera_value character varying, entidadfinanciera_name character varying, 
+					bp_entidadfinanciera_value character varying, bp_entidadfinanciera_name character varying, 
+					cupon character varying, creditcard character varying, isfiscaldocument character(1), 
+					isfiscal character(1), fiscalalreadyprinted character(1), c_currency_id integer);
+
+--funview c_posjournal_c_cash_v_filtered
+CREATE OR REPLACE FUNCTION c_posjournal_c_cash_v_filtered(posjournalids anyarray)
+  RETURNS SETOF c_posjournal_v_type AS
+$BODY$
+declare
+	consulta varchar;
+	wherePosJournalIDs varchar;
+	existsPosJournalIDs boolean;
+	adocument c_posjournal_v_type;
+BEGIN
+	-- Armado de condiciones de filtro parámetro
+	existsPosJournalIDs = posjournalIDs is not null and array_length(posjournalIDs,1) > 0 and posjournalIDs[1] <> -1;
+
+	-- Filtro de cajas diarias
+	wherePosJournalIDs = '';
+	if existsPosJournalIDs then
+		wherePosJournalIDs = ' AND c.c_posjournal_id IN ('|| array_to_string(posjournalIDs, ',') || ')';
+	end if;
+	
+	consulta =  
+	'SELECT al.c_allocationhdr_id, al.c_allocationline_id, al.ad_client_id, al.ad_org_id, al.isactive, al.created, al.createdby, al.updated, al.updatedby, al.c_invoice_id, al.c_payment_id, al.c_cashline_id, al.c_invoice_credit_id, ''CA''::character varying AS tendertype, NULL::character varying AS documentno, cl.description, ((c.name::text || ''_''::text) || cl.line::text)::character varying AS info, COALESCE(currencyconvert((case when ah.allocationtype in (''OPA'',''RCA'') then cl.amount else al.amount + al.discountamt + al.writeoffamt end), (case when ah.allocationtype in (''OPA'',''RCA'') then cl.c_currency_id else ah.c_currency_id end), ah.c_currency_id, ah.dateacct, null::integer, ah.ad_client_id, ah.ad_org_id), 0::numeric)::numeric(20,2) AS amount, cl.c_cash_id, cl.line, NULL::integer AS c_doctype_id, NULL::character varying AS checkno, NULL::character varying AS a_bank, NULL::character varying AS transferno, NULL::character(1) AS creditcardtype, NULL::integer AS m_entidadfinancieraplan_id, NULL::integer AS m_entidadfinanciera_id, NULL::character varying AS couponnumber, date_trunc(''day''::text, ah.datetrx) AS allocationdate, cl.docstatus, c.dateacct::date AS dateacct, (case when ah.allocationtype in (''OPA'',''RCA'') then ''Anticipo'' else i.documentno end) AS invoice_documentno, i.grandtotal AS invoice_grandtotal, NULL::character varying AS entidadfinanciera_value, NULL::character varying AS entidadfinanciera_name, NULL::character varying AS bp_entidadfinanciera_value, NULL::character varying AS bp_entidadfinanciera_name, NULL::character varying AS cupon, NULL::character varying AS creditcard, NULL::bpchar AS isfiscaldocument, NULL::bpchar AS isfiscal, NULL::bpchar AS fiscalalreadyprinted, ah.c_currency_id
+           FROM c_allocationline al
+      JOIN c_allocationhdr ah ON al.c_allocationhdr_id = ah.c_allocationhdr_id
+   JOIN c_cashline cl ON al.c_cashline_id = cl.c_cashline_id
+   JOIN c_cash c ON cl.c_cash_id = c.c_cash_id
+   LEFT JOIN c_invoice i ON al.c_invoice_id = i.c_invoice_id
+   WHERE 1=1 ' || wherePosJournalIDs || ' AND NOT EXISTS (SELECT ala.c_cashline_id FROM c_allocationline as ala INNER JOIN c_allocationhdr as aha on aha.c_allocationhdr_id = ala.c_allocationhdr_id WHERE ala.c_cashline_id = cl.c_cashline_id AND aha.allocationtype in (''OPA'',''RCA'') AND aha.c_allocationhdr_id <> ah.c_allocationhdr_id) ' ||
+   ' UNION ALL 
+         SELECT NULL::integer AS c_allocationhdr_id, NULL::integer AS c_allocationline_id, cl.ad_client_id, cl.ad_org_id, cl.isactive, cl.created, cl.createdby, cl.updated, cl.updatedby, NULL::integer AS c_invoice_id, NULL::integer AS c_payment_id, cl.c_cashline_id, NULL::integer AS c_invoice_credit_id, ''CA''::character varying(2) AS tendertype, NULL::character varying(30) AS documentno, cl.description, (((c.name::text || ''_''::text) || cl.line::text))::character varying(255) AS info, cl.amount, cl.c_cash_id, cl.line, NULL::integer AS c_doctype_id, NULL::character varying(20) AS checkno, NULL::character varying(255) AS a_bank, NULL::character varying(20) AS transferno, NULL::character(1) AS creditcardtype, NULL::integer AS m_entidadfinancieraplan_id, NULL::integer AS m_entidadfinanciera_id, NULL::character varying(30) AS couponnumber, date_trunc(''day''::text, c.statementdate) AS allocationdate, cl.docstatus, c.dateacct::date AS dateacct, NULL::character varying(30) AS invoice_documentno, NULL::numeric(20,2) AS invoice_grandtotal, NULL::character varying AS entidadfinanciera_value, NULL::character varying AS entidadfinanciera_name, NULL::character varying AS bp_entidadfinanciera_value, NULL::character varying AS bp_entidadfinanciera_name, NULL::character varying AS cupon, NULL::character varying AS creditcard, NULL::bpchar AS isfiscaldocument, NULL::bpchar AS isfiscal, NULL::bpchar AS fiscalalreadyprinted, cl.c_currency_id
+           FROM c_cashline cl
+      JOIN c_cash c ON c.c_cash_id = cl.c_cash_id
+     WHERE 1=1 '  || wherePosJournalIDs || 
+     ' AND NOT (EXISTS ( SELECT al.c_allocationline_id
+              FROM c_allocationline al
+             WHERE al.c_cashline_id = cl.c_cashline_id));';
+
+	--raise notice '%', consulta;
+	FOR adocument IN EXECUTE consulta LOOP
+		return next adocument;
+	END LOOP;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION c_posjournal_c_cash_v_filtered(anyarray)
+  OWNER TO libertya;
+
+--funview c_posjournal_c_payment_v_filtered
+CREATE OR REPLACE FUNCTION c_posjournal_c_payment_v_filtered(posjournalids anyarray)
+  RETURNS SETOF c_posjournal_c_payment_v_type AS
+$BODY$
+declare
+	consulta varchar;
+	wherePosJournalIDs varchar;
+	existsPosJournalIDs boolean;
+	adocument c_posjournal_c_payment_v_type;
+BEGIN
+	-- Armado de condiciones de filtro parámetro
+	existsPosJournalIDs = posjournalIDs is not null and array_length(posjournalIDs,1) > 0 and posjournalIDs[1] <> -1;
+
+	-- Filtro de cajas diarias
+	wherePosJournalIDs = '';
+	if existsPosJournalIDs then
+		wherePosJournalIDs = ' AND p.c_posjournal_id IN ('|| array_to_string(posjournalIDs, ',') || ')';
+	end if;
+	
+	consulta =  
+	'SELECT al.c_allocationhdr_id, al.c_allocationline_id, al.ad_client_id, al.ad_org_id, al.isactive, al.created, al.createdby, al.updated, al.updatedby, al.c_invoice_id, al.c_payment_id, al.c_cashline_id, al.c_invoice_credit_id, p.tendertype::character varying AS tendertype, p.documentno, p.description, ((p.documentno::text || ''_''::text) || to_char(p.datetrx, ''DD/MM/YYYY''::text))::character varying AS info, COALESCE(currencyconvert((case when ah.allocationtype in (''OPA'',''RCA'') then p.payamt else al.amount + al.discountamt + al.writeoffamt end), (case when ah.allocationtype in (''OPA'',''RCA'') then p.c_currency_id else ah.c_currency_id end), ah.c_currency_id, ah.dateacct, null::integer, ah.ad_client_id, ah.ad_org_id), 0::numeric)::numeric(20,2) AS amount, NULL::integer AS c_cash_id, NULL::numeric(18,0) AS line, NULL::integer AS c_doctype_id, p.checkno, p.a_bank, p.checkno AS transferno, p.creditcardtype, p.m_entidadfinancieraplan_id, ep.m_entidadfinanciera_id, p.couponnumber, date_trunc(''day''::text, ah.datetrx) AS allocationdate, p.docstatus, p.dateacct::date AS dateacct, (case when ah.allocationtype in (''OPA'',''RCA'') then ''Anticipo'' else i.documentno end) AS invoice_documentno, i.grandtotal AS invoice_grandtotal, ef.value AS entidadfinanciera_value, ef.name AS entidadfinanciera_name, bp.value AS bp_entidadfinanciera_value, bp.name AS bp_entidadfinanciera_name, p.couponnumber AS cupon, p.creditcardnumber AS creditcard, NULL::bpchar AS isfiscaldocument, NULL::bpchar AS isfiscal, NULL::bpchar AS fiscalalreadyprinted, al.changeamt, ah.c_currency_id
+           FROM c_allocationline al
+      JOIN c_allocationhdr ah ON al.c_allocationhdr_id = ah.c_allocationhdr_id
+   LEFT JOIN c_invoice i ON al.c_invoice_id = i.c_invoice_id
+   JOIN c_payment p ON al.c_payment_id = p.c_payment_id
+   LEFT JOIN m_entidadfinancieraplan ep ON p.m_entidadfinancieraplan_id = ep.m_entidadfinancieraplan_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = ep.m_entidadfinanciera_id
+   LEFT JOIN c_bpartner bp ON bp.c_bpartner_id = ef.c_bpartner_id
+   WHERE 1=1 ' || wherePosJournalIDs || ' AND NOT EXISTS (SELECT ala.c_payment_id FROM c_allocationline as ala INNER JOIN c_allocationhdr as aha on aha.c_allocationhdr_id = ala.c_allocationhdr_id WHERE ala.c_payment_id = p.c_payment_id AND aha.allocationtype in (''OPA'',''RCA'') AND aha.c_allocationhdr_id <> ah.c_allocationhdr_id) ' || 
+   ' UNION ALL 
+        ( SELECT NULL::integer AS c_allocationhdr_id, NULL::integer AS c_allocationline_id, p.ad_client_id, p.ad_org_id, p.isactive, p.created, p.createdby, p.updated, p.updatedby, NULL::integer AS c_invoice_id, p.c_payment_id, NULL::integer AS c_cashline_id, NULL::integer AS c_invoice_credit_id, p.tendertype::character varying(2) AS tendertype, p.documentno, p.description, (((p.documentno::text || ''_''::text) || to_char(p.datetrx, ''DD/MM/YYYY''::text)))::character varying(255) AS info, p.payamt AS amount, NULL::integer AS c_cash_id, NULL::numeric(18,0) AS line, NULL::integer AS c_doctype_id, p.checkno, p.a_bank, p.checkno AS transferno, p.creditcardtype, p.m_entidadfinancieraplan_id, ep.m_entidadfinanciera_id, p.couponnumber, date_trunc(''day''::text, p.datetrx) AS allocationdate, p.docstatus, p.dateacct::date AS dateacct, NULL::character varying(30) AS invoice_documentno, NULL::numeric(20,2) AS invoice_grandtotal, ef.value AS entidadfinanciera_value, ef.name AS entidadfinanciera_name, bp.value AS bp_entidadfinanciera_value, bp.name AS bp_entidadfinanciera_name, p.couponnumber AS cupon, p.creditcardnumber AS creditcard, NULL::bpchar AS isfiscaldocument, NULL::bpchar AS isfiscal, NULL::bpchar AS fiscalalreadyprinted, 0 AS changeamt, p.c_currency_id
+           FROM c_payment p
+      LEFT JOIN m_entidadfinancieraplan ep ON p.m_entidadfinancieraplan_id = ep.m_entidadfinancieraplan_id
+   LEFT JOIN m_entidadfinanciera ef ON ef.m_entidadfinanciera_id = ep.m_entidadfinanciera_id
+   LEFT JOIN c_bpartner bp ON bp.c_bpartner_id = ef.c_bpartner_id
+  WHERE 1=1 ' || wherePosJournalIDs || 
+  ' AND NOT (EXISTS ( SELECT al.c_allocationline_id
+    FROM c_allocationline al
+   WHERE al.c_payment_id = p.c_payment_id))
+  ORDER BY p.tendertype::character varying(2), p.documentno);';
+
+	--raise notice '%', consulta;
+	FOR adocument IN EXECUTE consulta LOOP
+		return next adocument;
+	END LOOP;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION c_posjournal_c_payment_v_filtered(anyarray)
+  OWNER TO libertya;
+
+--funview c_posjournal_c_invoice_credit_v_filtered
+CREATE OR REPLACE FUNCTION c_posjournal_c_invoice_credit_v_filtered(posjournalids anyarray)
+  RETURNS SETOF c_posjournal_v_type AS
+$BODY$
+declare
+	consulta varchar;
+	wherePosJournalIDs varchar;
+	existsPosJournalIDs boolean;
+	adocument c_posjournal_v_type;
+BEGIN
+	-- Armado de condiciones de filtro parámetro
+	existsPosJournalIDs = posjournalIDs is not null and array_length(posjournalIDs,1) > 0 and posjournalIDs[1] <> -1;
+
+	-- Filtro de cajas diarias
+	wherePosJournalIDs = '';
+	if existsPosJournalIDs then
+		wherePosJournalIDs = ' AND ah.c_posjournal_id IN ('|| array_to_string(posjournalIDs, ',') || ')';
+	end if;
+	
+	consulta =  
+	'SELECT al.c_allocationhdr_id, al.c_allocationline_id, al.ad_client_id, al.ad_org_id, al.isactive, al.created, al.createdby, al.updated, al.updatedby, al.c_invoice_id, al.c_payment_id, al.c_cashline_id, al.c_invoice_credit_id, ''CR''::character varying AS tendertype, ic.documentno, ic.description, ic.documentno AS info, (al.amount + al.discountamt + al.writeoffamt)::numeric(20,2) AS amount, NULL::integer AS c_cash_id, NULL::integer AS line, ic.c_doctype_id, NULL::character varying AS checkno, NULL::character varying AS a_bank, NULL::character varying AS transferno, NULL::character(1) AS creditcardtype, NULL::integer AS m_entidadfinancieraplan_id, NULL::integer AS m_entidadfinanciera_id, NULL::character varying AS couponnumber, date_trunc(''day''::text, ah.datetrx) AS allocationdate, ic.docstatus, ic.dateacct::date AS dateacct, i.documentno AS invoice_documentno, i.grandtotal AS invoice_grandtotal, NULL::character varying AS entidadfinanciera_value, NULL::character varying AS entidadfinanciera_name, NULL::character varying AS bp_entidadfinanciera_value, NULL::character varying AS bp_entidadfinanciera_name, NULL::character varying AS cupon, NULL::character varying AS creditcard, dt.isfiscaldocument, dt.isfiscal, ic.fiscalalreadyprinted, ah.c_currency_id
+   FROM c_allocationline al
+   JOIN c_allocationhdr ah ON al.c_allocationhdr_id = ah.c_allocationhdr_id
+   JOIN c_invoice ic ON al.c_invoice_credit_id = ic.c_invoice_id
+   JOIN c_doctype dt ON dt.c_doctype_id = ic.c_doctypetarget_id
+   LEFT JOIN c_invoice i ON al.c_invoice_id = i.c_invoice_id
+   WHERE 1=1 ' || wherePosJournalIDs;
+
+	--raise notice '%', consulta;
+	FOR adocument IN EXECUTE consulta LOOP
+		return next adocument;
+	END LOOP;
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION c_posjournal_c_invoice_credit_v_filtered(anyarray)
+  OWNER TO libertya;
+
+--funview c_pos_declaracionvalores_voided_filtered
+CREATE OR REPLACE FUNCTION c_pos_declaracionvalores_voided_filtered(posjournalids anyarray)
+  RETURNS SETOF c_pos_declaracionvalores_type AS
+$BODY$
+declare
+	consulta varchar;
+	wherePosJournalAllocationsIDs varchar;
+	existsPosJournalIDs boolean;
+	parameterFunctionCall varchar;
+	posJournalInvoicesFunctionCall varchar;
+	adocument c_pos_declaracionvalores_type;
+BEGIN
+	-- Armado de condiciones de filtro parámetro
+	existsPosJournalIDs = posjournalIDs is not null and array_length(posjournalIDs,1) > 0 and posjournalIDs[1] <> -1;
+	
+	-- Filtro de cajas diarias
+	wherePosJournalAllocationsIDs = '';
+	if existsPosJournalIDs then
+		wherePosJournalAllocationsIDs = ' AND ji.c_posjournal_id IN ('|| array_to_string(posjournalIDs, ',') || ')';
+	end if;
+
+	-- Armado del parámetro a la función c_posjournalinvoices_v_filtered
+	parameterFunctionCall = 'array[-1]';
+	if existsPosJournalIDs then
+		parameterFunctionCall = 'ARRAY[' || array_to_string(posjournalIDs, ',') || ']';
+	end if;
+	
+	-- Armado de llamado a función c_posjournalinvoices_v_filtered
+	posJournalInvoicesFunctionCall = 'c_posjournalinvoices_v_filtered(' || parameterFunctionCall || ', false)';
+	
+	-- Consulta
+	consulta = 
+	'SELECT ji.ad_client_id, ji.ad_org_id, ji.c_posjournal_id, pj.ad_user_id, ji.c_currency_id, ji.dateinvoiced AS datetrx, ji.docstatus, NULL::unknown AS category, ji.docbasetype AS tendertype, (ji.documentno::text || '' ''::text) || COALESCE(ji.description, ''''::character varying)::text AS description, NULL::unknown AS c_charge_id, NULL::unknown AS chargename, ji.c_invoice_id AS doc_id, ji.signo_issotrx::numeric * currencybase(ji.grandtotal, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id)::numeric + COALESCE(( SELECT sum(al2.changeamt) AS sum
+           FROM c_allocationline al2
+      JOIN c_payment p2 ON p2.c_payment_id = al2.c_payment_id
+   JOIN c_cashline cl ON cl.c_payment_id = p2.c_payment_id
+  WHERE al2.c_invoice_id = ji.c_invoice_id AND p2.tendertype = ''C''::bpchar AND al2.isactive = ''N''::bpchar), 0::numeric) AS ingreso, 0::numeric(22,2) AS egreso, ji.c_invoice_id, ji.documentno AS invoice_documentno, ji.grandtotal AS invoice_grandtotal, NULL::unknown AS entidadfinanciera_value, NULL::unknown AS entidadfinanciera_name, NULL::unknown AS bp_entidadfinanciera_value, NULL::unknown AS bp_entidadfinanciera_name, NULL::unknown AS cupon, NULL::unknown AS creditcard, ic.documentno AS generated_invoice_documentno, ji.allocation_active, pos.c_pos_id, pos.name AS posname
+   FROM ' || posJournalInvoicesFunctionCall || ' ji
+   JOIN c_posjournal pj ON ji.c_posjournal_id = pj.c_posjournal_id
+   JOIN c_pos pos ON pos.c_pos_id = pj.c_pos_id
+   JOIN c_allocationline al ON al.c_allocationhdr_id = ji.c_allocationhdr_id
+   JOIN c_invoice i ON i.c_invoice_id = al.c_invoice_id
+   JOIN c_invoice ic ON al.c_invoice_credit_id = ic.c_invoice_id
+  WHERE (ji.docstatus = ANY (ARRAY[''VO''::bpchar, ''RE''::bpchar])) ' || wherePosJournalAllocationsIDs || 
+  ' AND (ji.isfiscal IS NULL OR ji.isfiscal = ''N''::bpchar OR ji.isfiscal = ''Y''::bpchar AND ji.fiscalalreadyprinted = ''Y''::bpchar) AND i.isvoidable = ''N''::bpchar;';
+
+--raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION c_pos_declaracionvalores_voided_filtered(anyarray)
+  OWNER TO libertya;
+
+--funview c_pos_declaracionvalores_ventas_filtered
+CREATE OR REPLACE FUNCTION c_pos_declaracionvalores_ventas_filtered(posjournalids anyarray)
+  RETURNS SETOF c_pos_declaracionvalores_type AS
+$BODY$
+declare
+	consulta varchar;
+	wherePosJournalInvoicesIDs varchar;
+	wherePosJournalAllocationsIDs varchar;
+	whereClauseStd varchar;
+	existsPosJournalIDs boolean;
+	parameterFunctionCall varchar;
+	posJournalInvoicesFunctionCall varchar;
+	adocument c_pos_declaracionvalores_type;
+BEGIN
+	-- Armado de condiciones de filtro parámetro
+	existsPosJournalIDs = posjournalIDs is not null and array_length(posjournalIDs,1) > 0 and posjournalIDs[1] <> -1;
+	
+	-- Filtro de cajas diarias
+	wherePosJournalInvoicesIDs = '';
+	wherePosJournalAllocationsIDs = '';
+	if existsPosJournalIDs then
+		wherePosJournalInvoicesIDs = ' AND i.c_posjournal_id IN ('|| array_to_string(posjournalIDs, ',') || ')';
+		wherePosJournalAllocationsIDs = ' AND ah.c_posjournal_id IN ('|| array_to_string(posjournalIDs, ',') || ')';
+	end if;
+	
+	-- Condición std
+	whereClauseStd = 'i.docstatus in (''CO'',''CL'')';
+
+	-- Armado del parámetro a la función c_posjournalinvoices_v_filtered
+	parameterFunctionCall = 'array[-1]';
+	if existsPosJournalIDs then
+		parameterFunctionCall = 'ARRAY[' || array_to_string(posjournalIDs, ',') || ']';
+	end if;
+	
+	-- Armado de llamado a función c_posjournalinvoices_v_filtered
+	posJournalInvoicesFunctionCall = 'c_posjournalinvoices_v_filtered(' || parameterFunctionCall || ')';
+	
+	-- Consulta
+	consulta = 
+	'SELECT i.ad_client_id, i.ad_org_id, i.c_posjournal_id, i.ad_user_id, i.c_currency_id, i.dateinvoiced AS datetrx, i.docstatus, NULL::unknown AS category, dt.docbasetype AS tendertype, (i.documentno::text || '' ''::text) || COALESCE(i.description, ''''::character varying)::text AS description, i.c_charge_id, i.chargename, i.c_invoice_id AS doc_id, 
+        CASE dt.signo_issotrx
+            WHEN 1 THEN i.ca_amount
+            WHEN (-1) THEN 0::numeric
+            ELSE NULL::numeric
+        END::numeric(22,2) AS ingreso, 
+        CASE dt.signo_issotrx
+            WHEN 1 THEN 0::numeric
+            WHEN (-1) THEN abs(i.ca_amount)
+            ELSE NULL::numeric
+        END::numeric(22,2) AS egreso, i.c_invoice_id, i.documentno AS invoice_documentno, i.total AS invoice_grandtotal, NULL::unknown AS entidadfinanciera_value, NULL::unknown AS entidadfinanciera_name, NULL::unknown AS bp_entidadfinanciera_value, NULL::unknown AS bp_entidadfinanciera_name, NULL::unknown AS cupon, NULL::unknown AS creditcard, NULL::unknown AS generated_invoice_documentno, i.allocation_active, i.c_pos_id, i.posname
+   FROM ( SELECT DISTINCT i.ad_client_id, i.ad_org_id, i.documentno, inv.description, i.c_posjournal_id, pj.ad_user_id, i.c_invoice_id, i.c_currency_id, i.docstatus, i.dateinvoiced::date AS dateinvoiced, i.c_bpartner_id, i.c_doctype_id, ch.c_charge_id, ch.name AS chargename, currencybase(i.grandtotal, i.c_currency_id, i.dateacct::timestamp with time zone, i.ad_client_id, i.ad_org_id)::numeric(22,2) AS total, COALESCE(ds.amount, 0::numeric)::numeric(22,2) AS ca_amount, i.allocation_active, pos.c_pos_id, pos.name AS posname
+           FROM ' || posJournalInvoicesFunctionCall || ' i
+      JOIN c_posjournal pj ON pj.c_posjournal_id = i.c_posjournal_id
+   JOIN c_pos pos ON pos.c_pos_id = pj.c_pos_id
+   JOIN c_invoice inv ON i.c_invoice_id = inv.c_invoice_id
+   LEFT JOIN ( SELECT al.c_invoice_id, ah.c_posjournal_id, sum(al.amount) AS amount
+    FROM c_allocationhdr ah
+   JOIN c_allocationline al ON al.c_allocationhdr_id = ah.c_allocationhdr_id
+   JOIN c_invoice i ON i.c_invoice_id = al.c_invoice_id
+  WHERE ' || whereClauseStd || wherePosJournalAllocationsIDs ||
+  ' AND ah.isactive = ''Y''::bpchar AND i.isvoidable = ''N''::bpchar
+  GROUP BY al.c_invoice_id, ah.c_posjournal_id) ds ON ds.c_invoice_id = inv.c_invoice_id AND pj.c_posjournal_id = ds.c_posjournal_id
+   LEFT JOIN c_charge ch ON ch.c_charge_id = inv.c_charge_id
+   WHERE '  || whereClauseStd || wherePosJournalInvoicesIDs ||
+  ' ORDER BY i.ad_client_id, i.ad_org_id, i.documentno, inv.description, i.c_posjournal_id, pj.ad_user_id, i.c_invoice_id, i.c_currency_id, i.docstatus, i.dateinvoiced::date, i.c_bpartner_id, i.c_doctype_id, ch.c_charge_id, ch.name, currencybase(i.grandtotal, i.c_currency_id, i.dateacct::timestamp with time zone, i.ad_client_id, i.ad_org_id)::numeric(22,2), COALESCE(ds.amount, 0::numeric)::numeric(22,2), i.allocation_active, pos.c_pos_id, pos.name) i
+   JOIN c_doctype dt ON i.c_doctype_id = dt.c_doctype_id;';
+
+--raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION c_pos_declaracionvalores_ventas_filtered(anyarray)
+  OWNER TO libertya;
+
+--funview c_pos_declaracionvalores_payments_filtered
+CREATE OR REPLACE FUNCTION c_pos_declaracionvalores_payments_filtered(posjournalids anyarray)
+  RETURNS SETOF c_pos_declaracionvalores_type AS
+$BODY$
+declare
+	consulta varchar;
+	wherePosJournalPaymentsIDs varchar;
+	whereClauseStd varchar;
+	existsPosJournalIDs boolean;
+	parameterFunctionCall varchar;
+	posJournalPaymentsFunctionCall varchar;
+	adocument c_pos_declaracionvalores_type;
+BEGIN
+	-- Armado de condiciones de filtro parámetro
+	existsPosJournalIDs = posjournalIDs is not null and array_length(posjournalIDs,1) > 0 and posjournalIDs[1] <> -1;
+	
+	-- Filtro de cajas diarias
+	wherePosJournalPaymentsIDs = '';
+	if existsPosJournalIDs then
+		wherePosJournalPaymentsIDs = ' AND pj.c_posjournal_id IN ('|| array_to_string(posjournalIDs, ',') || ')';
+	end if;
+	
+	-- Condición std
+	whereClauseStd = 'p.docstatus in (''CO'',''CL'')';
+
+	-- Armado del parámetro a la función c_posjournalinvoices_v_filtered
+	parameterFunctionCall = 'array[-1]';
+	if existsPosJournalIDs then
+		parameterFunctionCall = 'ARRAY[' || array_to_string(posjournalIDs, ',') || ']';
+	end if;
+	
+	-- Armado de llamado a función c_posjournalinvoices_v_filtered
+	posJournalPaymentsFunctionCall = 'c_posjournal_c_payment_v_filtered(' || parameterFunctionCall || ')';
+	
+	-- Consulta
+	consulta = 
+	'SELECT p.ad_client_id, p.ad_org_id, p.c_posjournal_id, p.ad_user_id, p.c_currency_id, p.datetrx, p.docstatus, NULL::text AS category, p.tendertype, (p.documentno::text || '' ''::text) || COALESCE(p.description, ''''::character varying)::text AS description, p.c_charge_id, p.chargename, p.c_payment_id AS doc_id, 
+        CASE WHEN (p.total * p.signo_issotrx) < 0 
+            THEN abs(p.total)
+            ELSE 0::numeric
+        END::numeric(22,2) AS ingreso, 
+        CASE WHEN (p.total * p.signo_issotrx) >= 0 
+	    THEN abs(p.total)
+            ELSE 0::numeric
+        END::numeric(22,2) AS egreso, p.c_invoice_id, p.invoice_documentno, p.invoice_grandtotal, p.entidadfinanciera_value, p.entidadfinanciera_name, p.bp_entidadfinanciera_value, p.bp_entidadfinanciera_name, p.cupon, p.creditcard, NULL::unknown AS generated_invoice_documentno, p.allocation_active, p.c_pos_id, p.posname, p.m_entidadfinanciera_id
+   FROM ( SELECT p.ad_client_id, p.ad_org_id, p.c_payment_id, p.c_posjournal_id, pj.ad_user_id, p.c_currency_id, p.datetrx::date AS datetrx, p.docstatus, p.documentno, p.description, p.isreceipt, p.tendertype, ch.c_charge_id, ch.name AS chargename, 
+		sum(currencybase(pjp.amount, pjp.c_currency_id, pjp.dateacct, pjp.ad_client_id, pjp.ad_org_id) + 
+                CASE
+                    WHEN p.tendertype = ''C''::bpchar THEN pjp.changeamt
+                    ELSE 0::numeric
+                END)::numeric(22,2) AS total, pjp.invoice_documentno, 
+                (currencybase(pjp.invoice_grandtotal, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id) + 
+                CASE
+                    WHEN p.tendertype = ''C''::bpchar THEN pjp.changeamt
+                    ELSE 0::numeric
+                END)::numeric(20,2) AS invoice_grandtotal, pjp.entidadfinanciera_value, pjp.entidadfinanciera_name, pjp.bp_entidadfinanciera_value, pjp.bp_entidadfinanciera_name, pjp.cupon, pjp.creditcard, pjp.isactive AS allocation_active, pjp.c_invoice_id, pos.c_pos_id, pos.name AS posname, pjp.m_entidadfinanciera_id, dt.signo_issotrx
+           FROM c_payment p
+           INNER JOIN c_doctype dt on dt.c_doctype_id = p.c_doctype_id
+      JOIN ' || posJournalPaymentsFunctionCall || ' pjp ON pjp.c_payment_id = p.c_payment_id
+   JOIN c_posjournal pj ON pj.c_posjournal_id = p.c_posjournal_id
+   JOIN c_pos pos ON pos.c_pos_id = pj.c_pos_id
+   LEFT JOIN c_charge ch ON ch.c_charge_id = p.c_charge_id
+   LEFT JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+  WHERE ' || whereClauseStd || wherePosJournalPaymentsIDs ||
+  ' AND (i.c_invoice_id IS NULL OR NOT (EXISTS ( SELECT cl.c_cashline_id
+   FROM c_cashline cl
+  WHERE cl.c_payment_id = p.c_payment_id AND i.isvoidable = ''Y''::bpchar)))
+GROUP BY p.ad_client_id, p.ad_org_id, p.c_payment_id, p.c_posjournal_id, pj.ad_user_id, p.c_currency_id, p.datetrx::date, p.docstatus, p.documentno, p.description, p.isreceipt, p.tendertype, ch.c_charge_id, ch.name, pjp.invoice_documentno, pjp.invoice_grandtotal, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id, pjp.changeamt, pjp.entidadfinanciera_value, pjp.entidadfinanciera_name, pjp.bp_entidadfinanciera_value, pjp.bp_entidadfinanciera_name, pjp.cupon, pjp.creditcard, pjp.isactive, pjp.c_invoice_id, pos.c_pos_id, pos.name, pjp.m_entidadfinanciera_id, dt.signo_issotrx) p;';
+
+--raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION c_pos_declaracionvalores_payments_filtered(anyarray)
+  OWNER TO libertya;
+
+--funview c_pos_declaracionvalores_credit_filtered
+CREATE OR REPLACE FUNCTION c_pos_declaracionvalores_credit_filtered(posjournalids anyarray)
+  RETURNS SETOF c_pos_declaracionvalores_type AS
+$BODY$
+declare
+	consulta varchar;
+	wherePosJournalCreditIDs varchar;
+	whereClauseStd varchar;
+	existsPosJournalIDs boolean;
+	parameterFunctionCall varchar;
+	posJournalCreditFunctionCall varchar;
+	adocument c_pos_declaracionvalores_type;
+BEGIN
+	-- Armado de condiciones de filtro parámetro
+	existsPosJournalIDs = posjournalIDs is not null and array_length(posjournalIDs,1) > 0 and posjournalIDs[1] <> -1;
+	
+	-- Filtro de cajas diarias
+	wherePosJournalCreditIDs = '';
+	if existsPosJournalIDs then
+		wherePosJournalCreditIDs = ' AND pj.c_posjournal_id IN ('|| array_to_string(posjournalIDs, ',') || ')';
+	end if;
+	
+	-- Condición std
+	whereClauseStd = 'i.docstatus in (''CO'',''CL'')';
+
+	-- Armado del parámetro a la función c_posjournalinvoices_v_filtered
+	parameterFunctionCall = 'array[-1]';
+	if existsPosJournalIDs then
+		parameterFunctionCall = 'ARRAY[' || array_to_string(posjournalIDs, ',') || ']';
+	end if;
+	
+	-- Armado de llamado a función c_posjournalinvoices_v_filtered
+	posJournalCreditFunctionCall = 'c_posjournal_c_invoice_credit_v_filtered(' || parameterFunctionCall || ')';
+	
+	-- Consulta
+	consulta = 
+	'SELECT i.ad_client_id, i.ad_org_id, i.c_posjournal_id, i.ad_user_id, i.c_currency_id, i.dateinvoiced AS datetrx, i.docstatus, NULL::unknown AS category, i.tendertype, (i.documentno::text || '' ''::text) || COALESCE(i.description, ''''::character varying)::text AS description, i.c_charge_id, i.chargename, i.c_invoice_id AS doc_id, i.total AS ingreso, 0 AS egreso, i.invoice_id AS c_invoice_id, i.invoice_documentno, i.invoice_grandtotal, i.entidadfinanciera_value, i.entidadfinanciera_name, i.bp_entidadfinanciera_value, i.bp_entidadfinanciera_name, i.cupon, i.creditcard, NULL::unknown AS generated_invoice_documentno, i.allocation_active, i.c_pos_id, i.posname
+   FROM ( SELECT i.ad_client_id, i.ad_org_id, i.documentno, i.description, ah.c_posjournal_id, pj.ad_user_id, i.c_invoice_id, i.c_currency_id, i.docstatus, pjp.tendertype, i.dateinvoiced::date AS dateinvoiced, i.c_bpartner_id, i.c_doctype_id, ch.c_charge_id, ch.name AS chargename, sum(currencybase(pjp.amount, pjp.c_currency_id, pjp.dateacct, pjp.ad_client_id, pjp.ad_org_id)::numeric(22,2))::numeric(22,2) AS total, pjp.invoice_documentno, currencybase(pjp.invoice_grandtotal, si.c_currency_id, si.dateacct, si.ad_client_id, si.ad_org_id)::numeric(22,2) as invoice_grandtotal, pjp.entidadfinanciera_value, pjp.entidadfinanciera_name, pjp.bp_entidadfinanciera_value, pjp.bp_entidadfinanciera_name, pjp.cupon, pjp.creditcard, pjp.isactive AS allocation_active, pjp.c_invoice_id AS invoice_id, pos.c_pos_id, pos.name AS posname
+           FROM c_invoice i
+      JOIN ' || posJournalCreditFunctionCall || ' pjp ON pjp.c_invoice_credit_id = i.c_invoice_id
+   JOIN c_allocationhdr ah ON ah.c_allocationhdr_id = pjp.c_allocationhdr_id
+   JOIN c_posjournal pj ON pj.c_posjournal_id = ah.c_posjournal_id
+   JOIN c_pos pos ON pos.c_pos_id = pj.c_pos_id
+   LEFT JOIN c_invoice si ON si.c_invoice_id = pjp.c_invoice_id
+   LEFT JOIN c_charge ch ON ch.c_charge_id = i.c_charge_id
+   WHERE ' || whereClauseStd || wherePosJournalCreditIDs ||
+  ' GROUP BY i.ad_client_id, i.ad_org_id, i.documentno, i.description, ah.c_posjournal_id, pj.ad_user_id, i.c_invoice_id, i.c_currency_id, i.docstatus, pjp.tendertype, i.dateinvoiced::date, i.c_bpartner_id, i.c_doctype_id, ch.c_charge_id, ch.name, pjp.invoice_documentno, pjp.invoice_grandtotal, si.c_currency_id, si.dateacct, si.ad_client_id, si.ad_org_id, pjp.entidadfinanciera_value, pjp.entidadfinanciera_name, pjp.bp_entidadfinanciera_value, pjp.bp_entidadfinanciera_name, pjp.cupon, pjp.creditcard, pjp.isactive, pjp.c_invoice_id, pos.c_pos_id, pos.name) i
+   JOIN c_doctype dt ON i.c_doctype_id = dt.c_doctype_id';
+
+--raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION c_pos_declaracionvalores_credit_filtered(anyarray)
+  OWNER TO libertya;
+
+CREATE OR REPLACE FUNCTION c_pos_declaracionvalores_cash_filtered(posjournalids anyarray)
+  RETURNS SETOF c_pos_declaracionvalores_type AS
+$BODY$
+declare
+	consulta varchar;
+	wherePosJournalCashIDs varchar;
+	whereClauseStd varchar;
+	existsPosJournalIDs boolean;
+	parameterFunctionCall varchar;
+	posJournalCashFunctionCall varchar;
+	adocument c_pos_declaracionvalores_type;
+BEGIN
+	-- Armado de condiciones de filtro parámetro
+	existsPosJournalIDs = posjournalIDs is not null and array_length(posjournalIDs,1) > 0 and posjournalIDs[1] <> -1;
+	
+	-- Filtro de cajas diarias
+	wherePosJournalCashIDs = '';
+	if existsPosJournalIDs then
+		wherePosJournalCashIDs = ' AND pj.c_posjournal_id IN ('|| array_to_string(posjournalIDs, ',') || ')';
+	end if;
+	
+	-- Condición std
+	whereClauseStd = 'cl.docstatus in (''CO'',''CL'')';
+
+	-- Armado del parámetro a la función c_posjournalinvoices_v_filtered
+	parameterFunctionCall = 'array[-1]';
+	if existsPosJournalIDs then
+		parameterFunctionCall = 'ARRAY[' || array_to_string(posjournalIDs, ',') || ']';
+	end if;
+	
+	-- Armado de llamado a función c_posjournalinvoices_v_filtered
+	posJournalCashFunctionCall = 'c_posjournal_c_cash_v_filtered(' || parameterFunctionCall || ')';
+	
+	-- Consulta
+	consulta = 
+	'SELECT c.ad_client_id, c.ad_org_id, c.c_posjournal_id, c.ad_user_id, c.c_currency_id, c.datetrx, c.docstatus, c.cashtype AS category, c.tendertype, 
+        CASE
+            WHEN length(c.description::text) > 0 THEN c.description
+            ELSE c.info
+        END AS description, c.c_charge_id, c.chargename, c.c_cashline_id AS doc_id, 
+        CASE sign(c.amount)
+            WHEN (-1) THEN 0::numeric
+            ELSE c.total
+        END::numeric(22,2) AS ingreso, 
+        CASE sign(c.amount)
+            WHEN (-1) THEN abs(c.total)
+            ELSE 0::numeric
+        END::numeric(22,2) AS egreso, c.c_invoice_id, c.invoice_documentno, c.invoice_grandtotal, c.entidadfinanciera_value, c.entidadfinanciera_name, c.bp_entidadfinanciera_value, c.bp_entidadfinanciera_name, c.cupon, c.creditcard, NULL::unknown AS generated_invoice_documentno, c.allocation_active, c.c_pos_id, c.posname
+   FROM ( SELECT cl.ad_client_id, cl.ad_org_id, cl.c_cashline_id, c.c_posjournal_id, pj.ad_user_id, cl.c_currency_id, c.statementdate::date AS datetrx, cl.docstatus, cl.description, pjp.info, pjp.tendertype, cl.cashtype, ch.c_charge_id, ch.name AS chargename, sum(currencybase(pjp.amount, pjp.c_currency_id, pjp.dateacct, pjp.ad_client_id, pjp.ad_org_id))::numeric(22,2) AS total, pjp.invoice_documentno, currencybase(pjp.invoice_grandtotal, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id)::numeric(22,2) as invoice_grandtotal, pjp.entidadfinanciera_value, pjp.entidadfinanciera_name, pjp.bp_entidadfinanciera_value, pjp.bp_entidadfinanciera_name, pjp.cupon, pjp.creditcard, cl.amount, pjp.isactive AS allocation_active, pjp.c_invoice_id, pos.c_pos_id, pos.name AS posname
+           FROM c_cashline cl
+      JOIN c_cash c ON c.c_cash_id = cl.c_cash_id
+   JOIN ' || posJournalCashFunctionCall || ' pjp ON pjp.c_cashline_id = cl.c_cashline_id
+   JOIN c_posjournal pj ON pj.c_posjournal_id = c.c_posjournal_id
+   JOIN c_pos pos ON pos.c_pos_id = pj.c_pos_id
+   LEFT JOIN c_invoice i ON i.c_invoice_id = pjp.c_invoice_id
+   LEFT JOIN c_charge ch ON ch.c_charge_id = cl.c_charge_id
+   WHERE ' || whereClauseStd || wherePosJournalCashIDs ||
+   ' GROUP BY cl.ad_client_id, cl.ad_org_id, cl.c_cashline_id, c.c_posjournal_id, pj.ad_user_id, cl.c_currency_id, c.statementdate::date, cl.docstatus, cl.description, pjp.info, pjp.tendertype, cl.cashtype, ch.c_charge_id, ch.name, pjp.invoice_documentno, pjp.invoice_grandtotal, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id, pjp.entidadfinanciera_value, pjp.entidadfinanciera_name, pjp.bp_entidadfinanciera_value, pjp.bp_entidadfinanciera_name, pjp.cupon, pjp.creditcard, cl.amount, pjp.isactive, pjp.c_invoice_id, pos.c_pos_id, pos.name) c;';
+
+--raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION c_pos_declaracionvalores_cash_filtered(anyarray)
+  OWNER TO libertya;
+
+--Creación de views
+CREATE OR REPLACE VIEW c_posjournal_c_cash_v AS 
+ SELECT c_posjournal_c_cash_v_filtered.c_allocationhdr_id, c_posjournal_c_cash_v_filtered.c_allocationline_id, c_posjournal_c_cash_v_filtered.ad_client_id, c_posjournal_c_cash_v_filtered.ad_org_id, c_posjournal_c_cash_v_filtered.isactive, c_posjournal_c_cash_v_filtered.created, c_posjournal_c_cash_v_filtered.createdby, c_posjournal_c_cash_v_filtered.updated, c_posjournal_c_cash_v_filtered.updatedby, c_posjournal_c_cash_v_filtered.c_invoice_id, c_posjournal_c_cash_v_filtered.c_payment_id, c_posjournal_c_cash_v_filtered.c_cashline_id, c_posjournal_c_cash_v_filtered.c_invoice_credit_id, c_posjournal_c_cash_v_filtered.tendertype, c_posjournal_c_cash_v_filtered.documentno, c_posjournal_c_cash_v_filtered.description, c_posjournal_c_cash_v_filtered.info, c_posjournal_c_cash_v_filtered.amount, c_posjournal_c_cash_v_filtered.c_cash_id, c_posjournal_c_cash_v_filtered.line, c_posjournal_c_cash_v_filtered.c_doctype_id, c_posjournal_c_cash_v_filtered.checkno, c_posjournal_c_cash_v_filtered.a_bank, c_posjournal_c_cash_v_filtered.transferno, c_posjournal_c_cash_v_filtered.creditcardtype, c_posjournal_c_cash_v_filtered.m_entidadfinancieraplan_id, c_posjournal_c_cash_v_filtered.m_entidadfinanciera_id, c_posjournal_c_cash_v_filtered.couponnumber, c_posjournal_c_cash_v_filtered.allocationdate, c_posjournal_c_cash_v_filtered.docstatus, c_posjournal_c_cash_v_filtered.dateacct, c_posjournal_c_cash_v_filtered.invoice_documentno, c_posjournal_c_cash_v_filtered.invoice_grandtotal, c_posjournal_c_cash_v_filtered.entidadfinanciera_value, c_posjournal_c_cash_v_filtered.entidadfinanciera_name, c_posjournal_c_cash_v_filtered.bp_entidadfinanciera_value, c_posjournal_c_cash_v_filtered.bp_entidadfinanciera_name, c_posjournal_c_cash_v_filtered.cupon, c_posjournal_c_cash_v_filtered.creditcard, c_posjournal_c_cash_v_filtered.isfiscaldocument, c_posjournal_c_cash_v_filtered.isfiscal, c_posjournal_c_cash_v_filtered.fiscalalreadyprinted
+   FROM c_posjournal_c_cash_v_filtered(ARRAY[(-1)]) c_posjournal_c_cash_v_filtered(c_allocationhdr_id, c_allocationline_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_invoice_id, c_payment_id, c_cashline_id, c_invoice_credit_id, tendertype, documentno, description, info, amount, c_cash_id, line, c_doctype_id, checkno, a_bank, transferno, creditcardtype, m_entidadfinancieraplan_id, m_entidadfinanciera_id, couponnumber, allocationdate, docstatus, dateacct, invoice_documentno, invoice_grandtotal, entidadfinanciera_value, entidadfinanciera_name, bp_entidadfinanciera_value, bp_entidadfinanciera_name, cupon, creditcard, isfiscaldocument, isfiscal, fiscalalreadyprinted);
+
+ALTER TABLE c_posjournal_c_cash_v
+  OWNER TO libertya;
+
+CREATE OR REPLACE VIEW c_posjournal_c_invoice_credit_v AS 
+ SELECT c_posjournal_c_invoice_credit_v_filtered.c_allocationhdr_id, c_posjournal_c_invoice_credit_v_filtered.c_allocationline_id, c_posjournal_c_invoice_credit_v_filtered.ad_client_id, c_posjournal_c_invoice_credit_v_filtered.ad_org_id, c_posjournal_c_invoice_credit_v_filtered.isactive, c_posjournal_c_invoice_credit_v_filtered.created, c_posjournal_c_invoice_credit_v_filtered.createdby, c_posjournal_c_invoice_credit_v_filtered.updated, c_posjournal_c_invoice_credit_v_filtered.updatedby, c_posjournal_c_invoice_credit_v_filtered.c_invoice_id, c_posjournal_c_invoice_credit_v_filtered.c_payment_id, c_posjournal_c_invoice_credit_v_filtered.c_cashline_id, c_posjournal_c_invoice_credit_v_filtered.c_invoice_credit_id, c_posjournal_c_invoice_credit_v_filtered.tendertype, c_posjournal_c_invoice_credit_v_filtered.documentno, c_posjournal_c_invoice_credit_v_filtered.description, c_posjournal_c_invoice_credit_v_filtered.info, c_posjournal_c_invoice_credit_v_filtered.amount, c_posjournal_c_invoice_credit_v_filtered.c_cash_id, c_posjournal_c_invoice_credit_v_filtered.line, c_posjournal_c_invoice_credit_v_filtered.c_doctype_id, c_posjournal_c_invoice_credit_v_filtered.checkno, c_posjournal_c_invoice_credit_v_filtered.a_bank, c_posjournal_c_invoice_credit_v_filtered.transferno, c_posjournal_c_invoice_credit_v_filtered.creditcardtype, c_posjournal_c_invoice_credit_v_filtered.m_entidadfinancieraplan_id, c_posjournal_c_invoice_credit_v_filtered.m_entidadfinanciera_id, c_posjournal_c_invoice_credit_v_filtered.couponnumber, c_posjournal_c_invoice_credit_v_filtered.allocationdate, c_posjournal_c_invoice_credit_v_filtered.docstatus, c_posjournal_c_invoice_credit_v_filtered.dateacct, c_posjournal_c_invoice_credit_v_filtered.invoice_documentno, c_posjournal_c_invoice_credit_v_filtered.invoice_grandtotal, c_posjournal_c_invoice_credit_v_filtered.entidadfinanciera_value, c_posjournal_c_invoice_credit_v_filtered.entidadfinanciera_name, c_posjournal_c_invoice_credit_v_filtered.bp_entidadfinanciera_value, c_posjournal_c_invoice_credit_v_filtered.bp_entidadfinanciera_name, c_posjournal_c_invoice_credit_v_filtered.cupon, c_posjournal_c_invoice_credit_v_filtered.creditcard, c_posjournal_c_invoice_credit_v_filtered.isfiscaldocument, c_posjournal_c_invoice_credit_v_filtered.isfiscal, c_posjournal_c_invoice_credit_v_filtered.fiscalalreadyprinted
+   FROM c_posjournal_c_invoice_credit_v_filtered(ARRAY[(-1)]) c_posjournal_c_invoice_credit_v_filtered(c_allocationhdr_id, c_allocationline_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_invoice_id, c_payment_id, c_cashline_id, c_invoice_credit_id, tendertype, documentno, description, info, amount, c_cash_id, line, c_doctype_id, checkno, a_bank, transferno, creditcardtype, m_entidadfinancieraplan_id, m_entidadfinanciera_id, couponnumber, allocationdate, docstatus, dateacct, invoice_documentno, invoice_grandtotal, entidadfinanciera_value, entidadfinanciera_name, bp_entidadfinanciera_value, bp_entidadfinanciera_name, cupon, creditcard, isfiscaldocument, isfiscal, fiscalalreadyprinted);
+
+ALTER TABLE c_posjournal_c_invoice_credit_v
+  OWNER TO libertya;
+
+CREATE OR REPLACE VIEW c_posjournal_c_payment_v AS 
+ SELECT c_posjournal_c_payment_v_filtered.c_allocationhdr_id, c_posjournal_c_payment_v_filtered.c_allocationline_id, c_posjournal_c_payment_v_filtered.ad_client_id, c_posjournal_c_payment_v_filtered.ad_org_id, c_posjournal_c_payment_v_filtered.isactive, c_posjournal_c_payment_v_filtered.created, c_posjournal_c_payment_v_filtered.createdby, c_posjournal_c_payment_v_filtered.updated, c_posjournal_c_payment_v_filtered.updatedby, c_posjournal_c_payment_v_filtered.c_invoice_id, c_posjournal_c_payment_v_filtered.c_payment_id, c_posjournal_c_payment_v_filtered.c_cashline_id, c_posjournal_c_payment_v_filtered.c_invoice_credit_id, c_posjournal_c_payment_v_filtered.tendertype, c_posjournal_c_payment_v_filtered.documentno, c_posjournal_c_payment_v_filtered.description, c_posjournal_c_payment_v_filtered.info, c_posjournal_c_payment_v_filtered.amount, c_posjournal_c_payment_v_filtered.c_cash_id, c_posjournal_c_payment_v_filtered.line, c_posjournal_c_payment_v_filtered.c_doctype_id, c_posjournal_c_payment_v_filtered.checkno, c_posjournal_c_payment_v_filtered.a_bank, c_posjournal_c_payment_v_filtered.transferno, c_posjournal_c_payment_v_filtered.creditcardtype, c_posjournal_c_payment_v_filtered.m_entidadfinancieraplan_id, c_posjournal_c_payment_v_filtered.m_entidadfinanciera_id, c_posjournal_c_payment_v_filtered.couponnumber, c_posjournal_c_payment_v_filtered.allocationdate, c_posjournal_c_payment_v_filtered.docstatus, c_posjournal_c_payment_v_filtered.dateacct, c_posjournal_c_payment_v_filtered.invoice_documentno, c_posjournal_c_payment_v_filtered.invoice_grandtotal, c_posjournal_c_payment_v_filtered.entidadfinanciera_value, c_posjournal_c_payment_v_filtered.entidadfinanciera_name, c_posjournal_c_payment_v_filtered.bp_entidadfinanciera_value, c_posjournal_c_payment_v_filtered.bp_entidadfinanciera_name, c_posjournal_c_payment_v_filtered.cupon, c_posjournal_c_payment_v_filtered.creditcard, c_posjournal_c_payment_v_filtered.isfiscaldocument, c_posjournal_c_payment_v_filtered.isfiscal, c_posjournal_c_payment_v_filtered.fiscalalreadyprinted, c_posjournal_c_payment_v_filtered.changeamt
+   FROM c_posjournal_c_payment_v_filtered(ARRAY[(-1)]) c_posjournal_c_payment_v_filtered(c_allocationhdr_id, c_allocationline_id, ad_client_id, ad_org_id, isactive, created, createdby, updated, updatedby, c_invoice_id, c_payment_id, c_cashline_id, c_invoice_credit_id, tendertype, documentno, description, info, amount, c_cash_id, line, c_doctype_id, checkno, a_bank, transferno, creditcardtype, m_entidadfinancieraplan_id, m_entidadfinanciera_id, couponnumber, allocationdate, docstatus, dateacct, invoice_documentno, invoice_grandtotal, entidadfinanciera_value, entidadfinanciera_name, bp_entidadfinanciera_value, bp_entidadfinanciera_name, cupon, creditcard, isfiscaldocument, isfiscal, fiscalalreadyprinted, changeamt);
+
+ALTER TABLE c_posjournal_c_payment_v
+  OWNER TO libertya;
+
+CREATE OR REPLACE VIEW c_pos_declaracionvalores_cash AS 
+ SELECT c_pos_declaracionvalores_cash_filtered.ad_client_id, c_pos_declaracionvalores_cash_filtered.ad_org_id, c_pos_declaracionvalores_cash_filtered.c_posjournal_id, c_pos_declaracionvalores_cash_filtered.ad_user_id, c_pos_declaracionvalores_cash_filtered.c_currency_id, c_pos_declaracionvalores_cash_filtered.datetrx, c_pos_declaracionvalores_cash_filtered.docstatus, c_pos_declaracionvalores_cash_filtered.category, c_pos_declaracionvalores_cash_filtered.tendertype, c_pos_declaracionvalores_cash_filtered.description, c_pos_declaracionvalores_cash_filtered.c_charge_id, c_pos_declaracionvalores_cash_filtered.chargename, c_pos_declaracionvalores_cash_filtered.doc_id, c_pos_declaracionvalores_cash_filtered.ingreso, c_pos_declaracionvalores_cash_filtered.egreso, c_pos_declaracionvalores_cash_filtered.c_invoice_id, c_pos_declaracionvalores_cash_filtered.invoice_documentno, c_pos_declaracionvalores_cash_filtered.invoice_grandtotal, c_pos_declaracionvalores_cash_filtered.entidadfinanciera_value, c_pos_declaracionvalores_cash_filtered.entidadfinanciera_name, c_pos_declaracionvalores_cash_filtered.bp_entidadfinanciera_value, c_pos_declaracionvalores_cash_filtered.bp_entidadfinanciera_name, c_pos_declaracionvalores_cash_filtered.cupon, c_pos_declaracionvalores_cash_filtered.creditcard, c_pos_declaracionvalores_cash_filtered.generated_invoice_documentno, c_pos_declaracionvalores_cash_filtered.allocation_active, c_pos_declaracionvalores_cash_filtered.c_pos_id, c_pos_declaracionvalores_cash_filtered.posname
+   FROM c_pos_declaracionvalores_cash_filtered(ARRAY[(-1)]) c_pos_declaracionvalores_cash_filtered(ad_client_id, ad_org_id, c_posjournal_id, ad_user_id, c_currency_id, datetrx, docstatus, category, tendertype, description, c_charge_id, chargename, doc_id, ingreso, egreso, c_invoice_id, invoice_documentno, invoice_grandtotal, entidadfinanciera_value, entidadfinanciera_name, bp_entidadfinanciera_value, bp_entidadfinanciera_name, cupon, creditcard, generated_invoice_documentno, allocation_active, c_pos_id, posname);
+
+ALTER TABLE c_pos_declaracionvalores_cash
+  OWNER TO libertya;
+
+CREATE OR REPLACE VIEW c_pos_declaracionvalores_credit AS 
+ SELECT c_pos_declaracionvalores_credit_filtered.ad_client_id, c_pos_declaracionvalores_credit_filtered.ad_org_id, c_pos_declaracionvalores_credit_filtered.c_posjournal_id, c_pos_declaracionvalores_credit_filtered.ad_user_id, c_pos_declaracionvalores_credit_filtered.c_currency_id, c_pos_declaracionvalores_credit_filtered.datetrx, c_pos_declaracionvalores_credit_filtered.docstatus, c_pos_declaracionvalores_credit_filtered.category, c_pos_declaracionvalores_credit_filtered.tendertype, c_pos_declaracionvalores_credit_filtered.description, c_pos_declaracionvalores_credit_filtered.c_charge_id, c_pos_declaracionvalores_credit_filtered.chargename, c_pos_declaracionvalores_credit_filtered.doc_id, c_pos_declaracionvalores_credit_filtered.ingreso, c_pos_declaracionvalores_credit_filtered.egreso, c_pos_declaracionvalores_credit_filtered.c_invoice_id, c_pos_declaracionvalores_credit_filtered.invoice_documentno, c_pos_declaracionvalores_credit_filtered.invoice_grandtotal, c_pos_declaracionvalores_credit_filtered.entidadfinanciera_value, c_pos_declaracionvalores_credit_filtered.entidadfinanciera_name, c_pos_declaracionvalores_credit_filtered.bp_entidadfinanciera_value, c_pos_declaracionvalores_credit_filtered.bp_entidadfinanciera_name, c_pos_declaracionvalores_credit_filtered.cupon, c_pos_declaracionvalores_credit_filtered.creditcard, c_pos_declaracionvalores_credit_filtered.generated_invoice_documentno, c_pos_declaracionvalores_credit_filtered.allocation_active, c_pos_declaracionvalores_credit_filtered.c_pos_id, c_pos_declaracionvalores_credit_filtered.posname
+   FROM c_pos_declaracionvalores_credit_filtered(ARRAY[(-1)]) c_pos_declaracionvalores_credit_filtered(ad_client_id, ad_org_id, c_posjournal_id, ad_user_id, c_currency_id, datetrx, docstatus, category, tendertype, description, c_charge_id, chargename, doc_id, ingreso, egreso, c_invoice_id, invoice_documentno, invoice_grandtotal, entidadfinanciera_value, entidadfinanciera_name, bp_entidadfinanciera_value, bp_entidadfinanciera_name, cupon, creditcard, generated_invoice_documentno, allocation_active, c_pos_id, posname);
+
+ALTER TABLE c_pos_declaracionvalores_credit
+  OWNER TO libertya;
+
+CREATE OR REPLACE VIEW c_pos_declaracionvalores_payments AS 
+ SELECT c_pos_declaracionvalores_payments_filtered.ad_client_id, c_pos_declaracionvalores_payments_filtered.ad_org_id, c_pos_declaracionvalores_payments_filtered.c_posjournal_id, c_pos_declaracionvalores_payments_filtered.ad_user_id, c_pos_declaracionvalores_payments_filtered.c_currency_id, c_pos_declaracionvalores_payments_filtered.datetrx, c_pos_declaracionvalores_payments_filtered.docstatus, c_pos_declaracionvalores_payments_filtered.category, c_pos_declaracionvalores_payments_filtered.tendertype, c_pos_declaracionvalores_payments_filtered.description, c_pos_declaracionvalores_payments_filtered.c_charge_id, c_pos_declaracionvalores_payments_filtered.chargename, c_pos_declaracionvalores_payments_filtered.doc_id, c_pos_declaracionvalores_payments_filtered.ingreso, c_pos_declaracionvalores_payments_filtered.egreso, c_pos_declaracionvalores_payments_filtered.c_invoice_id, c_pos_declaracionvalores_payments_filtered.invoice_documentno, c_pos_declaracionvalores_payments_filtered.invoice_grandtotal, c_pos_declaracionvalores_payments_filtered.entidadfinanciera_value, c_pos_declaracionvalores_payments_filtered.entidadfinanciera_name, c_pos_declaracionvalores_payments_filtered.bp_entidadfinanciera_value, c_pos_declaracionvalores_payments_filtered.bp_entidadfinanciera_name, c_pos_declaracionvalores_payments_filtered.cupon, c_pos_declaracionvalores_payments_filtered.creditcard, c_pos_declaracionvalores_payments_filtered.generated_invoice_documentno, c_pos_declaracionvalores_payments_filtered.allocation_active, c_pos_declaracionvalores_payments_filtered.c_pos_id, c_pos_declaracionvalores_payments_filtered.posname
+   FROM c_pos_declaracionvalores_payments_filtered(ARRAY[(-1)]) c_pos_declaracionvalores_payments_filtered(ad_client_id, ad_org_id, c_posjournal_id, ad_user_id, c_currency_id, datetrx, docstatus, category, tendertype, description, c_charge_id, chargename, doc_id, ingreso, egreso, c_invoice_id, invoice_documentno, invoice_grandtotal, entidadfinanciera_value, entidadfinanciera_name, bp_entidadfinanciera_value, bp_entidadfinanciera_name, cupon, creditcard, generated_invoice_documentno, allocation_active, c_pos_id, posname);
+
+ALTER TABLE c_pos_declaracionvalores_payments
+  OWNER TO libertya;
+
+CREATE OR REPLACE VIEW c_pos_declaracionvalores_ventas AS 
+ SELECT c_pos_declaracionvalores_ventas_filtered.ad_client_id, c_pos_declaracionvalores_ventas_filtered.ad_org_id, c_pos_declaracionvalores_ventas_filtered.c_posjournal_id, c_pos_declaracionvalores_ventas_filtered.ad_user_id, c_pos_declaracionvalores_ventas_filtered.c_currency_id, c_pos_declaracionvalores_ventas_filtered.datetrx, c_pos_declaracionvalores_ventas_filtered.docstatus, c_pos_declaracionvalores_ventas_filtered.category, c_pos_declaracionvalores_ventas_filtered.tendertype, c_pos_declaracionvalores_ventas_filtered.description, c_pos_declaracionvalores_ventas_filtered.c_charge_id, c_pos_declaracionvalores_ventas_filtered.chargename, c_pos_declaracionvalores_ventas_filtered.doc_id, c_pos_declaracionvalores_ventas_filtered.ingreso, c_pos_declaracionvalores_ventas_filtered.egreso, c_pos_declaracionvalores_ventas_filtered.c_invoice_id, c_pos_declaracionvalores_ventas_filtered.invoice_documentno, c_pos_declaracionvalores_ventas_filtered.invoice_grandtotal, c_pos_declaracionvalores_ventas_filtered.entidadfinanciera_value, c_pos_declaracionvalores_ventas_filtered.entidadfinanciera_name, c_pos_declaracionvalores_ventas_filtered.bp_entidadfinanciera_value, c_pos_declaracionvalores_ventas_filtered.bp_entidadfinanciera_name, c_pos_declaracionvalores_ventas_filtered.cupon, c_pos_declaracionvalores_ventas_filtered.creditcard, c_pos_declaracionvalores_ventas_filtered.generated_invoice_documentno, c_pos_declaracionvalores_ventas_filtered.allocation_active, c_pos_declaracionvalores_ventas_filtered.c_pos_id, c_pos_declaracionvalores_ventas_filtered.posname
+   FROM c_pos_declaracionvalores_ventas_filtered(ARRAY[(-1)]) c_pos_declaracionvalores_ventas_filtered(ad_client_id, ad_org_id, c_posjournal_id, ad_user_id, c_currency_id, datetrx, docstatus, category, tendertype, description, c_charge_id, chargename, doc_id, ingreso, egreso, c_invoice_id, invoice_documentno, invoice_grandtotal, entidadfinanciera_value, entidadfinanciera_name, bp_entidadfinanciera_value, bp_entidadfinanciera_name, cupon, creditcard, generated_invoice_documentno, allocation_active, c_pos_id, posname);
+
+ALTER TABLE c_pos_declaracionvalores_ventas
+  OWNER TO libertya;
+
+CREATE OR REPLACE VIEW c_pos_declaracionvalores_voided AS 
+ SELECT c_pos_declaracionvalores_voided_filtered.ad_client_id, c_pos_declaracionvalores_voided_filtered.ad_org_id, c_pos_declaracionvalores_voided_filtered.c_posjournal_id, c_pos_declaracionvalores_voided_filtered.ad_user_id, c_pos_declaracionvalores_voided_filtered.c_currency_id, c_pos_declaracionvalores_voided_filtered.datetrx, c_pos_declaracionvalores_voided_filtered.docstatus, c_pos_declaracionvalores_voided_filtered.category, c_pos_declaracionvalores_voided_filtered.tendertype, c_pos_declaracionvalores_voided_filtered.description, c_pos_declaracionvalores_voided_filtered.c_charge_id, c_pos_declaracionvalores_voided_filtered.chargename, c_pos_declaracionvalores_voided_filtered.doc_id, c_pos_declaracionvalores_voided_filtered.ingreso, c_pos_declaracionvalores_voided_filtered.egreso, c_pos_declaracionvalores_voided_filtered.c_invoice_id, c_pos_declaracionvalores_voided_filtered.invoice_documentno, c_pos_declaracionvalores_voided_filtered.invoice_grandtotal, c_pos_declaracionvalores_voided_filtered.entidadfinanciera_value, c_pos_declaracionvalores_voided_filtered.entidadfinanciera_name, c_pos_declaracionvalores_voided_filtered.bp_entidadfinanciera_value, c_pos_declaracionvalores_voided_filtered.bp_entidadfinanciera_name, c_pos_declaracionvalores_voided_filtered.cupon, c_pos_declaracionvalores_voided_filtered.creditcard, c_pos_declaracionvalores_voided_filtered.generated_invoice_documentno, c_pos_declaracionvalores_voided_filtered.allocation_active, c_pos_declaracionvalores_voided_filtered.c_pos_id, c_pos_declaracionvalores_voided_filtered.posname
+   FROM c_pos_declaracionvalores_voided_filtered(ARRAY[(-1)]) c_pos_declaracionvalores_voided_filtered(ad_client_id, ad_org_id, c_posjournal_id, ad_user_id, c_currency_id, datetrx, docstatus, category, tendertype, description, c_charge_id, chargename, doc_id, ingreso, egreso, c_invoice_id, invoice_documentno, invoice_grandtotal, entidadfinanciera_value, entidadfinanciera_name, bp_entidadfinanciera_value, bp_entidadfinanciera_name, cupon, creditcard, generated_invoice_documentno, allocation_active, c_pos_id, posname);
+
+ALTER TABLE c_pos_declaracionvalores_voided
+  OWNER TO libertya;
+  
+  
+--20180115 Desactivacion de registros a replicar hacia un eventual host con problemas. Por ejemplo sin conectividad
+CREATE OR REPLACE FUNCTION delay_records_for_host(p_hostpos int , p_delayvalue varchar)
+  RETURNS INTEGER AS
+$BODY$
+DECLARE
+atable VARCHAR;
+query VARCHAR;
+BEGIN
+    FOR atable IN (    SELECT lower(t.tablename)
+            FROM ad_tablereplication tr
+            INNER JOIN ad_table t ON tr.ad_table_id = t.ad_table_id
+            UNION
+            SELECT 'ad_changelog_replication' )
+    LOOP
+        raise notice 'Delay para tabla %', atable;
+        query =    ' UPDATE ' || atable ||
+            ' SET reparray = ';
+        if atable <> 'ad_changelog_replication' then
+            query = query || '''SET''||';
+        end if;
+       
+        query = query ||'reparray, includeinreplication = ''' || p_delayvalue || ''' ' ||
+                ' WHERE includeinreplication = ''Y'' ' ||
+                ' AND (    ( strpos(reparray, ''1'') = ' || p_hostpos || ' AND (CHAR_LENGTH(reparray) - CHAR_LENGTH(REPLACE(reparray, ''1'', ''''))) = 1 )' ||
+                '     OR ( strpos(reparray, ''3'') = ' || p_hostpos || ' AND (CHAR_LENGTH(reparray) - CHAR_LENGTH(REPLACE(reparray, ''3'', ''''))) = 1 )' ||
+                '     OR ( strpos(reparray, ''A'') = ' || p_hostpos || ' AND (CHAR_LENGTH(reparray) - CHAR_LENGTH(REPLACE(reparray, ''A'', ''''))) = 1 )' ||
+                '     OR ( strpos(reparray, ''a'') = ' || p_hostpos || ' AND (CHAR_LENGTH(reparray) - CHAR_LENGTH(REPLACE(reparray, ''a'', ''''))) = 1 ) ) ';
+        --raise notice '%', query;
+        EXECUTE query;
+    END LOOP;
+
+    return 0;
+
+END
+$BODY$
+  LANGUAGE 'plpgsql' VOLATILE;
+  
+-- Reactivacion de registros desactivados
+CREATE OR REPLACE FUNCTION undelay_records_for_host(p_delayvalue varchar)
+  RETURNS INTEGER AS
+$BODY$
+DECLARE
+atable VARCHAR;
+query VARCHAR;
+BEGIN
+    FOR atable IN (    SELECT lower(t.tablename)
+            FROM ad_tablereplication tr
+            INNER JOIN ad_table t ON tr.ad_table_id = t.ad_table_id
+            UNION
+            SELECT 'ad_changelog_replication' )
+    LOOP
+        raise notice 'Undelay para tabla %', atable;
+        query =    ' UPDATE ' || atable ||
+            ' SET reparray = ';
+        if atable <> 'ad_changelog_replication' then
+            query = query || '''SET''||';
+        end if;
+       
+        query = query ||'reparray, includeinreplication = ''Y'' ' ||
+                ' WHERE includeinreplication = ''' || p_delayvalue || ''' ';
+        --raise notice '%', query;
+        EXECUTE query;
+    END LOOP;
+
+    return 0;
+
+END
+$BODY$
+  LANGUAGE 'plpgsql' VOLATILE;
+  
+--20180119 Nuevo indice remito -> factura, el cual es necesario para agilizar los tiempos en la impresion de facturas
+update ad_system set dummy = (SELECT addindexifnotexists('m_inout_invoice','m_inout','c_invoice_id'));
+
+--20180124-0900 Constraints para la tabla de configuración de corrección de cobranza
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_client FOREIGN KEY (ad_client_id)
+      REFERENCES ad_client (ad_client_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_org FOREIGN KEY (ad_org_id)
+      REFERENCES ad_org (ad_org_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_doctype_recovery FOREIGN KEY (c_doctype_recovery_id)
+      REFERENCES c_doctype (c_doctype_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_doctype_credit_recovery FOREIGN KEY (c_doctype_credit_recovery_id)
+      REFERENCES c_doctype (c_doctype_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_doctype_rejected FOREIGN KEY (c_doctype_rejected_id)
+      REFERENCES c_doctype (c_doctype_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_doctype_credit_rejected FOREIGN KEY (c_doctype_credit_rejected_id)
+      REFERENCES c_doctype (c_doctype_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_product_recovery FOREIGN KEY (m_product_recovery_id)
+      REFERENCES m_product (m_product_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_product_rejected FOREIGN KEY (m_product_rejected_id)
+      REFERENCES m_product (m_product_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+      
+--20180124-1056 Las preferencias DIF_CAMBIO_ARTICULO y DIF_CAMBIO_PTO_VENTA estaban con compañía System en lugar de Libertya
+update ad_preference set ad_client_id = 1010016 where ad_componentobjectuid in ('CORE-AD_Preference-1011156', 'CORE-AD_Preference-1011157');
+
+--20180130-1542 Factura electronica. Codigos de paises faltantes.  Segun definicion AFIP.
+update c_country set countrycodefe = '301' where ad_componentobjectuid = 'CORE-C_Country-110';
+update c_country set countrycodefe = '401' where ad_componentobjectuid = 'CORE-C_Country-114';
+update c_country set countrycodefe = '149' where ad_componentobjectuid = 'CORE-C_Country-115';
+update c_country set countrycodefe = '265' where ad_componentobjectuid = 'CORE-C_Country-117';
+update c_country set countrycodefe = '237' where ad_componentobjectuid = 'CORE-C_Country-118';
+update c_country set countrycodefe = '349' where ad_componentobjectuid = 'CORE-C_Country-120';
+update c_country set countrycodefe = '501' where ad_componentobjectuid = 'CORE-C_Country-122';
+update c_country set countrycodefe = '405' where ad_componentobjectuid = 'CORE-C_Country-108';
+update c_country set countrycodefe = '350' where ad_componentobjectuid = 'CORE-C_Country-124';
+update c_country set countrycodefe = '239' where ad_componentobjectuid = 'CORE-C_Country-125';
+update c_country set countrycodefe = '303' where ad_componentobjectuid = 'CORE-C_Country-126';
+update c_country set countrycodefe = '345' where ad_componentobjectuid = 'CORE-C_Country-127';
+update c_country set countrycodefe = '201' where ad_componentobjectuid = 'CORE-C_Country-128';
+update c_country set countrycodefe = '439' where ad_componentobjectuid = 'CORE-C_Country-129';
+update c_country set countrycodefe = '236' where ad_componentobjectuid = 'CORE-C_Country-131';
+update c_country set countrycodefe = '112' where ad_componentobjectuid = 'CORE-C_Country-132';
+update c_country set countrycodefe = '305' where ad_componentobjectuid = 'CORE-C_Country-134';
+update c_country set countrycodefe = '446' where ad_componentobjectuid = 'CORE-C_Country-136';
+update c_country set countrycodefe = '103' where ad_componentobjectuid = 'CORE-C_Country-137';
+update c_country set countrycodefe = '346' where ad_componentobjectuid = 'CORE-C_Country-141';
+update c_country set countrycodefe = '101' where ad_componentobjectuid = 'CORE-C_Country-143';
+update c_country set countrycodefe = '104' where ad_componentobjectuid = 'CORE-C_Country-144';
+update c_country set countrycodefe = '306' where ad_componentobjectuid = 'CORE-C_Country-145';
+update c_country set countrycodefe = '105' where ad_componentobjectuid = 'CORE-C_Country-146';
+update c_country set countrycodefe = '150' where ad_componentobjectuid = 'CORE-C_Country-148';
+update c_country set countrycodefe = '107' where ad_componentobjectuid = 'CORE-C_Country-150';
+update c_country set countrycodefe = '111' where ad_componentobjectuid = 'CORE-C_Country-151';
+update c_country set countrycodefe = '155' where ad_componentobjectuid = 'CORE-C_Country-157';
+update c_country set countrycodefe = '108' where ad_componentobjectuid = 'CORE-C_Country-158';
+update c_country set countrycodefe = '109' where ad_componentobjectuid = 'CORE-C_Country-159';
+update c_country set countrycodefe = '110' where ad_componentobjectuid = 'CORE-C_Country-162';
+update c_country set countrycodefe = '447' where ad_componentobjectuid = 'CORE-C_Country-163';
+update c_country set countrycodefe = '435' where ad_componentobjectuid = 'CORE-C_Country-165';
+update c_country set countrycodefe = '451' where ad_componentobjectuid = 'CORE-C_Country-166';
+update c_country set countrycodefe = '409' where ad_componentobjectuid = 'CORE-C_Country-167';
+update c_country set countrycodefe = '153' where ad_componentobjectuid = 'CORE-C_Country-168';
+update c_country set countrycodefe = '233' where ad_componentobjectuid = 'CORE-C_Country-169';
+update c_country set countrycodefe = '209' where ad_componentobjectuid = 'CORE-C_Country-170';
+update c_country set countrycodefe = '113' where ad_componentobjectuid = 'CORE-C_Country-172';
+update c_country set countrycodefe = '119' where ad_componentobjectuid = 'CORE-C_Country-174';
+update c_country set countrycodefe = '160' where ad_componentobjectuid = 'CORE-C_Country-175';
+update c_country set countrycodefe = '440' where ad_componentobjectuid = 'CORE-C_Country-176';
+update c_country set countrycodefe = '161' where ad_componentobjectuid = 'CORE-C_Country-177';
+update c_country set countrycodefe = '254' where ad_componentobjectuid = 'CORE-C_Country-178';
+update c_country set countrycodefe = '512' where ad_componentobjectuid = 'CORE-C_Country-180';
+update c_country set countrycodefe = '411' where ad_componentobjectuid = 'CORE-C_Country-181';
+update c_country set countrycodefe = '115' where ad_componentobjectuid = 'CORE-C_Country-186';
+update c_country set countrycodefe = '116' where ad_componentobjectuid = 'CORE-C_Country-187';
+update c_country set countrycodefe = '438' where ad_componentobjectuid = 'CORE-C_Country-101';
+update c_country set countrycodefe = '117' where ad_componentobjectuid = 'CORE-C_Country-190';
+update c_country set countrycodefe = '240' where ad_componentobjectuid = 'CORE-C_Country-194';
+update c_country set countrycodefe = '118' where ad_componentobjectuid = 'CORE-C_Country-198';
+update c_country set countrycodefe = '156' where ad_componentobjectuid = 'CORE-C_Country-199';
+update c_country set countrycodefe = '431' where ad_componentobjectuid = 'CORE-C_Country-203';
+update c_country set countrycodefe = '341' where ad_componentobjectuid = 'CORE-C_Country-205';
+update c_country set countrycodefe = '414' where ad_componentobjectuid = 'CORE-C_Country-206';
+update c_country set countrycodefe = '416' where ad_componentobjectuid = 'CORE-C_Country-207';
+update c_country set countrycodefe = '316' where ad_componentobjectuid = 'CORE-C_Country-209';
+update c_country set countrycodefe = '318' where ad_componentobjectuid = 'CORE-C_Country-210';
+update c_country set countrycodefe = '317' where ad_componentobjectuid = 'CORE-C_Country-211';
+update c_country set countrycodefe = '319' where ad_componentobjectuid = 'CORE-C_Country-213';
+update c_country set countrycodefe = '321' where ad_componentobjectuid = 'CORE-C_Country-217';
+update c_country set countrycodefe = '352' where ad_componentobjectuid = 'CORE-C_Country-218';
+update c_country set countrycodefe = '120' where ad_componentobjectuid = 'CORE-C_Country-219';
+update c_country set countrycodefe = '514' where ad_componentobjectuid = 'CORE-C_Country-220';
+update c_country set countrycodefe = '308' where ad_componentobjectuid = 'CORE-C_Country-221';
+update c_country set countrycodefe = '309' where ad_componentobjectuid = 'CORE-C_Country-222';
+update c_country set countrycodefe = '323' where ad_componentobjectuid = 'CORE-C_Country-223';
+update c_country set countrycodefe = '353' where ad_componentobjectuid = 'CORE-C_Country-224';
+update c_country set countrycodefe = '324' where ad_componentobjectuid = 'CORE-C_Country-225';
+update c_country set countrycodefe = '441' where ad_componentobjectuid = 'CORE-C_Country-226';
+update c_country set countrycodefe = '325' where ad_componentobjectuid = 'CORE-C_Country-227';
+update c_country set countrycodefe = '121' where ad_componentobjectuid = 'CORE-C_Country-228';
+update c_country set countrycodefe = '122' where ad_componentobjectuid = 'CORE-C_Country-229';
+update c_country set countrycodefe = '123' where ad_componentobjectuid = 'CORE-C_Country-230';
+update c_country set countrycodefe = '418' where ad_componentobjectuid = 'CORE-C_Country-231';
+update c_country set countrycodefe = '442' where ad_componentobjectuid = 'CORE-C_Country-232';
+update c_country set countrycodefe = '419' where ad_componentobjectuid = 'CORE-C_Country-233';
+update c_country set countrycodefe = '344' where ad_componentobjectuid = 'CORE-C_Country-234';
+update c_country set countrycodefe = '450' where ad_componentobjectuid = 'CORE-C_Country-235';
+update c_country set countrycodefe = '124' where ad_componentobjectuid = 'CORE-C_Country-236';
+update c_country set countrycodefe = '125' where ad_componentobjectuid = 'CORE-C_Country-237';
+update c_country set countrycodefe = '326' where ad_componentobjectuid = 'CORE-C_Country-238';
+update c_country set countrycodefe = '327' where ad_componentobjectuid = 'CORE-C_Country-239';
+update c_country set countrycodefe = '126' where ad_componentobjectuid = 'CORE-C_Country-240';
+update c_country set countrycodefe = '420' where ad_componentobjectuid = 'CORE-C_Country-241';
+update c_country set countrycodefe = '520' where ad_componentobjectuid = 'CORE-C_Country-242';
+update c_country set countrycodefe = '129' where ad_componentobjectuid = 'CORE-C_Country-244';
+update c_country set countrycodefe = '515' where ad_componentobjectuid = 'CORE-C_Country-248';
+update c_country set countrycodefe = '443' where ad_componentobjectuid = 'CORE-C_Country-249';
+update c_country set countrycodefe = '421' where ad_componentobjectuid = 'CORE-C_Country-250';
+update c_country set countrycodefe = '329' where ad_componentobjectuid = 'CORE-C_Country-251';
+update c_country set countrycodefe = '127' where ad_componentobjectuid = 'CORE-C_Country-253';
+update c_country set countrycodefe = '151' where ad_componentobjectuid = 'CORE-C_Country-254';
+update c_country set countrycodefe = '304' where ad_componentobjectuid = 'CORE-C_Country-255';
+update c_country set countrycodefe = '158' where ad_componentobjectuid = 'CORE-C_Country-256';
+update c_country set countrycodefe = '503' where ad_componentobjectuid = 'CORE-C_Country-257';
+update c_country set countrycodefe = '423' where ad_componentobjectuid = 'CORE-C_Country-105';
+update c_country set countrycodefe = '330' where ad_componentobjectuid = 'CORE-C_Country-258';
+update c_country set countrycodefe = '241' where ad_componentobjectuid = 'CORE-C_Country-260';
+update c_country set countrycodefe = '504' where ad_componentobjectuid = 'CORE-C_Country-262';
+update c_country set countrycodefe = '219' where ad_componentobjectuid = 'CORE-C_Country-263';
+update c_country set countrycodefe = '130' where ad_componentobjectuid = 'CORE-C_Country-264';
+update c_country set countrycodefe = '131' where ad_componentobjectuid = 'CORE-C_Country-265';
+update c_country set countrycodefe = '521' where ad_componentobjectuid = 'CORE-C_Country-268';
+update c_country set countrycodefe = '422' where ad_componentobjectuid = 'CORE-C_Country-269';
+update c_country set countrycodefe = '328' where ad_componentobjectuid = 'CORE-C_Country-270';
+update c_country set countrycodefe = '332' where ad_componentobjectuid = 'CORE-C_Country-271';
+update c_country set countrycodefe = '516' where ad_componentobjectuid = 'CORE-C_Country-272';
+update c_country set countrycodefe = '357' where ad_componentobjectuid = 'CORE-C_Country-273';
+update c_country set countrycodefe = '513' where ad_componentobjectuid = 'CORE-C_Country-275';
+update c_country set countrycodefe = '312' where ad_componentobjectuid = 'CORE-C_Country-278';
+update c_country set countrycodefe = '322' where ad_componentobjectuid = 'CORE-C_Country-283';
+update c_country set countrycodefe = '427' where ad_componentobjectuid = 'CORE-C_Country-285';
+update c_country set countrycodefe = '133' where ad_componentobjectuid = 'CORE-C_Country-287';
+update c_country set countrycodefe = '234' where ad_componentobjectuid = 'CORE-C_Country-290';
+update c_country set countrycodefe = '235' where ad_componentobjectuid = 'CORE-C_Country-292';
+update c_country set countrycodefe = '506' where ad_componentobjectuid = 'CORE-C_Country-293';
+update c_country set countrycodefe = '428' where ad_componentobjectuid = 'CORE-C_Country-294';
+update c_country set countrycodefe = '157' where ad_componentobjectuid = 'CORE-C_Country-295';
+update c_country set countrycodefe = '302' where ad_componentobjectuid = 'CORE-C_Country-296';
+update c_country set countrycodefe = '134' where ad_componentobjectuid = 'CORE-C_Country-297';
+update c_country set countrycodefe = '152' where ad_componentobjectuid = 'CORE-C_Country-298';
+update c_country set countrycodefe = '135' where ad_componentobjectuid = 'CORE-C_Country-299';
+update c_country set countrycodefe = '333' where ad_componentobjectuid = 'CORE-C_Country-300';
+update c_country set countrycodefe = '448' where ad_componentobjectuid = 'CORE-C_Country-301';
+update c_country set countrycodefe = '449' where ad_componentobjectuid = 'CORE-C_Country-302';
+update c_country set countrycodefe = '136' where ad_componentobjectuid = 'CORE-C_Country-304';
+update c_country set countrycodefe = '159' where ad_componentobjectuid = 'CORE-C_Country-305';
+update c_country set countrycodefe = '307' where ad_componentobjectuid = 'CORE-C_Country-308';
+update c_country set countrycodefe = '138' where ad_componentobjectuid = 'CORE-C_Country-309';
+update c_country set countrycodefe = '232' where ad_componentobjectuid = 'CORE-C_Country-310';
+update c_country set countrycodefe = '137' where ad_componentobjectuid = 'CORE-C_Country-312';
+update c_country set countrycodefe = '430' where ad_componentobjectuid = 'CORE-C_Country-107';
+update c_country set countrycodefe = '334' where ad_componentobjectuid = 'CORE-C_Country-315';
+update c_country set countrycodefe = '354' where ad_componentobjectuid = 'CORE-C_Country-317';
+update c_country set countrycodefe = '139' where ad_componentobjectuid = 'CORE-C_Country-318';
+update c_country set countrycodefe = '335' where ad_componentobjectuid = 'CORE-C_Country-319';
+update c_country set countrycodefe = '140' where ad_componentobjectuid = 'CORE-C_Country-321';
+update c_country set countrycodefe = '519' where ad_componentobjectuid = 'CORE-C_Country-323';
+update c_country set countrycodefe = '141' where ad_componentobjectuid = 'CORE-C_Country-325';
+update c_country set countrycodefe = '355' where ad_componentobjectuid = 'CORE-C_Country-327';
+update c_country set countrycodefe = '517' where ad_componentobjectuid = 'CORE-C_Country-329';
+update c_country set countrycodefe = '142' where ad_componentobjectuid = 'CORE-C_Country-330';
+update c_country set countrycodefe = '331' where ad_componentobjectuid = 'CORE-C_Country-332';
+update c_country set countrycodefe = '426' where ad_componentobjectuid = 'CORE-C_Country-333';
+update c_country set countrycodefe = '356' where ad_componentobjectuid = 'CORE-C_Country-337';
+update c_country set countrycodefe = '505' where ad_componentobjectuid = 'CORE-C_Country-338';
+update c_country set countrycodefe = '337' where ad_componentobjectuid = 'CORE-C_Country-340';
+update c_country set countrycodefe = '348' where ad_componentobjectuid = 'CORE-C_Country-345';
+update c_country set countrycodefe = '144' where ad_componentobjectuid = 'CORE-C_Country-347';
+update c_country set countrycodefe = '132' where ad_componentobjectuid = 'CORE-C_Country-348';
+
+--20180131-1000 Codigos de monedas adicionales
+update c_currency set wsfecode = '014' where ad_componentobjectuid = 'CORE-C_Currency-241';
+update c_currency set wsfecode = '059' where ad_componentobjectuid = 'CORE-C_Currency-282';
+update c_currency set wsfecode = '023' where ad_componentobjectuid = 'CORE-C_Currency-205';
+update c_currency set wsfecode = '026' where ad_componentobjectuid = 'CORE-C_Currency-120';
+update c_currency set wsfecode = '031' where ad_componentobjectuid = 'CORE-C_Currency-146';
+update c_currency set wsfecode = '035' where ad_componentobjectuid = 'CORE-C_Currency-308';
+update c_currency set wsfecode = '042' where ad_componentobjectuid = 'CORE-C_Currency-298';
+update c_currency set wsfecode = '009' where ad_componentobjectuid = 'CORE-C_Currency-318';
+
+--20180202-1207 Relacionados con merge r2303 y 2304
+
+-- Columna agregada para el Detalle de Cuentas (CORE)
+alter table T_Acct_Detail add column origin_tableName varchar(150);
+alter table T_Acct_Detail add column procedence_id integer;
+
+-- Agregado de columna para el campo cuenta contable (CORE)
+alter table C_Payment add column accounting_c_charge_id integer;
+alter table C_BankTransfer add column accounting_c_charge_id integer;
+alter table C_CreditCardSettlement add column accounting_c_charge_id integer;
+alter table C_CashLine add column accounting_c_charge_id integer;
+
+-- Actualizacion de las descripciones de registros contables
+-- Se modificarán para liquidaciones de tarj de crédito, facturas, OP/RC y extractos
+
+-- update description on c_creditCardSettlement
+update fact_acct fa set description = (
+    select settlementNo || ' ' || description from C_CreditCardSettlement ccs where ccs.C_CreditCardSettlement_ID = fa.record_id) 
+where ad_table_id = (select ad_table_id from ad_table where tablename = 'C_CreditCardSettlement') and ad_client_id = 1010016;
+
+-- update description on c_invoice
+update fact_acct fa set description = (
+    select i.documentNo || coalesce(' #' || to_char(l.line,'99999'), '') || coalesce(' (' || l.description || ')' ,'')
+    from C_Invoice i  
+    left join C_invoiceLine l on (i.c_invoice_id = l.c_invoice_id) 
+    where i.C_Invoice_ID = fa.record_id and l.c_invoiceLine_id = fa.line_id) 
+where ad_table_id = (select ad_table_id from ad_table where tablename = 'C_Invoice') and ad_client_id = 1010016;
+
+-- update description on c_bankStatement
+update fact_acct fa set description = (
+    select bs.name || coalesce(' #' || to_char(bsl.line, '99999'), '') || coalesce(' (' || bsl.description || ')' ,'')
+    from c_bankStatement bs  
+    left join C_bankStatementLine bsl on (bs.c_bankStatement_id = bsl.c_bankStatement_id) 
+    where bs.c_bankStatement_ID = fa.record_id and bsl.c_bankStatement_id = fa.line_id)
+where ad_table_id = (select ad_table_id from ad_table where tablename = 'C_BankStatement') and ad_client_id = 1010016;
+
+-- update description on allocationHdr
+update fact_acct fa set description = (
+    select a.documentNo || coalesce(' #' || to_char(al.allocationNo, '99999'), '') || coalesce(' (' || al.line_description || ')','')
+    from c_allocationHdr a  
+    left join C_allocationLine al on (a.c_allocationHdr_id = al.c_allocationHdr_id)
+    where a.c_allocationHdr_ID = fa.record_id and al.c_allocationLine_id = fa.line_id)
+where ad_table_id = (select ad_table_id from ad_table where tablename = 'C_AllocationHdr') and ad_client_id = 1010016;
+
+-- El campo Record_ID de la tabla AD_Attachment debe ser de tipo referencia (18), no un boton (28) 
+update ad_column set ad_reference_id = 18 where ad_componentobjectuid = 'CORE-AD_Column-2097';
