@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.Enumeration;
+import java.util.Map;
 import java.util.Properties;
 import java.util.logging.Level;
 
@@ -60,13 +61,15 @@ import org.openXpertya.apps.form.VOrdenPagoModel.ResultItemFactura;
 import org.openXpertya.model.Lookup;
 import org.openXpertya.model.MBPartner;
 import org.openXpertya.model.MCurrency;
+import org.openXpertya.model.MDocType;
+import org.openXpertya.model.MInvoice;
 import org.openXpertya.model.MLookup;
 import org.openXpertya.model.MLookupFactory;
 import org.openXpertya.model.MLookupInfo;
 import org.openXpertya.model.MPInstance;
 import org.openXpertya.model.MPInstancePara;
+import org.openXpertya.model.MPreference;
 import org.openXpertya.model.MProcess;
-import org.openXpertya.model.MSequence;
 import org.openXpertya.model.RetencionProcessor;
 import org.openXpertya.model.X_C_BankAccountDoc;
 import org.openXpertya.process.ProcessInfo;
@@ -75,6 +78,9 @@ import org.openXpertya.util.DB;
 import org.openXpertya.util.DisplayType;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.TimeUtil;
+import org.openXpertya.util.Util;
+import org.openXpertya.util.ValueNamePair;
 import org.zkoss.lang.Objects;
 import org.zkoss.zk.ui.event.Event;
 import org.zkoss.zk.ui.event.EventListener;
@@ -183,6 +189,19 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 		cboOrg.setValue(Env.getAD_Org_ID(Env.getCtx()));
 		addPopupMenu(cboOrg, true, true, false);
 		
+		try{
+			createPaymentRuleCombo();
+		} catch(Exception e){
+			log.severe("Error creating payment rule combo: "+e.getMessage());
+		}
+		
+		cboPaymentRule.addValueChangeListener(this);
+		
+		dateTrx = new WDateEditor();
+		dateTrx.setMandatory(true);
+		dateTrx.setValue(getModel().getFechaOP());
+		dateTrx.addValueChangeListener(this);
+		
         radPayTypeStd = new Radio();
         radPayTypeAdv = new Radio();
         radPayTypeStd.setValue("PAGO NORMAL");
@@ -214,9 +233,9 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
         cmdGrabar = new Button();
 
         
-		MLookupInfo infoLibroCaja = VComponentsFactory.MLookupInfoFactory( Env.getCtx(),m_WindowNo, 0, "C_Cash_ID", "C_Cash", DisplayType.Search, m_model.getEfectivoLibroCajaSqlValidation());
+		MLookupInfo infoLibroCaja = VComponentsFactory.MLookupInfoFactory( Env.getCtx(),m_WindowNo, 0, "C_Cash_ID", "C_Cash", DisplayType.TableDir, m_model.getEfectivoLibroCajaSqlValidation());
 		MLookup lookupLibroCaja = new MLookup(infoLibroCaja, 0);
-		efectivoLibroCaja = new WSearchEditor("C_Cash_ID", false, false, true, lookupLibroCaja);
+		efectivoLibroCaja = new WTableDirEditor("C_Cash_ID", false, false, true, lookupLibroCaja);
 		addPopupMenu(efectivoLibroCaja, true, true, false);
         txtEfectivoImporte = new WStringEditor();
 
@@ -452,6 +471,13 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
     	row.appendChild(cboDocumentType.getComponent());
     	row.appendChild(new Space());
 
+    	row = rows.newRow();
+    	row.appendChild(dateTrx.getLabel().rightAlign());
+    	row.appendChild(dateTrx.getComponent());
+    	row.appendChild(new Space());
+    	row.appendChild(cboPaymentRule.getLabel().rightAlign());
+    	row.appendChild(cboPaymentRule.getComponent());
+    	row.appendChild(new Space());
     }
     
     
@@ -759,8 +785,6 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 		mpc.banco = txtChequeBanco.getValue().toString().trim();
 		mpc.cuitLibrador = txtChequeCUITLibrador.getValue().toString().trim();
 		mpc.descripcion = txtChequeDescripcion.getValue().toString().trim();
-		Timestamp today = new Timestamp(System.currentTimeMillis());
-		mpc.dateTrx = mpc.fechaPago.before(today)?mpc.fechaPago:today;
 		// A La Orden: Campo no obligatorio
 		//
 		// if (mpc.aLaOrden.trim().equals(""))
@@ -776,6 +800,18 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 			throw new Exception(getMsg("InvalidCheckDueDate"));
 		}
 		
+		// Realizar la comparación para que la diferencia de días sea mayor o
+		// igual al mínimo permitido
+		String diffDaysPreference = MPreference.searchCustomPreferenceValue(VOrdenPagoModel.MIN_CHECK_DIFF_DAYS_PREFERENCE_NAME,
+				Env.getAD_Client_ID(m_ctx), Env.getAD_Org_ID(m_ctx), Env.getAD_User_ID(m_ctx), true);
+		if(!Util.isEmpty(diffDaysPreference, true)){
+			Integer diffDaysPreferenceInt = Integer.parseInt(diffDaysPreference);
+			if (TimeUtil.getDiffDays(mpc.fechaEm, mpc.fechaPago) < diffDaysPreferenceInt.intValue()) {
+				throw new Exception(
+						getModel().getMsg("InvalidCheckDiffDays", new Object[] { diffDaysPreferenceInt }));
+			}
+		}
+		
 		if (mpc.importe.compareTo(new BigDecimal(0.0)) <= 0)
 			throw new Exception(txtChequeImporte.getLabel().getValue());
 		
@@ -784,26 +820,6 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 		
 		mpc.setCampaign(getC_Campaign_ID() == null?0:getC_Campaign_ID());
 		mpc.setProject(getC_Project_ID() == null?0:getC_Project_ID());
-		
-		// Se actualiza la secuencia de nros de cheque de la chequera en caso de ser posible.
-		if (isActualizarNrosChequera()) {
-			String nroChequeStr = mpc.nroCheque.trim();
-			try {
-				int nroCheque = Integer.parseInt(nroChequeStr);
-				// El numero de cheque es numérico.
-				int C_BankAccountDoc_ID = mpc.chequera_ID;
-				// Se incrementa en 1 el numero de cheque;
-				nroCheque++;
-				// Se guarda el siguiente numero de cheque en la chequera.
-				X_C_BankAccountDoc bankAccountDoc = new X_C_BankAccountDoc(Env.getCtx(),C_BankAccountDoc_ID,null);
-				bankAccountDoc.setCurrentNext(nroCheque);
-				bankAccountDoc.save();
-				bankAccountDoc = null;
-			} catch (Exception e) {
-				// El usuario modifico el numero de cheque agregandole caracteres que no son numericos.
-				// En este caso no se actualiza la secuencia de la chequera.
-			}
-		}
 		
 		return mpc;
     }
@@ -994,8 +1010,10 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
     		BigDecimal monto = null;
     		
     		try {
-    			monto = numberParse(txtTotalPagar1.getValue().toString());
-    		} catch (ParseException e) {
+    			
+    			monto = m_model.numberParse((String)txtTotalPagar1.getValue());
+    			
+    		} catch (Exception e) {
     			showError("@SaveErrorNotUnique@ \n\n" + txtTotalPagar1.getLabel().getValue());
     			
         		txtTotalPagar1.getComponent().setFocus(true); // .requestFocusInWindow();
@@ -1006,6 +1024,7 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
     		}
     		
     		m_model.setActualizarFacturasAuto(false);
+    		dateTrx.setReadWrite(false);
     		// Fuerzo la actualizacion de los valores de la interfaz
     		onTipoPagoChange(true);
     		m_model.setPagoNormal(radPayTypeStd.isSelected(), monto);
@@ -1070,6 +1089,7 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
     		// Avanza a la siguiente tab
     		m_cambioTab = true;
     		tabbox.setSelectedIndex(1);
+    		fldDocumentNo.setValue(getModel().getDocumentNo());
 //    		m_cambioTab = false;  // <- diferencias con Swing en los tiempos de eventos. Se pone a false en el evento 
     		
     		updatePaymentsTabsState();
@@ -1115,7 +1135,7 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
     				return;
     	        int proc_ID = DB.getSQLValue( null, "SELECT AD_Process_ID FROM AD_Process WHERE value='" + m_model.getReportValue()+ "' " );
     	        if( proc_ID > 0 ) {
-
+    	        	
     	        	MPInstance instance = new MPInstance( Env.getCtx(), proc_ID, 0, null );
     	            if( !instance.save()) {
     	            	log.log(Level.SEVERE, "Error at mostrarInforme: instance.save()");
@@ -1130,10 +1150,18 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
     	            ip = new MPInstancePara( instance, 10 );
     	            ip.setParameter( "C_AllocationHdr_ID",String.valueOf(m_model.m_newlyCreatedC_AllocationHeader_ID ));
     	            if( !ip.save()) {
-    	            	log.log(Level.SEVERE, "Error at mostrarInforme: ip.save()");
+    	            	log.log(Level.SEVERE, "Error al mostrar informe. ");
     	            	showError("Error al mostrar informe. " + CLogger.retrieveErrorAsString());
     	                return;
     	            }
+    	            
+    	            ip = new MPInstancePara(instance, 20);
+    				ip.setParameter("PrintRetentions", isPrintRetentions() ? "Y" : "N");
+    				if (!ip.save()) {
+    					log.log(Level.SEVERE, "Error al mostrar informe. ");
+    					showError("Error al mostrar informe. " + CLogger.retrieveErrorAsString());
+    					return;
+    				}
     	            
     	            MProcess process = new MProcess(Env.getCtx(), proc_ID, null);
     	            try {
@@ -1153,6 +1181,11 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
     	return "Orden de Pago";
     }
     
+    protected boolean isPrintRetentions(){
+		return m_model.getSumaRetenciones().compareTo(BigDecimal.ZERO) > 0
+				&& FDialog.ask(m_WindowNo, this, "PrintOPRetentions");
+	}
+    
     /**
      * Metodo que determina el valor que se encuentra dentro de la entidad comercial.
      * Si es null y está seteado el radio button de pago anticipado, no se puede pasar a Siguiente.
@@ -1160,7 +1193,7 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
      * @param evt
      */
     private void cmdBPartnerSelActionPerformed(ValueChangeEvent evt){
-    	if((this.BPartnerSel.getValue() == null)){
+    	if((this.BPartnerSel.getNewValueOnChange() == null)){
     		this.cmdProcess.setEnabled(false);
     	}
     	else{
@@ -1182,6 +1215,10 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
     protected WTableDirEditor cboOrg;
     protected WTableDirEditor cboProject;
     protected WTableDirEditor cboCurrency;
+    protected WTableDirEditor cboPaymentRule;
+    protected WDateEditor dateTrx;
+    
+    protected Map<String, ValueNamePair> paymentRules;
     
     protected WSearchEditor chequeChequera;
     protected WDateEditor chequeFechaEmision;
@@ -1193,7 +1230,7 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
     protected Button cmdGrabar;
     protected Button cmdProcess;
  
-    protected WSearchEditor efectivoLibroCaja;    
+    protected WTableDirEditor efectivoLibroCaja;    
     
     protected WDateEditor invoiceDatePick;
     protected Grid jPanel1;
@@ -1260,7 +1297,6 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 
     protected static final int PAGO_ADELANTADO_TYPE_PAYMENT_INDEX = 0;
     protected static final int PAGO_ADELANTADO_TYPE_CASH_INDEX = 1;
-    protected MSequence seq;
     
     private int m_chequeTerceroTabIndex = -1;
     
@@ -1275,7 +1311,6 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 	private static CLogger log = CLogger.getCLogger( WOrdenPago.class );
 	protected VOrdenPagoModel m_model = new VOrdenPagoModel();
 	protected Properties m_ctx = Env.getCtx();
-	private boolean actualizarNrosChequera = true;
     
 	Tab tabPaymentSelection;
 	Tab tabPaymentRule;
@@ -1315,6 +1350,7 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 		
 		//
 		
+		txtTotalPagar1.setValue(null);
 		txtTotalPagar1.getLabel().setText("");
 		
 		txtSaldo.getLabel().setText("");
@@ -1501,7 +1537,9 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 		fldDocumentNo.getLabel().setText("Nro. Documento");
         cboOrg.getLabel().setText(Msg.translate(Env.getCtx(),"AD_Org_ID"));
         cboDocumentType.getLabel().setText(Msg.translate(Env.getCtx(),"C_DOCTYPE_ID"));
+        cboPaymentRule.getLabel().setText(Msg.translate(Env.getCtx(),"PaymentRule"));
         
+        dateTrx.getLabel().setText(Msg.getMsg(m_ctx, "Date"));
         
 		cboProject.getLabel().setText(Msg.translate(Env.getCtx(), "C_Project_ID"));
 		cboCurrency.getLabel().setText(Msg.translate(Env.getCtx(), "C_Currency_ID"));
@@ -1537,8 +1575,6 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 	
 	protected void clearMediosPago() {
 		
-		Date d = new Date();
-		
 		// Efectivo
 		
 		efectivoLibroCaja.setValue(null);
@@ -1547,14 +1583,14 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 		// Transferencia 
 		
 		transfCtaBancaria.setValue(null);
-		transFecha.setValue(d);
+		transFecha.setValue(dateTrx.getValue());
 		txtTransfImporte.setValue("");
 		txtTransfNroTransf.setValue("");
 		
 		// Cheque
 		
 		chequeChequera.setValue(null);
-		chequeFechaEmision.setValue(d);
+		chequeFechaEmision.setValue(dateTrx.getValue());
 		chequeFechaPago.setValue(null);
 		if (getModel().getBPartner() == null) 
 			txtChequeALaOrden.setValue("");
@@ -1571,7 +1607,7 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 //			txtChequeALaOrden.setText(getModel().getBPartner().getName());
 		// -------------------------------------------------------------
 		else
-			txtChequeALaOrden.setValue(getModel().getBPartner().getName());
+			txtChequeALaOrden.setValue(getModel().getChequeALaOrden());
 		// -------------------------------------------------------------
 		txtChequeImporte.setValue("");
 		txtChequeNroCheque.setValue("");
@@ -1713,8 +1749,8 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
         	customUpdateBPartnerRelatedComponents(true);
         	buscarPagos();
         	// Actualizar interfaz grafica para null value
-			if (BPartnerSel.getNewValueOnChange() == null)
-				this.cmdProcess.setEnabled(false); //cmdBPartnerSelActionPerformed(null);
+        	if (BPartnerSel.getValue() == null)
+				cmdBPartnerSelActionPerformed(null);
         	updatePayAllInvoices(false);
         	
 			// Activo/Desactivo pestaña de Pagos Adelantados dependiendo
@@ -1744,14 +1780,27 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 		
 		} else if (e.getSource() == cboDocumentType) {
 			if(e.getNewValue() != null){
-				m_model.setDocumentType((Integer)e.getNewValue());
-				seq = MSequence.get(m_ctx, getSeqName(), false, Env.getAD_Client_ID(m_ctx));
-				fldDocumentNo.setValue((seq.getPrefix()!=null?seq.getPrefix():"") + seq.getCurrentNext().toString() + (seq.getSuffix()!=null?seq.getSuffix():""));
+				getModel().setDocumentType((Integer)e.getNewValue());
+				String documentNo = null;
+				try {
+					documentNo = getModel().nextDocumentNo();
+				} catch (Exception e2) {
+					m_model.setDocumentType(null);
+					fldDocumentNo.setValue(null);
+					showInfo(e2.getMessage());
+				}
+				fldDocumentNo.setValue(documentNo);
 			}
 			else{
 				fldDocumentNo.setValue(null);
 				m_model.setDocumentType(null);
 			}
+		} else if (e.getSource() == cboPaymentRule) {
+			updatePaymentRule();
+		} else if(e.getSource() == dateTrx){
+			m_model.setFechaOP((Timestamp)dateTrx.getValue());
+			m_model.actualizarFacturas();
+			Env.setContext(m_ctx, m_WindowNo, "Date", (Timestamp)dateTrx.getValue());
 		}
 	}
 
@@ -1775,6 +1824,8 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 			cboOrg.setReadWrite(tabbox.getSelectedIndex() == 0);
 			cboDocumentType.setReadWrite(tabbox.getSelectedIndex() == 0);
 			fldDocumentNo.setReadWrite(tabbox.getSelectedIndex() == 0);
+			cboPaymentRule.setReadWrite(tabbox.getSelectedIndex() == 0);
+			dateTrx.setReadWrite(tabbox.getSelectedIndex() == 0);
 		} else if (arg0.getTarget().getParent().getParent() == mpTabbox) {
 			// TAB de medios de pago
 			updateContextValues();
@@ -1862,23 +1913,11 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 			X_C_BankAccountDoc bankAccountDoc = new X_C_BankAccountDoc(Env.getCtx(),C_BankAccountDoc_ID,null);
 			int nextNroCheque = bankAccountDoc.getCurrentNext();
 			txtChequeNroCheque.setValue(String.valueOf(nextNroCheque));
-		} else
+			txtChequeNroCheque.setReadWrite(bankAccountDoc.isAllowManualCheckNo());
+		} else{
 			txtChequeNroCheque.setValue("");
-	}
-
-	/**
-	 * @return the actualizarNrosChequera
-	 */
- 
-	protected boolean isActualizarNrosChequera() {
-		return actualizarNrosChequera;
-	}
-	
-	/**
-	 * @param actualizarNrosChequera the actualizarNrosChequera to set
-	 */
-	protected void setActualizarNrosChequera(boolean actualizarNrosChequera) {
-		this.actualizarNrosChequera = actualizarNrosChequera;
+			txtChequeNroCheque.setReadWrite(true);
+		}
 	}
 	
 	/**
@@ -2396,24 +2435,25 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 		txtDescription.getComponent().setText("");
 		m_model.setDescription("");
 		checkPayAll.setSelected(false);
-		// actualizar secuencia
-		seq.setCurrentNext(seq.getCurrentNext().add(BigDecimal.ONE));
-		seq.save();
-		fldDocumentNo.setValue((seq.getPrefix()!=null?seq.getPrefix():"") + seq.getCurrentNext().toString() + (seq.getSuffix()!=null?seq.getSuffix():""));
-				
-		m_model.setDocumentNo("");
+		
+		
+		String documentNo = null;
+		Integer docTypeID = (Integer)cboDocumentType.getValue();
+		try {
+			documentNo = getModel().nextDocumentNo();
+		} catch (Exception e) {
+			documentNo = null;
+			docTypeID = null;
+		}
+		
+		m_model.setDocumentType(docTypeID);
+		cboDocumentType.setValue(docTypeID);
+		fldDocumentNo.setValue(documentNo);
+		m_model.setDocumentNo(documentNo);
+		
 		getModel().reset();
 		updateTreeModel();
 		pagosTree.setModel(getMediosPagoTreeModel());
-	}
-	
-	protected String getSeqName()
-	{
-		if (m_model.getDocumentType() != null){
-			return DB.getSQLValueString( null,"SELECT s.name FROM AD_Sequence s INNER JOIN C_DocType d ON (s.AD_Sequence_ID = d.docnosequence_ID) WHERE C_DocType_ID =?",m_model.getDocumentType());
-		}
-		return null;
-		
 	}
     
 	@Override
@@ -2433,6 +2473,7 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 			dynInit();
 			customInitComponents();
 			initTranslations();
+			initDefaultValues();
 			getModel().m_facturasTableModel.addTableModelListener(this);
 			
 			onTipoPagoChange(false);
@@ -2450,6 +2491,35 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 		
 	}
 
+	protected void initDefaultValues() {
+		// Organización
+		String preferenceOrg = MPreference.searchCustomPreferenceValue(
+				VOrdenPagoModel.ORG_DEFAULT_VALUE_PREFERENCE_NAME, Env.getAD_Client_ID(m_ctx), Env.getAD_Org_ID(m_ctx),
+				Env.getAD_User_ID(m_ctx), true);
+		if(!Util.isEmpty(preferenceOrg, true)){
+			Integer preferenceOrgInt = Integer.parseInt(preferenceOrg);
+			cboOrg.setValue(preferenceOrgInt);
+			updateOrg(preferenceOrgInt);
+		}
+		
+		// Tipo de Documento
+		String preferenceDocTypeKey = MPreference.searchCustomPreferenceValue(
+				VOrdenPagoModel.DOCTYPE_DEFAULT_VALUE_PREFERENCE_NAME, 
+				Env.getAD_Client_ID(m_ctx), Env.getAD_Org_ID(m_ctx),
+				Env.getAD_User_ID(m_ctx), true);
+		if(!Util.isEmpty(preferenceDocTypeKey, true)){
+			MDocType dt = MDocType.getDocType(m_ctx, preferenceDocTypeKey, null);
+			if(dt != null && cboDocumentType.getLookup().containsKey(dt.getID())){
+				
+				cboDocumentType.setValue(dt.getID());
+				try{
+					valueChange(new ValueChangeEvent(cboDocumentType, "C_DocType_ID", null, dt.getID()));
+				} catch(Exception e){
+					e.printStackTrace();
+				}
+			}
+		}
+	}
 	
 	protected Panel agregarCampProy() {
 		
@@ -2654,6 +2724,21 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 		listModel = new FacturasModel(VModelHelper.HideColumnsTableModelFactory(m_model.m_facturasTableModel), m_WindowNo);
 		tblFacturas.setModel(listModel);
 		updateTotalAPagar1();
+	}
+	
+	protected void createPaymentRuleCombo() throws Exception{
+		MLookup lookupPaymentRule = MLookupFactory.get(m_ctx, m_WindowNo, 0, DisplayType.List, Env.getLanguage(m_ctx),
+				"PaymentRule", MInvoice.PAYMENTRULE_AD_Reference_ID, false, getModel().getPaymentRuleValidation());
+		cboPaymentRule = new WTableDirEditor("PaymentRule", true, false, true, lookupPaymentRule);
+		cboPaymentRule.setValue(getModel().getDefaultPaymentRule());
+		getModel().setPaymentRule(getModel().getDefaultPaymentRule());
+		Env.setContext(m_ctx, m_WindowNo, "PaymentRule", getModel().getDefaultPaymentRule());
+	}
+	
+	protected void updatePaymentRule(){
+		getModel().setPaymentRule((String)cboPaymentRule.getValue());
+		Env.setContext(m_ctx, m_WindowNo, "PaymentRule", (String)cboPaymentRule.getValue());
+		getModel().actualizarFacturas();
 	}
 	
 	/**
@@ -2953,7 +3038,7 @@ public class WOrdenPago extends ADForm implements ValueChangeListener, TableMode
 			m_nodoRetenciones.removeAllChildren();
 			
 			for (RetencionProcessor r : m_model.m_retenciones)
-				m_nodoRetenciones.add(new MyTreeNode(r.getRetencionTypeName() + ": " + numberFormat( r.getAmount() ), r, true));
+				m_nodoRetenciones.add(new MyTreeNode(r.getRetencionSchemaName() + ": " + numberFormat( r.getAmount() ), r, true));
 		}
 		
 		// Agrego los medios de pago

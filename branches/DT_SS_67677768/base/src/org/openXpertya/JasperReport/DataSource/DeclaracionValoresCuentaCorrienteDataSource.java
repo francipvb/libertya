@@ -31,6 +31,7 @@ public class DeclaracionValoresCuentaCorrienteDataSource extends
 																								"where ah.isactive = 'Y' " +
 																								"group by c_invoice_id, c_posjournal_id) as ds on ds.alloc_invoice_id = dv.c_invoice_id and dv.c_posjournal_id = ds.alloc_journal_id WHERE ");
 		sql.append(getStdWhereClause(true,"dv",true,false));
+		sql.append(" AND (allocation_active is null OR allocation_active = 'Y') ");
 		superSql.append(sql);
 		superSql.append(") as inv ");
 		superSql.append(" WHERE (open > 0) ");

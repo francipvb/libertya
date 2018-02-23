@@ -120,7 +120,7 @@ ORDER BY nropedido]]></queryString>
 					<textElement>
 						<font pdfFontName="Helvetica-Bold" size="8" isBold="true" isUnderline="false"/>
 					</textElement>
-				<textFieldExpression   class="java.lang.String"><![CDATA["Reporte de Recepciones de Proveedor"]]></textFieldExpression>
+				<textFieldExpression   class="java.lang.String"><![CDATA["Listado de OC Vencidas o Sin Novedades"]]></textFieldExpression>
 				</textField>
 				<staticText>
 					<reportElement
@@ -295,7 +295,7 @@ ORDER BY nropedido]]></queryString>
 					</textElement>
 				<text><![CDATA[Cantidad de Días:]]></text>
 				</staticText>
-				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
+				<textField isStretchWithOverflow="false" pattern="###0" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
 						x="104"
 						y="63"

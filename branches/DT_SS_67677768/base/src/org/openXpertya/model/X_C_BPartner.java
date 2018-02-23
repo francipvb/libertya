@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_BPartner
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-01-09 19:48:20.36 */
+ *  @version  - 2017-08-22 12:40:10.347 */
 public class X_C_BPartner extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -23,12 +23,12 @@ setC_BPartner_ID (0);
 setC_BP_Group_ID (0);
 setCreditMinimumAmt (Env.ZERO);
 setDiscountContext (null);	// B
-setDUNS (null);
 setIsConvenioMultilateral (false);
 setIsCustomer (false);
 setIsEmployee (false);
 setIsGroupInvoices (false);
 setisiso (false);
+setIsMandatoryCAI (false);
 setIsMultiCUIT (false);
 setIsOneTime (false);
 setIsProspect (true);	// Y
@@ -37,6 +37,7 @@ setIsSummary (false);
 setIsVendor (false);
 setMinimumPurchasedAmt (Env.ZERO);
 setName (null);
+setProcessPO (null);
 setSearchUnallocatedPayments (false);
 setSecondaryCreditStatus (null);	// OK
 setSendEMail (false);
@@ -181,6 +182,21 @@ if (oo != null)
 }
 return false;
 }
+/** Set Check to */
+public void setA_Name_Check (String A_Name_Check)
+{
+if (A_Name_Check != null && A_Name_Check.length() > 60)
+{
+log.warning("Length > 60 - truncated");
+A_Name_Check = A_Name_Check.substring(0,60);
+}
+set_Value ("A_Name_Check", A_Name_Check);
+}
+/** Get Check to */
+public String getA_Name_Check() 
+{
+return (String)get_Value("A_Name_Check");
+}
 /** Set Automatic Credit Notes */
 public void setAutomaticCreditNotes (boolean AutomaticCreditNotes)
 {
@@ -197,6 +213,28 @@ if (oo != null)
 }
 return false;
 }
+public static final int BATCH_PAYMENT_RULE_AD_Reference_ID = MReference.getReferenceID("Batch Payment Rules");
+/** Check = C */
+public static final String BATCH_PAYMENT_RULE_Check = "C";
+/** Electronic Check = E */
+public static final String BATCH_PAYMENT_RULE_ElectronicCheck = "E";
+/** Set Batch Payment Rule */
+public void setBatch_Payment_Rule (String Batch_Payment_Rule)
+{
+if (Batch_Payment_Rule == null || Batch_Payment_Rule.equals("C") || Batch_Payment_Rule.equals("E") || ( refContainsValue("SSTE2CORE-AD_Reference-1010278-20161024122334", Batch_Payment_Rule) ) );
+ else throw new IllegalArgumentException ("Batch_Payment_Rule Invalid value: " + Batch_Payment_Rule + ".  Valid: " +  refValidOptions("SSTE2CORE-AD_Reference-1010278-20161024122334") );
+if (Batch_Payment_Rule != null && Batch_Payment_Rule.length() > 1)
+{
+log.warning("Length > 1 - truncated");
+Batch_Payment_Rule = Batch_Payment_Rule.substring(0,1);
+}
+set_Value ("Batch_Payment_Rule", Batch_Payment_Rule);
+}
+/** Get Batch Payment Rule */
+public String getBatch_Payment_Rule() 
+{
+return (String)get_Value("Batch_Payment_Rule");
+}
 public static final int BPARTNER_PARENT_ID_AD_Reference_ID = MReference.getReferenceID("C_BPartner (No Summary)");
 /** Set Partner Parent.
 Business Partner Parent */
@@ -211,6 +249,38 @@ Business Partner Parent */
 public int getBPartner_Parent_ID() 
 {
 Integer ii = (Integer)get_Value("BPartner_Parent_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
+/** Set BuiltCabaJurisdiction */
+public void setBuiltCabaJurisdiction (boolean BuiltCabaJurisdiction)
+{
+set_Value ("BuiltCabaJurisdiction", new Boolean(BuiltCabaJurisdiction));
+}
+/** Get BuiltCabaJurisdiction */
+public boolean isBuiltCabaJurisdiction() 
+{
+Object oo = get_Value("BuiltCabaJurisdiction");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
+/** Set Bank Account.
+Account at the Bank */
+public void setC_BankAccount_ID (int C_BankAccount_ID)
+{
+if (C_BankAccount_ID <= 0) set_Value ("C_BankAccount_ID", null);
+ else 
+set_Value ("C_BankAccount_ID", new Integer(C_BankAccount_ID));
+}
+/** Get Bank Account.
+Account at the Bank */
+public int getC_BankAccount_ID() 
+{
+Integer ii = (Integer)get_Value("C_BankAccount_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
@@ -353,6 +423,21 @@ public String getCopyFrom()
 {
 return (String)get_Value("CopyFrom");
 }
+/** Set Copy Vendor Products */
+public void setCopyVendorProducts (String CopyVendorProducts)
+{
+if (CopyVendorProducts != null && CopyVendorProducts.length() > 1)
+{
+log.warning("Length > 1 - truncated");
+CopyVendorProducts = CopyVendorProducts.substring(0,1);
+}
+set_Value ("CopyVendorProducts", CopyVendorProducts);
+}
+/** Get Copy Vendor Products */
+public String getCopyVendorProducts() 
+{
+return (String)get_Value("CopyVendorProducts");
+}
 /** Set Payment Term.
 The terms for Payment of this transaction */
 public void setC_PaymentTerm_ID (int C_PaymentTerm_ID)
@@ -433,8 +518,8 @@ public static final String CUSTOMERTYPE_Maderas = "Maderas";
 /** Set customertype */
 public void setCustomerType (String CustomerType)
 {
-if (CustomerType == null || CustomerType.equals("Aplicadores") || CustomerType.equals("Metal o Plastico") || CustomerType.equals("Pintores") || CustomerType.equals("Leasing") || CustomerType.equals("Ingenierias") || CustomerType.equals("Sin Definir") || CustomerType.equals("Almacenistas o revendedores") || CustomerType.equals("Maderas"));
- else throw new IllegalArgumentException ("CustomerType Invalid value - Reference = CUSTOMERTYPE_AD_Reference_ID - Aplicadores - Metal o Plastico - Pintores - Leasing - Ingenierias - Sin Definir - Almacenistas o revendedores - Maderas");
+if (CustomerType == null || CustomerType.equals("Aplicadores") || CustomerType.equals("Metal o Plastico") || CustomerType.equals("Pintores") || CustomerType.equals("Leasing") || CustomerType.equals("Ingenierias") || CustomerType.equals("Sin Definir") || CustomerType.equals("Almacenistas o revendedores") || CustomerType.equals("Maderas") || ( refContainsValue("CORE-AD_Reference-1000047", CustomerType) ) );
+ else throw new IllegalArgumentException ("CustomerType Invalid value: " + CustomerType + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1000047") );
 if (CustomerType != null && CustomerType.length() > 22)
 {
 log.warning("Length > 22 - truncated");
@@ -466,8 +551,8 @@ public static final String DELIVERYRULE_Force_AfterInvoicing = "Z";
 Defines the timing of Delivery */
 public void setDeliveryRule (String DeliveryRule)
 {
-if (DeliveryRule == null || DeliveryRule.equals("A") || DeliveryRule.equals("O") || DeliveryRule.equals("R") || DeliveryRule.equals("L") || DeliveryRule.equals("F") || DeliveryRule.equals("I") || DeliveryRule.equals("Z"));
- else throw new IllegalArgumentException ("DeliveryRule Invalid value - Reference = DELIVERYRULE_AD_Reference_ID - A - O - R - L - F - I - Z");
+if (DeliveryRule == null || DeliveryRule.equals("A") || DeliveryRule.equals("O") || DeliveryRule.equals("R") || DeliveryRule.equals("L") || DeliveryRule.equals("F") || DeliveryRule.equals("I") || DeliveryRule.equals("Z") || ( refContainsValue("CORE-AD_Reference-151", DeliveryRule) ) );
+ else throw new IllegalArgumentException ("DeliveryRule Invalid value: " + DeliveryRule + ".  Valid: " +  refValidOptions("CORE-AD_Reference-151") );
 if (DeliveryRule != null && DeliveryRule.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -492,8 +577,8 @@ public static final String DELIVERYVIARULE_Delivery = "D";
 How the order will be delivered */
 public void setDeliveryViaRule (String DeliveryViaRule)
 {
-if (DeliveryViaRule == null || DeliveryViaRule.equals("P") || DeliveryViaRule.equals("S") || DeliveryViaRule.equals("D"));
- else throw new IllegalArgumentException ("DeliveryViaRule Invalid value - Reference = DELIVERYVIARULE_AD_Reference_ID - P - S - D");
+if (DeliveryViaRule == null || DeliveryViaRule.equals("P") || DeliveryViaRule.equals("S") || DeliveryViaRule.equals("D") || ( refContainsValue("CORE-AD_Reference-152", DeliveryViaRule) ) );
+ else throw new IllegalArgumentException ("DeliveryViaRule Invalid value: " + DeliveryViaRule + ".  Valid: " +  refValidOptions("CORE-AD_Reference-152") );
 if (DeliveryViaRule != null && DeliveryViaRule.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -532,8 +617,8 @@ public static final String DISCOUNTCONTEXT_Receipt = "R";
 /** Set Discount Context */
 public void setDiscountContext (String DiscountContext)
 {
-if (DiscountContext.equals("B") || DiscountContext.equals("R"));
- else throw new IllegalArgumentException ("DiscountContext Invalid value - Reference = DISCOUNTCONTEXT_AD_Reference_ID - B - R");
+if (DiscountContext.equals("B") || DiscountContext.equals("R") || ( refContainsValue("CORE-AD_Reference-1010160", DiscountContext) ) );
+ else throw new IllegalArgumentException ("DiscountContext Invalid value: " + DiscountContext + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1010160") );
 if (DiscountContext == null) throw new IllegalArgumentException ("DiscountContext is mandatory");
 if (DiscountContext.length() > 1)
 {
@@ -565,8 +650,7 @@ return ii.intValue();
 Dun & Bradstreet Number */
 public void setDUNS (String DUNS)
 {
-if (DUNS == null) throw new IllegalArgumentException ("DUNS is mandatory");
-if (DUNS.length() > 11)
+if (DUNS != null && DUNS.length() > 11)
 {
 log.warning("Length > 11 - truncated");
 DUNS = DUNS.substring(0,11);
@@ -638,8 +722,8 @@ public static final String FREIGHTCOSTRULE_FreightIncluded = "I";
 Method for charging Freight */
 public void setFreightCostRule (String FreightCostRule)
 {
-if (FreightCostRule == null || FreightCostRule.equals("L") || FreightCostRule.equals("F") || FreightCostRule.equals("C") || FreightCostRule.equals("I"));
- else throw new IllegalArgumentException ("FreightCostRule Invalid value - Reference = FREIGHTCOSTRULE_AD_Reference_ID - L - F - C - I");
+if (FreightCostRule == null || FreightCostRule.equals("L") || FreightCostRule.equals("F") || FreightCostRule.equals("C") || FreightCostRule.equals("I") || ( refContainsValue("CORE-AD_Reference-153", FreightCostRule) ) );
+ else throw new IllegalArgumentException ("FreightCostRule Invalid value: " + FreightCostRule + ".  Valid: " +  refValidOptions("CORE-AD_Reference-153") );
 if (FreightCostRule != null && FreightCostRule.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -692,8 +776,8 @@ public static final String IIBBTYPE_RegSimplificado = "5";
 /** Set IIBB Type */
 public void setIIBBType (String IIBBType)
 {
-if (IIBBType == null || IIBBType.equals("1") || IIBBType.equals("2") || IIBBType.equals("4") || IIBBType.equals("5"));
- else throw new IllegalArgumentException ("IIBBType Invalid value - Reference = IIBBTYPE_AD_Reference_ID - 1 - 2 - 4 - 5");
+if (IIBBType == null || IIBBType.equals("1") || IIBBType.equals("2") || IIBBType.equals("4") || IIBBType.equals("5") || ( refContainsValue("CORE-AD_Reference-1010262", IIBBType) ) );
+ else throw new IllegalArgumentException ("IIBBType Invalid value: " + IIBBType + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1010262") );
 if (IIBBType != null && IIBBType.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -736,8 +820,8 @@ public static final String INVOICERULE_CustomerScheduleAfterDelivery = "S";
 Frequency and method of invoicing  */
 public void setInvoiceRule (String InvoiceRule)
 {
-if (InvoiceRule == null || InvoiceRule.equals("D") || InvoiceRule.equals("O") || InvoiceRule.equals("I") || InvoiceRule.equals("S"));
- else throw new IllegalArgumentException ("InvoiceRule Invalid value - Reference = INVOICERULE_AD_Reference_ID - D - O - I - S");
+if (InvoiceRule == null || InvoiceRule.equals("D") || InvoiceRule.equals("O") || InvoiceRule.equals("I") || InvoiceRule.equals("S") || ( refContainsValue("CORE-AD_Reference-150", InvoiceRule) ) );
+ else throw new IllegalArgumentException ("InvoiceRule Invalid value: " + InvoiceRule + ".  Valid: " +  refValidOptions("CORE-AD_Reference-150") );
 if (InvoiceRule != null && InvoiceRule.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -864,6 +948,22 @@ set_Value ("isiso", new Boolean(isiso));
 public boolean isiso() 
 {
 Object oo = get_Value("isiso");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
+/** Set Validate Mandatory CAI */
+public void setIsMandatoryCAI (boolean IsMandatoryCAI)
+{
+set_Value ("IsMandatoryCAI", new Boolean(IsMandatoryCAI));
+}
+/** Get Validate Mandatory CAI */
+public boolean isMandatoryCAI() 
+{
+Object oo = get_Value("IsMandatoryCAI");
 if (oo != null) 
 {
  if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
@@ -1104,10 +1204,6 @@ public String getName()
 {
 return (String)get_Value("Name");
 }
-public KeyNamePair getKeyNamePair() 
-{
-return new KeyNamePair(getID(), getName());
-}
 /** Set Name 2.
 Additional Name */
 public void setName2 (String Name2)
@@ -1148,8 +1244,6 @@ public static final String PAYMENTRULE_CreditCard = "K";
 public static final String PAYMENTRULE_Cash = "B";
 /** On Credit = P */
 public static final String PAYMENTRULE_OnCredit = "P";
-/** Check = S */
-public static final String PAYMENTRULE_Check = "S";
 /** Payment Check = PC */
 public static final String PAYMENTRULE_PaymentCheck = "PC";
 /** Direct Deposit = T */
@@ -1158,12 +1252,14 @@ public static final String PAYMENTRULE_DirectDeposit = "T";
 public static final String PAYMENTRULE_Confirming = "Cf";
 /** Direct Debit = D */
 public static final String PAYMENTRULE_DirectDebit = "D";
+/** Check = S */
+public static final String PAYMENTRULE_Check = "S";
 /** Set Payment Rule.
 How you pay the invoice */
 public void setPaymentRule (String PaymentRule)
 {
-if (PaymentRule == null || PaymentRule.equals("Tr") || PaymentRule.equals("K") || PaymentRule.equals("B") || PaymentRule.equals("P") || PaymentRule.equals("S") || PaymentRule.equals("PC") || PaymentRule.equals("T") || PaymentRule.equals("Cf") || PaymentRule.equals("D"));
- else throw new IllegalArgumentException ("PaymentRule Invalid value - Reference = PAYMENTRULE_AD_Reference_ID - Tr - K - B - P - S - PC - T - Cf - D");
+if (PaymentRule == null || PaymentRule.equals("Tr") || PaymentRule.equals("K") || PaymentRule.equals("B") || PaymentRule.equals("P") || PaymentRule.equals("PC") || PaymentRule.equals("T") || PaymentRule.equals("Cf") || PaymentRule.equals("D") || PaymentRule.equals("S") || ( refContainsValue("CORE-AD_Reference-195", PaymentRule) ) );
+ else throw new IllegalArgumentException ("PaymentRule Invalid value: " + PaymentRule + ".  Valid: " +  refValidOptions("CORE-AD_Reference-195") );
 if (PaymentRule != null && PaymentRule.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -1186,8 +1282,6 @@ public static final String PAYMENTRULEPO_CreditCard = "K";
 public static final String PAYMENTRULEPO_Cash = "B";
 /** On Credit = P */
 public static final String PAYMENTRULEPO_OnCredit = "P";
-/** Check = S */
-public static final String PAYMENTRULEPO_Check = "S";
 /** Payment Check = PC */
 public static final String PAYMENTRULEPO_PaymentCheck = "PC";
 /** Direct Deposit = T */
@@ -1196,12 +1290,14 @@ public static final String PAYMENTRULEPO_DirectDeposit = "T";
 public static final String PAYMENTRULEPO_Confirming = "Cf";
 /** Direct Debit = D */
 public static final String PAYMENTRULEPO_DirectDebit = "D";
+/** Check = S */
+public static final String PAYMENTRULEPO_Check = "S";
 /** Set Payment Rule.
 Purchase payment option */
 public void setPaymentRulePO (String PaymentRulePO)
 {
-if (PaymentRulePO == null || PaymentRulePO.equals("Tr") || PaymentRulePO.equals("K") || PaymentRulePO.equals("B") || PaymentRulePO.equals("P") || PaymentRulePO.equals("S") || PaymentRulePO.equals("PC") || PaymentRulePO.equals("T") || PaymentRulePO.equals("Cf") || PaymentRulePO.equals("D"));
- else throw new IllegalArgumentException ("PaymentRulePO Invalid value - Reference = PAYMENTRULEPO_AD_Reference_ID - Tr - K - B - P - S - PC - T - Cf - D");
+if (PaymentRulePO == null || PaymentRulePO.equals("Tr") || PaymentRulePO.equals("K") || PaymentRulePO.equals("B") || PaymentRulePO.equals("P") || PaymentRulePO.equals("PC") || PaymentRulePO.equals("T") || PaymentRulePO.equals("Cf") || PaymentRulePO.equals("D") || PaymentRulePO.equals("S") || ( refContainsValue("CORE-AD_Reference-195", PaymentRulePO) ) );
+ else throw new IllegalArgumentException ("PaymentRulePO Invalid value: " + PaymentRulePO + ".  Valid: " +  refValidOptions("CORE-AD_Reference-195") );
 if (PaymentRulePO != null && PaymentRulePO.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -1296,6 +1392,29 @@ public BigDecimal getPotentialLifeTimeValue()
 BigDecimal bd = (BigDecimal)get_Value("PotentialLifeTimeValue");
 if (bd == null) return Env.ZERO;
 return bd;
+}
+public static final int PROCESSPO_AD_Reference_ID = MReference.getReferenceID("Process PO Values");
+/** Activate Vendor Products = Y */
+public static final String PROCESSPO_ActivateVendorProducts = "Y";
+/** Desactivate Vendor Products = N */
+public static final String PROCESSPO_DesactivateVendorProducts = "N";
+/** Set Process Vendor Products */
+public void setProcessPO (String ProcessPO)
+{
+if (ProcessPO.equals("Y") || ProcessPO.equals("N") || ( refContainsValue("CORE-AD_Reference-1010382", ProcessPO) ) );
+ else throw new IllegalArgumentException ("ProcessPO Invalid value: " + ProcessPO + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1010382") );
+if (ProcessPO == null) throw new IllegalArgumentException ("ProcessPO is mandatory");
+if (ProcessPO.length() > 1)
+{
+log.warning("Length > 1 - truncated");
+ProcessPO = ProcessPO.substring(0,1);
+}
+set_Value ("ProcessPO", ProcessPO);
+}
+/** Get Process Vendor Products */
+public String getProcessPO() 
+{
+return (String)get_Value("ProcessPO");
 }
 /** Set program_amt */
 public void setprogram_amt (BigDecimal program_amt)
@@ -1435,8 +1554,8 @@ public static final String SECONDARYCREDITSTATUS_AutomaticDisabling = "AD";
 /** Set Secondary Credit Status */
 public void setSecondaryCreditStatus (String SecondaryCreditStatus)
 {
-if (SecondaryCreditStatus.equals("OK") || SecondaryCreditStatus.equals("AS") || SecondaryCreditStatus.equals("FN") || SecondaryCreditStatus.equals("TC") || SecondaryCreditStatus.equals("SN") || SecondaryCreditStatus.equals("CO") || SecondaryCreditStatus.equals("TD") || SecondaryCreditStatus.equals("AD"));
- else throw new IllegalArgumentException ("SecondaryCreditStatus Invalid value - Reference = SECONDARYCREDITSTATUS_AD_Reference_ID - OK - AS - FN - TC - SN - CO - TD - AD");
+if (SecondaryCreditStatus.equals("OK") || SecondaryCreditStatus.equals("AS") || SecondaryCreditStatus.equals("FN") || SecondaryCreditStatus.equals("TC") || SecondaryCreditStatus.equals("SN") || SecondaryCreditStatus.equals("CO") || SecondaryCreditStatus.equals("TD") || SecondaryCreditStatus.equals("AD") || ( refContainsValue("CORE-AD_Reference-1010165", SecondaryCreditStatus) ) );
+ else throw new IllegalArgumentException ("SecondaryCreditStatus Invalid value: " + SecondaryCreditStatus + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1010165") );
 if (SecondaryCreditStatus == null) throw new IllegalArgumentException ("SecondaryCreditStatus is mandatory");
 if (SecondaryCreditStatus.length() > 2)
 {
@@ -1528,8 +1647,8 @@ public static final String SOCREDITSTATUS_CreditDisabled = "D";
 Business Partner Credit Status */
 public void setSOCreditStatus (String SOCreditStatus)
 {
-if (SOCreditStatus == null || SOCreditStatus.equals("S") || SOCreditStatus.equals("O") || SOCreditStatus.equals("H") || SOCreditStatus.equals("X") || SOCreditStatus.equals("W") || SOCreditStatus.equals("D"));
- else throw new IllegalArgumentException ("SOCreditStatus Invalid value - Reference = SOCREDITSTATUS_AD_Reference_ID - S - O - H - X - W - D");
+if (SOCreditStatus == null || SOCreditStatus.equals("S") || SOCreditStatus.equals("O") || SOCreditStatus.equals("H") || SOCreditStatus.equals("X") || SOCreditStatus.equals("W") || SOCreditStatus.equals("D") || ( refContainsValue("CORE-AD_Reference-289", SOCreditStatus) ) );
+ else throw new IllegalArgumentException ("SOCreditStatus Invalid value: " + SOCreditStatus + ".  Valid: " +  refValidOptions("CORE-AD_Reference-289") );
 if (SOCreditStatus != null && SOCreditStatus.length() > 1)
 {
 log.warning("Length > 1 - truncated");
@@ -1690,8 +1809,8 @@ public static final String TAXIDTYPE_SinIDTipoDocumento = "99";
 /** Set Tax Id Type */
 public void setTaxIdType (String TaxIdType)
 {
-if (TaxIdType == null || TaxIdType.equals("80") || TaxIdType.equals("86") || TaxIdType.equals("87") || TaxIdType.equals("89") || TaxIdType.equals("90") || TaxIdType.equals("91") || TaxIdType.equals("92") || TaxIdType.equals("93") || TaxIdType.equals("95") || TaxIdType.equals("96") || TaxIdType.equals("94") || TaxIdType.equals("00") || TaxIdType.equals("01") || TaxIdType.equals("07") || TaxIdType.equals("08") || TaxIdType.equals("09") || TaxIdType.equals("10") || TaxIdType.equals("11") || TaxIdType.equals("12") || TaxIdType.equals("13") || TaxIdType.equals("14") || TaxIdType.equals("16") || TaxIdType.equals("17") || TaxIdType.equals("18") || TaxIdType.equals("19") || TaxIdType.equals("20") || TaxIdType.equals("02") || TaxIdType.equals("03") || TaxIdType.equals("04") || TaxIdType.equals("05") || TaxIdType.equals("06") || TaxIdType.equals("21") || TaxIdType.equals("22") || TaxIdType.equals("23") || TaxIdType.equals("24") || TaxIdType.equals("25") || TaxIdType.equals("99"));
- else throw new IllegalArgumentException ("TaxIdType Invalid value - Reference = TAXIDTYPE_AD_Reference_ID - 80 - 86 - 87 - 89 - 90 - 91 - 92 - 93 - 95 - 96 - 94 - 00 - 01 - 07 - 08 - 09 - 10 - 11 - 12 - 13 - 14 - 16 - 17 - 18 - 19 - 20 - 02 - 03 - 04 - 05 - 06 - 21 - 22 - 23 - 24 - 25 - 99");
+if (TaxIdType == null || TaxIdType.equals("80") || TaxIdType.equals("86") || TaxIdType.equals("87") || TaxIdType.equals("89") || TaxIdType.equals("90") || TaxIdType.equals("91") || TaxIdType.equals("92") || TaxIdType.equals("93") || TaxIdType.equals("95") || TaxIdType.equals("96") || TaxIdType.equals("94") || TaxIdType.equals("00") || TaxIdType.equals("01") || TaxIdType.equals("07") || TaxIdType.equals("08") || TaxIdType.equals("09") || TaxIdType.equals("10") || TaxIdType.equals("11") || TaxIdType.equals("12") || TaxIdType.equals("13") || TaxIdType.equals("14") || TaxIdType.equals("16") || TaxIdType.equals("17") || TaxIdType.equals("18") || TaxIdType.equals("19") || TaxIdType.equals("20") || TaxIdType.equals("02") || TaxIdType.equals("03") || TaxIdType.equals("04") || TaxIdType.equals("05") || TaxIdType.equals("06") || TaxIdType.equals("21") || TaxIdType.equals("22") || TaxIdType.equals("23") || TaxIdType.equals("24") || TaxIdType.equals("25") || TaxIdType.equals("99") || ( refContainsValue("CORE-AD_Reference-1010201", TaxIdType) ) );
+ else throw new IllegalArgumentException ("TaxIdType Invalid value: " + TaxIdType + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1010201") );
 if (TaxIdType != null && TaxIdType.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -1767,5 +1886,9 @@ Search key for the record in the format required - must be unique */
 public String getValue() 
 {
 return (String)get_Value("Value");
+}
+public KeyNamePair getKeyNamePair() 
+{
+return new KeyNamePair(getID(), getValue());
 }
 }

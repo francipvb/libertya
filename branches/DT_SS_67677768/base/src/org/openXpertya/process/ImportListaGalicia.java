@@ -119,7 +119,7 @@ public class ImportListaGalicia extends SvrProcess
 		sql.append("NVL(CUENTA_ESPECIFICA,'') AS CUENTA_ESPECIFICA, ");
 		sql.append("NVL(ORDEN_DE_PAGO,'') AS ORDEN_DE_PAGO, ");
 		sql.append("FECHA_PAGO, ");
-		sql.append("NVL(MONTO,0)/100) AS MONTO ");
+		sql.append("(NVL(MONTO,0)/100) AS MONTO ");
 		sql.append("FROM I_LISTA_GALICIA ");
 		sql.append("WHERE I_ISIMPORTED = 'N' AND CODIGO = 'PD' AND ESTADO IN ('N','P','S','T') ");
 		
@@ -131,6 +131,8 @@ public class ImportListaGalicia extends SvrProcess
 		int cuentaEspecificaInt = 0;
 		int chequesActualizados = 0;
 		int chequesNoEncontrados = 0;
+		
+		MDocType lgdt = MDocType.getDocType(getCtx(), MDocType.DOCTYPE_Lista_Galicia, get_TrxName());
 		
 		PreparedStatement pstmt = DB.prepareStatement(sql.toString());
 		ResultSet rs = pstmt.executeQuery();
@@ -167,7 +169,7 @@ public class ImportListaGalicia extends SvrProcess
 			// BUSCO EN LA TABLA C_PAYMENT LOS PAYMENTS QUE MATCHEEN CON LOS
 			// DATOS IMPORTADOS EN I_LISTA_GALICIA
 			sql = new StringBuffer("select p.C_Payment_ID, coalesce(p.c_banklist_id,0) as c_lista_galicia_id ");
-			sql.append("from c_lista_galicia_payments p ");
+			sql.append("from c_electronic_payments p ");
 			sql.append("inner join c_bpartner b on p.c_bpartner_id = b.c_bpartner_id ");
 			sql.append("inner join c_bankaccount ba on ba.c_bankaccount_id = p.c_bankaccount_id ");
 			sql.append("left join c_allocationhdr ah on ah.c_allocationhdr_id = p.c_allocationhdr_id ");
@@ -177,12 +179,14 @@ public class ImportListaGalicia extends SvrProcess
 			sql.append("and ba.accountno = ").append(cuentaEspecificaInt);
 			sql.append("and ba.IsActive = 'Y' ");
 			sql.append("and replace(b.taxid,'-','') = '").append(cuit).append("'");
+			sql.append(" and p.c_doctype_id = ? ");
 			
 			pstmt = DB.prepareStatement(sql.toString(), null, true);
 			try{
 				pstmt.setString(1,ordenDePago);
 				pstmt.setBigDecimal(2,monto);
 				pstmt.setTimestamp(3,fechaPago);
+				pstmt.setInt(4, lgdt.getID());
 				
 				ResultSet rsPayment = pstmt.executeQuery();
 				if(rsPayment.next()) {
@@ -192,13 +196,11 @@ public class ImportListaGalicia extends SvrProcess
 					
 					if(C_Lista_Galicia_ID == 0) {
 						sql = new StringBuffer("UPDATE I_LISTA_GALICIA ");
-						sql.append("SET I_ISIMPORTED = 'N', I_ERRORMSG = ? ");
-						sql.append("WHERE I_LISTA_GALICIA_ID = ? ");
-						pstmt = DB.prepareStatement(sql.toString());
-						pstmt.setString(1,"EL CHEQUE CORRESPONDIENTE PERTENECE A UNA OP QUE NO POSEE UNA LISTA GALICIA ASOCIADA");
-						pstmt.setInt(2,I_Lista_Galicia_ID);
-						pstmt.executeUpdate();
-						pstmt.close();
+						sql.append("SET I_ISIMPORTED = 'N', I_ERRORMSG = '")
+								.append("EL CHEQUE CORRESPONDIENTE PERTENECE A UNA OP QUE NO POSEE UNA LISTA GALICIA ASOCIADA")
+								.append("' ");
+						sql.append("WHERE I_LISTA_GALICIA_ID = ").append(I_Lista_Galicia_ID);
+						DB.executeUpdate(sql.toString());
 					}
 					else {
 					    payment.setCheckNo(numero);
@@ -206,13 +208,9 @@ public class ImportListaGalicia extends SvrProcess
 					    //SI EL SAVE = FALSE, SETEO EL FLAG I_ISIMPORTED = 'N' 
 					    if(!payment.save()) {
 						    sql = new StringBuffer("UPDATE I_LISTA_GALICIA ");
-						    sql.append("SET I_ISIMPORTED = 'N', I_ERRORMSG = ? ");
-						    sql.append("WHERE I_LISTA_GALICIA_ID = ? ");
-						    pstmt = DB.prepareStatement(sql.toString());
-						    pstmt.setString(1,CLogger.retrieveErrorAsString());
-						    pstmt.setInt(2,I_Lista_Galicia_ID);
-						    pstmt.executeUpdate();
-						    pstmt.close();
+						    sql.append("SET I_ISIMPORTED = 'N', I_ERRORMSG = '").append(CLogger.retrieveErrorAsString()).append("' ");
+						    sql.append("WHERE I_LISTA_GALICIA_ID = ").append(I_Lista_Galicia_ID);
+						    DB.executeUpdate(sql.toString());
 					    }
 					    chequesActualizados++;
 					}
@@ -220,13 +218,11 @@ public class ImportListaGalicia extends SvrProcess
 				//SI NO ENCUENTRO EL PAYMENT "ASOCIADO" SETEO EL MSJ CORRESPONDIENTE.
 				else {
 					sql = new StringBuffer("UPDATE I_LISTA_GALICIA ");
-					sql.append("SET I_ISIMPORTED = 'N', I_ERRORMSG = ? ");
-					sql.append("WHERE I_LISTA_GALICIA_ID = ? ");
-					pstmt = DB.prepareStatement(sql.toString());
-					pstmt.setString(1,"NO SE ENCONTRO EL CHEQUE ASOCIADO, VER FECHA DE PAGO, IMPORTE O CUENTA BANCARIA");
-					pstmt.setInt(2,I_Lista_Galicia_ID);
-					pstmt.executeUpdate();
-					pstmt.close();
+					sql.append("SET I_ISIMPORTED = 'N', I_ERRORMSG = ")
+							.append("NO SE ENCONTRO EL CHEQUE ASOCIADO, VER FECHA DE PAGO, IMPORTE O CUENTA BANCARIA")
+							.append("' ");
+					sql.append("WHERE I_LISTA_GALICIA_ID = ").append(I_Lista_Galicia_ID);
+					DB.executeUpdate(sql.toString());
 					chequesNoEncontrados++;
 				}
 				
@@ -237,12 +233,9 @@ public class ImportListaGalicia extends SvrProcess
 		}
 		
 		sql = new StringBuffer("UPDATE I_LISTA_GALICIA ");
-		sql.append("SET I_ISIMPORTED = 'N', I_ERRORMSG = ? ");
+		sql.append("SET I_ISIMPORTED = 'N', I_ERRORMSG = 'EL CHEQUE FUE RECHAZADO, VER TABLA DE ESTADOS' ");
 		sql.append("WHERE ESTADO LIKE 'R%' ");
-		pstmt = DB.prepareStatement(sql.toString());
-		pstmt.setString(1,"EL CHEQUE FUE RECHAZADO, VER TABLA DE ESTADOS");
-		pstmt.executeUpdate();		
-		pstmt.close();
+		DB.executeUpdate(sql.toString());
 		
 		return "Proceso finalizado satisfactoriamente. Cheques Actualizados: " + chequesActualizados
 				+ ". Cheques no encontrados: " + chequesNoEncontrados;

@@ -20,6 +20,7 @@ import org.openXpertya.model.MBPartner;
 import org.openXpertya.model.MBPartnerLocation;
 import org.openXpertya.model.MClient;
 import org.openXpertya.model.MClientInfo;
+import org.openXpertya.model.MCurrency;
 import org.openXpertya.model.MDocType;
 import org.openXpertya.model.MInvoice;
 import org.openXpertya.model.MInvoiceLine;
@@ -170,7 +171,12 @@ public class LaunchInvoice extends SvrProcess {
 		}
 		
 		// Descuentos aplicados totales
-		jasperwrapper.addParameter("NROCOMPROBANTE", invoice.getNumeroDeDocumento());
+		jasperwrapper.addParameter("NROCOMPROBANTE", (!Util.isEmpty(invoice.getNumeroDeDocumento(), true)
+				? invoice.getNumeroDeDocumento() : invoice.getDocumentNo()).replace("<", "").replace(">", ""));
+		jasperwrapper.addParameter("NROCOMPROBANTESMALL",
+				invoice.getPuntoDeVenta()
+						+ "00000000".substring(String.valueOf(invoice.getNumeroComprobante()).length())
+						+ invoice.getNumeroComprobante());
 		jasperwrapper.addParameter("TIPOCOMPROBANTE", JasperReportsUtil
 			.getDocTypeName(getCtx(), invoice.getC_DocTypeTarget_ID(),
 					"FACTURA", get_TrxName()));
@@ -179,6 +185,7 @@ public class LaunchInvoice extends SvrProcess {
 		jasperwrapper.addParameter("DOCTYPENOTES", docType.getDocumentNote());
 				
 		jasperwrapper.addParameter("FECHA", invoice.getDateInvoiced());
+		jasperwrapper.addParameter("FECHA_CONTABLE", invoice.getDateAcct());
 		Calendar c = Calendar.getInstance();
 		c.setTimeInMillis(invoice.getDateInvoiced().getTime());
 		jasperwrapper.addParameter("DIA", Integer.toString(c.get(Calendar.DATE)));
@@ -411,6 +418,9 @@ public class LaunchInvoice extends SvrProcess {
 					JasperReportsUtil.getCategoriaIVAName(getCtx(),
 							client.getCategoriaIva(invoice.getAD_Org_ID()), get_TrxName()));
 		
+		jasperwrapper.addParameter("INGBRUTO_CLIENT", clientInfo.getIIBB());
+		jasperwrapper.addParameter("IIBB_DATE_CLIENT", clientInfo.getIIBBDate());
+		
 		/* Codigo original
 		jasperwrapper.addParameter("CLIENT_CUIT",clientInfo.getCUIT());
 		jasperwrapper.addParameter(
@@ -479,7 +489,7 @@ public class LaunchInvoice extends SvrProcess {
 			//jasperwrapper.addParameter("RET_ALLOC_AMOUNT", allocation.getGrandTotal());
 			MAllocationHdr allocation = new MAllocationHdr(getCtx(), retencion_invoice.getC_AllocationHdr_ID(), null);
 			// Monto del pago actual
-			jasperwrapper.addParameter("RET_ALLOC_AMOUNT", LaunchOrdenPago
+			jasperwrapper.addParameter("RET_ALLOC_AMOUNT", MAllocationHdr
 					.getPayNetAmt(getCtx(), allocation, get_TrxName())); 
 			// Comprobante/s que origina/n la retención. (Números de Documento de las facturas en el Recibo) 
 			jasperwrapper.addParameter("RET_ALLOC_INVOICES", get_Retencion_Invoices(allocation));
@@ -496,6 +506,12 @@ public class LaunchInvoice extends SvrProcess {
 			jasperwrapper.addParameter("SUBREPORT_PERCEPCIONES_DATASOURCE", perceptionDS);
 			jasperwrapper.addParameter("PERCEPCION_TOTAL_AMT", perceptionDS.getTotalAmt());
 		}
+		
+		// Importe Total en Moneda de Compañía
+		jasperwrapper.addParameter("CLIENT_CURRENCY_GRAND_TOTAL", getClientCurrencyGrandTotal(invoice));
+
+		// Tasa de Cambio
+		jasperwrapper.addParameter("CURRENCY_RATE", getCurrencyRate(invoice));
 	}
 	
 	
@@ -672,4 +688,30 @@ public class LaunchInvoice extends SvrProcess {
 		ds.loadData();
 		return ds;
 	}
-}
+	
+	/** 
+	 * Importe Total en Moneda de Compañía: es el importe Total de la Factura convertido a Moneda de la Compañía según la Tasa de Cambio configurada para la Fecha Contable de la factura
+	 */
+	protected BigDecimal getClientCurrencyGrandTotal(MInvoice invoice) {
+		return MCurrency.currencyConvert(
+				invoice.getGrandTotal(),
+				invoice.getC_Currency_ID(),
+				MClient.get(getCtx()).getC_Currency_ID(),
+				invoice.getDateAcct(),
+				invoice.getAD_Org_ID(),
+				getCtx());
+	}
+	
+	/**
+	 * Tasa de Cambio: es la tasa de cambio configurada para la moneda de la factura y la moneda de la Compañía, en la fecha Contable de la Factura.
+	 */
+	protected BigDecimal getCurrencyRate(MInvoice invoice) {
+		return MCurrency.currencyConvert(
+				BigDecimal.ONE,
+				invoice.getC_Currency_ID(),
+				MClient.get(getCtx()).getC_Currency_ID(),
+				invoice.getDateAcct(),
+				invoice.getAD_Org_ID(),
+				getCtx());	
+	}
+} 

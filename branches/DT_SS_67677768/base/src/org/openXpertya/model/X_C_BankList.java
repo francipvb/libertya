@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_BankList
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-05-23 10:58:57.88 */
+ *  @version  - 2017-04-13 13:35:14.579 */
 public class X_C_BankList extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -16,6 +16,8 @@ public X_C_BankList (Properties ctx, int C_BankList_ID, String trxName)
 super (ctx, C_BankList_ID, trxName);
 /** if (C_BankList_ID == 0)
 {
+setBankListTotal (Env.ZERO);
+setC_BankAccount_ID (0);
 setC_BankList_ID (0);
 setC_DocType_ID (0);
 setDailySeqNo (Env.ZERO);
@@ -54,28 +56,41 @@ public String toString()
 StringBuffer sb = new StringBuffer ("X_C_BankList[").append(getID()).append("]");
 return sb.toString();
 }
-/** Set Allocation.
-Payment allocation */
-public void setC_AllocationHdr_ID (int C_AllocationHdr_ID)
+/** Set Total.
+Bank List Total */
+public void setBankListTotal (BigDecimal BankListTotal)
 {
-if (C_AllocationHdr_ID <= 0) set_Value ("C_AllocationHdr_ID", null);
- else 
-set_Value ("C_AllocationHdr_ID", new Integer(C_AllocationHdr_ID));
+if (BankListTotal == null) throw new IllegalArgumentException ("BankListTotal is mandatory");
+set_Value ("BankListTotal", BankListTotal);
 }
-/** Get Allocation.
-Payment allocation */
-public int getC_AllocationHdr_ID() 
+/** Get Total.
+Bank List Total */
+public BigDecimal getBankListTotal() 
 {
-Integer ii = (Integer)get_Value("C_AllocationHdr_ID");
+BigDecimal bd = (BigDecimal)get_Value("BankListTotal");
+if (bd == null) return Env.ZERO;
+return bd;
+}
+/** Set Bank Account.
+Account at the Bank */
+public void setC_BankAccount_ID (int C_BankAccount_ID)
+{
+set_Value ("C_BankAccount_ID", new Integer(C_BankAccount_ID));
+}
+/** Get Bank Account.
+Account at the Bank */
+public int getC_BankAccount_ID() 
+{
+Integer ii = (Integer)get_Value("C_BankAccount_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
-/** Set C_BankList_ID */
+/** Set Bank List */
 public void setC_BankList_ID (int C_BankList_ID)
 {
 set_ValueNoCheck ("C_BankList_ID", new Integer(C_BankList_ID));
 }
-/** Get C_BankList_ID */
+/** Get Bank List */
 public int getC_BankList_ID() 
 {
 Integer ii = (Integer)get_Value("C_BankList_ID");
@@ -172,8 +187,8 @@ public static final String DOCACTION_Void = "VO";
 The targeted status of the document */
 public void setDocAction (String DocAction)
 {
-if (DocAction.equals("AP") || DocAction.equals("CL") || DocAction.equals("PR") || DocAction.equals("IN") || DocAction.equals("CO") || DocAction.equals("--") || DocAction.equals("RC") || DocAction.equals("RJ") || DocAction.equals("RA") || DocAction.equals("WC") || DocAction.equals("XL") || DocAction.equals("RE") || DocAction.equals("PO") || DocAction.equals("VO"));
- else throw new IllegalArgumentException ("DocAction Invalid value - Reference = DOCACTION_AD_Reference_ID - AP - CL - PR - IN - CO - -- - RC - RJ - RA - WC - XL - RE - PO - VO");
+if (DocAction.equals("AP") || DocAction.equals("CL") || DocAction.equals("PR") || DocAction.equals("IN") || DocAction.equals("CO") || DocAction.equals("--") || DocAction.equals("RC") || DocAction.equals("RJ") || DocAction.equals("RA") || DocAction.equals("WC") || DocAction.equals("XL") || DocAction.equals("RE") || DocAction.equals("PO") || DocAction.equals("VO") || ( refContainsValue("CORE-AD_Reference-135", DocAction) ) );
+ else throw new IllegalArgumentException ("DocAction Invalid value: " + DocAction + ".  Valid: " +  refValidOptions("CORE-AD_Reference-135") );
 if (DocAction == null) throw new IllegalArgumentException ("DocAction is mandatory");
 if (DocAction.length() > 2)
 {
@@ -217,8 +232,8 @@ public static final String DOCSTATUS_Reversed = "RE";
 The current status of the document */
 public void setDocStatus (String DocStatus)
 {
-if (DocStatus.equals("VO") || DocStatus.equals("NA") || DocStatus.equals("IP") || DocStatus.equals("CO") || DocStatus.equals("AP") || DocStatus.equals("CL") || DocStatus.equals("WC") || DocStatus.equals("WP") || DocStatus.equals("??") || DocStatus.equals("DR") || DocStatus.equals("IN") || DocStatus.equals("RE"));
- else throw new IllegalArgumentException ("DocStatus Invalid value - Reference = DOCSTATUS_AD_Reference_ID - VO - NA - IP - CO - AP - CL - WC - WP - ?? - DR - IN - RE");
+if (DocStatus.equals("VO") || DocStatus.equals("NA") || DocStatus.equals("IP") || DocStatus.equals("CO") || DocStatus.equals("AP") || DocStatus.equals("CL") || DocStatus.equals("WC") || DocStatus.equals("WP") || DocStatus.equals("??") || DocStatus.equals("DR") || DocStatus.equals("IN") || DocStatus.equals("RE") || ( refContainsValue("CORE-AD_Reference-131", DocStatus) ) );
+ else throw new IllegalArgumentException ("DocStatus Invalid value: " + DocStatus + ".  Valid: " +  refValidOptions("CORE-AD_Reference-131") );
 if (DocStatus == null) throw new IllegalArgumentException ("DocStatus is mandatory");
 if (DocStatus.length() > 2)
 {

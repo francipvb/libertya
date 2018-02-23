@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"  ?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <!-- Created with iReport - A designer for JasperReports -->
 <!DOCTYPE jasperReport PUBLIC "//JasperReports//DTD Report Design//EN" "http://jasperreports.sourceforge.net/dtds/jasperreport.dtd">
 <jasperReport
@@ -36,7 +36,7 @@
 	WHERE (fa.ad_table_id = 318)
 		AND (d.docbasetype IN ('ARI','API'))
 		AND (d.doctypekey NOT IN ('RCR','RCI','RTR','RTI'))
-	GROUP BY fa.ad_org_id, fa.ad_client_id, i.issotrx, fa.dateacct,fa.account_id)
+	GROUP BY fa.ad_org_id, fa.ad_client_id, i.issotrx, fa.dateacct, fa.account_id)
 UNION
 --RESUMEN PAGOS (PAYMENTS Y ALLOCATIONS)
 	(SELECT fa.ad_org_id, fa.ad_client_id, (case when i.issotrx = 'Y' then 'Cobro' else 'Pago' end) as tipo, fa.dateacct,fa.account_id, SUM(fa.amtsourcedr) as totalamtdr, SUM(fa.amtsourcecr) as totalamtcr
@@ -45,13 +45,21 @@ UNION
 	INNER JOIN (SELECT c_allocationhdr_id,issotrx FROM c_allocationline al 
 	INNER JOIN c_invoice i ON (i.c_invoice_id = al.c_invoice_id) group by c_allocationhdr_id,issotrx ) as i ON (i.c_allocationhdr_id = a.c_allocationhdr_id)
 	AND fa.ad_table_id = 735
-	GROUP BY fa.ad_org_id, fa.ad_client_id, i.issotrx, fa.dateacct,fa.account_id) 
+	GROUP BY fa.ad_org_id, fa.ad_client_id, i.issotrx, fa.dateacct, fa.account_id) 
 UNION
 	(SELECT fa.ad_org_id, fa.ad_client_id, (case when p.isreceipt = 'Y' then 'Cobro' else 'Pago' end) as tipo,fa.dateacct,fa.account_id, SUM(fa.amtsourcedr) as totalamtdr, SUM(fa.amtsourcecr) as totalamtcr
 	FROM c_payment p
 	INNER JOIN fact_acct fa ON fa.record_id = p.c_payment_id
 	AND fa.ad_table_id = 335
-	GROUP BY fa.ad_org_id, fa.ad_client_id, p.isreceipt, fa.dateacct,fa.account_id)
+	GROUP BY fa.ad_org_id, fa.ad_client_id, p.isreceipt, fa.dateacct, fa.account_id)
+--ASIENTOS MANUALES	
+UNION
+	(SELECT fa.ad_org_id, fa.ad_client_id, 'Asiento manual' as tipo, fa.dateacct, fa.account_id, SUM(fa.amtsourcedr) as totalamtdr, SUM(fa.amtsourcecr) as totalamtcr
+	FROM gl_journal j
+	INNER JOIN fact_acct fa ON fa.record_id = j.gl_journal_id
+	AND fa.ad_table_id = 224
+	GROUP BY fa.ad_org_id, fa.ad_client_id, fa.dateacct, fa.account_id
+	)
 UNION
 --TOTAL CAJA
 	(select fa.ad_org_id, fa.ad_client_id, 'Caja' as tipo, fa.dateacct,fa.account_id, SUM(fa.amtsourcedr) as totalamtdr, SUM(fa.amtsourcecr) as totalamtcr
@@ -67,8 +75,8 @@ WHERE (($P{AD_Org_ID} IS NULL) OR (0 = $P{AD_Org_ID}) OR (org.ad_org_id = $P{AD_
 	AND (($P{AD_CLIENT_ID} IS NULL) OR (cli.ad_client_id = $P{AD_CLIENT_ID}))
 	AND (($P{FechaDesde}::date IS NULL) OR (sc.dateacct::date >= $P{FechaDesde}::date)) 
 	AND (($P{FechaHasta}::date IS NULL) OR (sc.dateacct::date <= $P{FechaHasta}::date))
-GROUP BY sc.ad_org_id,org.name, sc.ad_client_id, sc.tipo, dateacct::date, e.name
-ORDER BY dateacct,tipo, e.name]]></queryString>
+GROUP BY sc.ad_org_id, org.name, sc.ad_client_id, sc.tipo, dateacct::date, e.name
+ORDER BY dateacct, tipo, e.name]]></queryString>
 
 	<field name="ad_org_id" class="java.lang.Integer"/>
 	<field name="organizacion" class="java.lang.String"/>

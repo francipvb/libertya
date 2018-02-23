@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por I_Invoice
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2014-11-17 11:34:19.974 */
+ *  @version  - 2017-07-28 13:21:45.139 */
 public class X_I_Invoice extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -20,6 +20,7 @@ setCreateCashLine (false);
 setDocumentNoBySequence (false);
 setI_Invoice_ID (0);
 setI_IsImported (false);
+setIsPrinted (false);
 }
  */
 }
@@ -115,6 +116,43 @@ Integer ii = (Integer)get_Value("AD_User_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
+public static final int AUTHORIZATIONCHAINSTATUS_AD_Reference_ID = MReference.getReferenceID("Authorization Status");
+/** Pending = P */
+public static final String AUTHORIZATIONCHAINSTATUS_Pending = "P";
+/** Authorized = A */
+public static final String AUTHORIZATIONCHAINSTATUS_Authorized = "A";
+/** Set Authorization Status */
+public void setAuthorizationChainStatus (String AuthorizationChainStatus)
+{
+if (AuthorizationChainStatus == null || AuthorizationChainStatus.equals("P") || AuthorizationChainStatus.equals("A") || ( refContainsValue("CORE-AD_Reference-1010261", AuthorizationChainStatus) ) );
+ else throw new IllegalArgumentException ("AuthorizationChainStatus Invalid value: " + AuthorizationChainStatus + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1010261") );
+if (AuthorizationChainStatus != null && AuthorizationChainStatus.length() > 1)
+{
+log.warning("Length > 1 - truncated");
+AuthorizationChainStatus = AuthorizationChainStatus.substring(0,1);
+}
+set_Value ("AuthorizationChainStatus", AuthorizationChainStatus);
+}
+/** Get Authorization Status */
+public String getAuthorizationChainStatus() 
+{
+return (String)get_Value("AuthorizationChainStatus");
+}
+/** Set Authorization Chain Value */
+public void setAuthorizationChainValue (String AuthorizationChainValue)
+{
+if (AuthorizationChainValue != null && AuthorizationChainValue.length() > 40)
+{
+log.warning("Length > 40 - truncated");
+AuthorizationChainValue = AuthorizationChainValue.substring(0,40);
+}
+set_Value ("AuthorizationChainValue", AuthorizationChainValue);
+}
+/** Get Authorization Chain Value */
+public String getAuthorizationChainValue() 
+{
+return (String)get_Value("AuthorizationChainValue");
+}
 /** Set Business Partner Key.
 Key of the Business Partner */
 public void setBPartnerValue (String BPartnerValue)
@@ -147,6 +185,21 @@ public int getC_Activity_ID()
 Integer ii = (Integer)get_Value("C_Activity_ID");
 if (ii == null) return 0;
 return ii.intValue();
+}
+/** Set CAI */
+public void setCAI (String CAI)
+{
+if (CAI != null && CAI.length() > 30)
+{
+log.warning("Length > 30 - truncated");
+CAI = CAI.substring(0,30);
+}
+set_Value ("CAI", CAI);
+}
+/** Get CAI */
+public String getCAI() 
+{
+return (String)get_Value("CAI");
 }
 /** Set Business Partner .
 Identifies a Business Partner */
@@ -438,6 +491,16 @@ public Timestamp getDateAcct()
 {
 return (Timestamp)get_Value("DateAcct");
 }
+/** Set CAI Date */
+public void setDateCAI (Timestamp DateCAI)
+{
+set_Value ("DateCAI", DateCAI);
+}
+/** Get CAI Date */
+public Timestamp getDateCAI() 
+{
+return (Timestamp)get_Value("DateCAI");
+}
 /** Set Date Invoiced.
 Date printed on Invoice */
 public void setDateInvoiced (Timestamp DateInvoiced)
@@ -600,6 +663,24 @@ public String getISO_Code()
 {
 return (String)get_Value("ISO_Code");
 }
+/** Set Printed.
+Indicates if this document / line is printed */
+public void setIsPrinted (boolean IsPrinted)
+{
+set_Value ("IsPrinted", new Boolean(IsPrinted));
+}
+/** Get Printed.
+Indicates if this document / line is printed */
+public boolean isPrinted() 
+{
+Object oo = get_Value("IsPrinted");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
 /** Set Sales Transaction.
 This is a Sales Transaction */
 public void setIsSOTrx (boolean IsSOTrx)
@@ -634,6 +715,20 @@ Description of the Line */
 public String getLineDescription() 
 {
 return (String)get_Value("LineDescription");
+}
+/** Set M_AuthorizationChain_ID */
+public void setM_AuthorizationChain_ID (int M_AuthorizationChain_ID)
+{
+if (M_AuthorizationChain_ID <= 0) set_Value ("M_AuthorizationChain_ID", null);
+ else 
+set_Value ("M_AuthorizationChain_ID", new Integer(M_AuthorizationChain_ID));
+}
+/** Get M_AuthorizationChain_ID */
+public int getM_AuthorizationChain_ID() 
+{
+Integer ii = (Integer)get_Value("M_AuthorizationChain_ID");
+if (ii == null) return 0;
+return ii.intValue();
 }
 /** Set Price List.
 Unique identifier of a Price List */
@@ -710,8 +805,6 @@ public static final String PAYMENTRULE_CreditCard = "K";
 public static final String PAYMENTRULE_Cash = "B";
 /** On Credit = P */
 public static final String PAYMENTRULE_OnCredit = "P";
-/** Check = S */
-public static final String PAYMENTRULE_Check = "S";
 /** Payment Check = PC */
 public static final String PAYMENTRULE_PaymentCheck = "PC";
 /** Direct Deposit = T */
@@ -720,12 +813,14 @@ public static final String PAYMENTRULE_DirectDeposit = "T";
 public static final String PAYMENTRULE_Confirming = "Cf";
 /** Direct Debit = D */
 public static final String PAYMENTRULE_DirectDebit = "D";
+/** Check = S */
+public static final String PAYMENTRULE_Check = "S";
 /** Set Payment Rule.
 How you pay the invoice */
 public void setPaymentRule (String PaymentRule)
 {
-if (PaymentRule == null || PaymentRule.equals("Tr") || PaymentRule.equals("K") || PaymentRule.equals("B") || PaymentRule.equals("P") || PaymentRule.equals("S") || PaymentRule.equals("PC") || PaymentRule.equals("T") || PaymentRule.equals("Cf") || PaymentRule.equals("D"));
- else throw new IllegalArgumentException ("PaymentRule Invalid value - Reference = PAYMENTRULE_AD_Reference_ID - Tr - K - B - P - S - PC - T - Cf - D");
+if (PaymentRule == null || PaymentRule.equals("Tr") || PaymentRule.equals("K") || PaymentRule.equals("B") || PaymentRule.equals("P") || PaymentRule.equals("PC") || PaymentRule.equals("T") || PaymentRule.equals("Cf") || PaymentRule.equals("D") || PaymentRule.equals("S") || ( refContainsValue("CORE-AD_Reference-195", PaymentRule) ) );
+ else throw new IllegalArgumentException ("PaymentRule Invalid value: " + PaymentRule + ".  Valid: " +  refValidOptions("CORE-AD_Reference-195") );
 if (PaymentRule != null && PaymentRule.length() > 2)
 {
 log.warning("Length > 2 - truncated");

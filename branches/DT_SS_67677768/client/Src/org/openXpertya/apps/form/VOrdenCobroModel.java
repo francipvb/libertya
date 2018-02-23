@@ -118,6 +118,7 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
 		getMsgMap().put("AdvancedPayment", "AdvancedCustomerPayment");
 		getMsgMap().put("Payment","CustomerPayment");
 		reciboDeCliente = new ReciboDeCliente(getCtx(),getTrxName());
+		setActualizarNrosChequera(false);
 	}
 
 	@Override
@@ -177,6 +178,7 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
 		
 		retProcessor.setDateTrx(retencionDate);
 		retProcessor.setAmount(amount);
+		retProcessor.setPaymentRule(getPaymentRule());
 		retProcessor.setRetencionNumber(retencionNumber);
 		retProcessor.setProjectID(projectID == null?0:projectID);
 		retProcessor.setCampaignID(campaignID == null?0:campaignID);
@@ -472,25 +474,32 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
 		
 		StringBuffer sql = new StringBuffer();
 		
-		sql.append(" SELECT c_invoice_id, c_invoicepayschedule_id, orgname, documentno, dateinvoiced, duedate, currencyIso, grandTotal, openTotal, convertedamt, openamt, isexchange, C_Currency_ID FROM ");
-		sql.append("  (SELECT i.C_Invoice_ID, i.C_InvoicePaySchedule_ID, org.name as orgname, i.DocumentNo, dateinvoiced, coalesce(i.duedate,dateinvoiced) as DueDate, cu.iso_code as currencyIso, i.grandTotal, invoiceOpen(i.C_Invoice_ID, COALESCE(i.C_InvoicePaySchedule_ID, 0)) as openTotal, "); // ips.duedate
+		sql.append(" SELECT c_invoice_id, c_invoicepayschedule_id, orgname, documentno");
+		if (isSetDescriptionPreference())
+			sql.append(",COALESCE(description,'')");
+		sql.append(", dateinvoiced, duedate, currencyIso, grandTotal, openTotal, convertedamt, openamt, isexchange, C_Currency_ID, paymentrule FROM ");
+		sql.append("  (SELECT i.C_Invoice_ID, i.C_InvoicePaySchedule_ID, org.name as orgname, i.DocumentNo, i.description, dateinvoiced, coalesce(i.duedate,dateinvoiced) as DueDate, cu.iso_code as currencyIso, i.grandTotal, invoiceOpen(i.C_Invoice_ID, COALESCE(i.C_InvoicePaySchedule_ID, 0)) as openTotal, "); // ips.duedate
 		sql.append("    abs(currencyConvert( i.GrandTotal, i.C_Currency_ID, ?, '"+ m_fechaTrx +"'::date, null, i.AD_Client_ID, i.AD_Org_ID)) as ConvertedAmt, isexchange, ");
-		sql.append("    currencyConvert( invoiceOpen(i.C_Invoice_ID, COALESCE(i.C_InvoicePaySchedule_ID, 0)), i.C_Currency_ID, ?, '"+ m_fechaTrx +"'::date, null, i.AD_Client_ID, i.AD_Org_ID) AS openAmt, i.C_Currency_ID ");
+		sql.append("    currencyConvert( invoiceOpen(i.C_Invoice_ID, COALESCE(i.C_InvoicePaySchedule_ID, 0)), i.C_Currency_ID, ?, '"+ m_fechaTrx +"'::date, null, i.AD_Client_ID, i.AD_Org_ID) AS openAmt, i.C_Currency_ID, i.paymentrule ");
 		sql.append("  FROM c_invoice_v AS i ");
 		sql.append("  LEFT JOIN ad_org org ON (org.ad_org_id=i.ad_org_id) ");
 		sql.append("  LEFT JOIN c_invoicepayschedule AS ips ON (i.c_invoicepayschedule_id=ips.c_invoicepayschedule_id) ");
 		sql.append("  INNER JOIN C_DocType AS dt ON (dt.C_DocType_ID=i.C_DocType_ID) ");
 		sql.append("  LEFT JOIN C_Currency cu ON (cu.C_Currency_ID=i.C_Currency_ID) ");
 		sql.append("  WHERE i.IsActive = 'Y' AND i.DocStatus IN ('CO', 'CL') ");
-		sql.append("    AND i.IsSOTRx = '" + getIsSOTrx() + "' AND GrandTotal <> 0.0 AND C_BPartner_ID = ? ");
+		//sql.append("    AND i.IsSOTRx = '" + getIsSOTrx() + "' ");
+		sql.append("    AND GrandTotal <> 0.0 ");
+		sql.append("    AND C_BPartner_ID = ? ");
 		sql.append("    AND dt.signo_issotrx = " + getSignoIsSOTrx());
 		
 		if (AD_Org_ID != 0) 
 			sql.append("  AND i.ad_org_id = ?  ");
 		
+		sql.append(" AND i.paymentRule = '").append(getPaymentRule()).append("' ");
+		
 		sql.append(" AND i.ispaid = 'N' ");
 		sql.append("  ) as openInvoices ");
-		sql.append(" GROUP BY c_invoice_id, c_invoicepayschedule_id, orgname, documentno, currencyIso, grandTotal, openTotal, dateinvoiced, duedate, convertedamt, openamt, isexchange, C_Currency_ID ");
+		sql.append(" GROUP BY c_invoice_id, c_invoicepayschedule_id, orgname, documentno, description, currencyIso, grandTotal, openTotal, dateinvoiced, duedate, convertedamt, openamt, isexchange, C_Currency_ID, paymentrule ");
 		sql.append(" HAVING opentotal > 0.0 ");
 		// Si agrupa no se puede filtrar por fecha de vencimiento, se deben traer todas
 		if (!m_allInvoices && !getBPartner().isGroupInvoices())
@@ -545,6 +554,12 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
 		m_facturasTableModel.fireChanged(false);
 		
 	}
+	
+	private boolean isSetDescriptionPreference() {
+		String sql = "SELECT COUNT(AD_Preference_ID) FROM ad_preference WHERE attribute = 'DescriptionRC' AND isActive = 'Y'";
+		return (DB.getSQLValue(getTrxName(), sql)>0);
+	}
+
 
 	/**
 	 * Actualización del descuento/recargo de las facturas
@@ -882,15 +897,15 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
 		for (Invoice f : debits) {
 			int invoiceID = f.getInvoiceID();
 			BigDecimal payAmount = f.getManualAmtOriginal().add(f.getTotalPaymentTermDiscountOriginalCurrency());
-			poGenerator.addInvoice(invoiceID, payAmount);
+			getPoGenerator().addInvoice(invoiceID, payAmount);
 		}	
 		
 		// Agrego los medios de pagos al generador	
 		for (MedioPago pago : credits) {
-			pago.addToGenerator(poGenerator);
+			pago.addToGenerator(getPoGenerator());
 		}
 		// Se crean las líneas de imputación entre las facturas y los pagos
-		poGenerator.generateLines();
+		getPoGenerator().generateLines();
 	}
 	
 	@Override
@@ -1043,6 +1058,9 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
 		// la factura (esto soluciona el problema de líneas de caja duplicadas que 
 		// se había detectado).
 		invoice.setCreateCashLine(false);
+		
+		// La forma de pago es la del RC
+		invoice.setPaymentRule(getPaymentRule());
 		
 		invoice.setDocAction(MInvoice.DOCACTION_Complete);
 		invoice.setDocStatus(MInvoice.DOCSTATUS_Drafted);
@@ -1588,6 +1606,8 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
             columnNames.add( "#$#" + Msg.getElement( Env.getCtx(),"C_InvoicePaySchedule_ID" ));
             columnNames.add( Msg.translate( Env.getCtx(),"AD_Org_ID" ));
             columnNames.add( Msg.getElement( Env.getCtx(),"DocumentNo" ));
+            if (isSetDescriptionPreference())
+            	columnNames.add(Msg.translate(Env.getCtx(), "Description"));
             columnNames.add( Msg.getElement( Env.getCtx(),"DateInvoiced" ));
             columnNames.add( Msg.translate( Env.getCtx(),"DueDate" ));
             columnNames.add( Msg.translate( Env.getCtx(),"Currency" ));
@@ -1602,21 +1622,29 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
             // La columna toPayCurrency permite ingresar el monto en la moneda de la Compañia
             columnNames.add( Msg.translate( Env.getCtx(),"ToPay" ).concat(" ").concat(mCurency.getISO_Code()));
 		}
-		
+
 		public int getOpenAmtColIdx() {
-			return 8;
+            if (isSetDescriptionPreference())
+            	return 9;
+            return 8;
 		}
 		
 		public int getIsExchange() {
-			return 11;
+            if (isSetDescriptionPreference())
+            	return 12;
+            return 11;
 		}
 		
 		public int getCurrencyColIdx() {
-			return 12;
+            if (isSetDescriptionPreference())
+            	return 13;
+            return 12;
 		}
 		
 		public int getOpenCurrentAmtColIdx() {
-			return 10;
+            if (isSetDescriptionPreference())
+            	return 11;
+            return 10;
 		}
 		
 		public int getIdColIdx() {
@@ -1628,11 +1656,15 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
 		}
 		
 		public int getDueDateColIdx() {
-			return 5;
+            if (isSetDescriptionPreference())
+            	return 6;
+            return 5;
 		}
 		
 		public int getDateInvoicedColIdx() {
-			return 4;
+            if (isSetDescriptionPreference())
+            	return 5;
+            return 4;
 		}
 		
 		@Override
@@ -1798,4 +1830,21 @@ public class VOrdenCobroModel extends VOrdenPagoModel {
 		setCashID(cashJournalID);
 	}
 
+	@Override
+	public boolean isAllowAdvanced(){
+		return true;
+	}
+
+	@Override
+	public String getChequeALaOrden(){
+		return getBPartner().getName();
+	}
+	
+	@Override
+	public String getEfectivoLibroCajaSqlValidation() {
+		// Se permite agregar efectivo de cualquier caja, sin importar la moneda
+		// Se agrega condición para agregar efectivo solo de cajas con misma fecha que la OP
+		//return " C_Cash.DocStatus = 'DR' AND (C_Cash.C_Cashbook_ID IN (SELECT C_Cashbook_ID FROM C_Cashbook cb WHERE cb.C_Currency_ID = @C_Currency_ID@ AND isactive = 'Y')) ";
+		return " C_Cash.DocStatus = 'DR' AND date_trunc('day', C_Cash.DateAcct) = date_trunc('day', '@Date@'::timestamp)";
+	}
 }

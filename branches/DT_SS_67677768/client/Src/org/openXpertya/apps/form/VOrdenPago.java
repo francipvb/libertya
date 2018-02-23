@@ -12,6 +12,8 @@ import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
@@ -20,11 +22,11 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyVetoException;
 import java.beans.VetoableChangeListener;
 import java.math.BigDecimal;
-import java.sql.Timestamp;
 import java.text.NumberFormat;
 import java.text.ParseException;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -62,6 +64,7 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 
+import org.compiere.swing.CComboBox;
 import org.compiere.swing.CPanel;
 import org.openXpertya.OpenXpertya;
 import org.openXpertya.apps.ADialog;
@@ -79,7 +82,8 @@ import org.openXpertya.grid.ed.VLookup;
 import org.openXpertya.images.ImageFactory;
 import org.openXpertya.model.MBPartner;
 import org.openXpertya.model.MCurrency;
-import org.openXpertya.model.MSequence;
+import org.openXpertya.model.MDocType;
+import org.openXpertya.model.MPreference;
 import org.openXpertya.model.MUser;
 import org.openXpertya.model.RetencionProcessor;
 import org.openXpertya.model.X_C_BankAccountDoc;
@@ -91,12 +95,13 @@ import org.openXpertya.process.ProcessInfo;
 import org.openXpertya.reflection.CallResult;
 import org.openXpertya.util.ASyncProcess;
 import org.openXpertya.util.CLogger;
-import org.openXpertya.util.DB;
 import org.openXpertya.util.DisplayType;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.TimeUtil;
 import org.openXpertya.util.UserAuthConstants;
 import org.openXpertya.util.Util;
+import org.openXpertya.util.ValueNamePair;
 
 /**
  *
@@ -338,10 +343,20 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 					throws PropertyVetoException {
 				m_model.setFechaOP(dateTrx.getTimestamp());
 				m_model.actualizarFacturas();
+				Env.setContext(m_ctx, m_WindowNo, "Date", dateTrx.getTimestamp());
 			}
 		});
-		//dateTrx.setReadWrite(false);
-	
+		
+		lblPaymentRule = new javax.swing.JLabel();
+		cboPaymentRule = createPaymentRuleCombo();
+		cboPaymentRule.addItemListener(new ItemListener() {
+			
+			@Override
+			public void itemStateChanged(ItemEvent e) {
+				updatePaymentRule();
+			}
+		});
+		
         tblFacturas = new javax.swing.JTable(getFacturasTableModel());
         txtTotalPagar1 = new JFormattedTextField();
         lblTotalPagar1 = new javax.swing.JLabel();
@@ -889,12 +904,14 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
                 .add(jPanel10Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.LEADING)
                     .add(lblOrg)
                     .add(lblDocumentNo)
-                    .add(lblDocumentType))
+                    .add(lblDocumentType)
+                    .add(lblPaymentRule))
                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
                 .add(jPanel10Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
                     .add(cboOrg, 0, 234, Short.MAX_VALUE)
                     .add(fldDocumentNo, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 234, Short.MAX_VALUE)
-                    .add(cboDocumentType, 0, 234, Short.MAX_VALUE))
+                    .add(cboDocumentType, 0, 234, Short.MAX_VALUE)
+                    .add(cboPaymentRule, 0, 234, Short.MAX_VALUE))
                 .addContainerGap())
         );
         jPanel10Layout.setVerticalGroup(
@@ -911,7 +928,11 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
                 .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
                 .add(jPanel10Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
                     .add(lblDocumentType)
-                    .add(cboDocumentType, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                    .add(cboDocumentType, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE))
+                .addPreferredGap(org.jdesktop.layout.LayoutStyle.RELATED)
+                    .add(jPanel10Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.BASELINE)
+                        .add(lblPaymentRule)
+                        .add(cboPaymentRule, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
                     ))
         );
     }
@@ -938,7 +959,7 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
                 .add(jPanel9Layout.createParallelGroup(org.jdesktop.layout.GroupLayout.TRAILING)
                     .add(cboClient, 0, 234, Short.MAX_VALUE)
                     .add(BPartnerSel, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 234, Short.MAX_VALUE)
-                    .add(dateTrx, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE, 234, org.jdesktop.layout.GroupLayout.PREFERRED_SIZE)
+                    .add(dateTrx, org.jdesktop.layout.GroupLayout.DEFAULT_SIZE, 234, Short.MAX_VALUE)
                     .add(txtDescription,org.jdesktop.layout.GroupLayout.DEFAULT_SIZE,234,Short.MAX_VALUE)
                 		)
                 .addContainerGap())
@@ -1527,6 +1548,14 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		if (mpe.importe.compareTo(new BigDecimal(0.0)) <= 0)
 			throw new Exception(lblEfectivoImporte.getText());
 
+		// La fecha de la caja debe ser del mismo día de la operación
+		if(!TimeUtil.isSameDay(mpe.getDateAcct(), getModel().m_fechaTrx)){
+			throw new Exception(Msg.parseTranslation(m_ctx,
+					"@NotAllowedCashWithDiferentDate@: \n - @DateTrx@ "
+							+ getModel().getSimpleDateFormat().format(getModel().m_fechaTrx) + " \n - @Date@ @C_Cash_ID@ "
+							+ getModel().getSimpleDateFormat().format(mpe.getDateAcct())));
+		}
+		
 		mpe.setCampaign(getC_Campaign_ID() == null?0:getC_Campaign_ID());
 		mpe.setProject(getC_Project_ID() == null?0:getC_Project_ID());
 		
@@ -1594,8 +1623,6 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		mpc.banco = txtChequeBanco.getText().trim();
 		mpc.cuitLibrador = txtChequeCUITLibrador.getText().trim();
 		mpc.descripcion = txtChequeDescripcion.getText().trim();
-		Timestamp today = new Timestamp(System.currentTimeMillis());
-		mpc.dateTrx = mpc.fechaPago.before(today)?mpc.fechaPago:today;
 		// A La Orden: Campo no obligatorio
 		//
 		// if (mpc.aLaOrden.trim().equals(""))
@@ -1611,6 +1638,18 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 			throw new Exception(getMsg("InvalidCheckDueDate"));
 		}
 		
+		// Realizar la comparación para que la diferencia de días sea mayor o
+		// igual al mínimo permitido
+		String diffDaysPreference = MPreference.searchCustomPreferenceValue(VOrdenPagoModel.MIN_CHECK_DIFF_DAYS_PREFERENCE_NAME,
+				Env.getAD_Client_ID(m_ctx), Env.getAD_Org_ID(m_ctx), Env.getAD_User_ID(m_ctx), true);
+		if(!Util.isEmpty(diffDaysPreference, true)){
+			Integer diffDaysPreferenceInt = Integer.parseInt(diffDaysPreference);
+			if (TimeUtil.getDiffDays(mpc.fechaEm, mpc.fechaPago) < diffDaysPreferenceInt.intValue()) {
+				throw new Exception(
+						getModel().getMsg("InvalidCheckDiffDays", new Object[] { diffDaysPreferenceInt }));
+			}
+		}
+		
 		if (mpc.importe.compareTo(new BigDecimal(0.0)) <= 0)
 			throw new Exception(lblChequeImporte.getText());
 		
@@ -1619,26 +1658,6 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		
 		mpc.setCampaign(getC_Campaign_ID() == null?0:getC_Campaign_ID());
 		mpc.setProject(getC_Project_ID() == null?0:getC_Project_ID());
-		
-		// Se actualiza la secuencia de nros de cheque de la chequera en caso de ser posible.
-		if (isActualizarNrosChequera()) {
-			String nroChequeStr = mpc.nroCheque.trim();
-			try {
-				int nroCheque = Integer.parseInt(nroChequeStr);
-				// El numero de cheque es numérico.
-				int C_BankAccountDoc_ID = mpc.chequera_ID;
-				// Se incrementa en 1 el numero de cheque;
-				nroCheque++;
-				// Se guarda el siguiente numero de cheque en la chequera.
-				X_C_BankAccountDoc bankAccountDoc = new X_C_BankAccountDoc(Env.getCtx(),C_BankAccountDoc_ID,null);
-				bankAccountDoc.setCurrentNext(nroCheque);
-				bankAccountDoc.save();
-				bankAccountDoc = null;
-			} catch (Exception e) {
-				// El usuario modifico el numero de cheque agregandole caracteres que no son numericos.
-				// En este caso no se actualiza la secuencia de la chequera.
-			}
-		}
 		
 		return mpc;
     }
@@ -1666,7 +1685,7 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		try {
 			mpcm.setImporte(numberParse(txtCreditImporte.getText()));
 		} catch (Exception e) {
-			throw new Exception(lblCreditImporte.getText());
+			throw new InterruptedException(lblCreditImporte.getText());
 		}
 		
 		mpcm.validate();
@@ -1837,8 +1856,8 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
     		BigDecimal monto = null;
     		
     		try {
-    			monto = numberParse(txtTotalPagar1.getText());
-    		} catch (ParseException e) {
+    			monto = (BigDecimal)txtTotalPagar1.getValue();
+    		} catch (Exception e) {
     			showError("@SaveErrorNotUnique@ \n\n" + lblTotalPagar1.getText());
     			
         		txtTotalPagar1.requestFocusInWindow();
@@ -1910,6 +1929,7 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 			// pestaña
     		updateComponentsPreProcesar();
     		dateTrx.setReadWrite(false);
+    		fldDocumentNo.setValue(getModel().getDocumentNo());
     		// Avanza a la siguiente tab
     		m_cambioTab = true;
     		jTabbedPane1.setSelectedIndex(1);
@@ -1962,7 +1982,7 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
     		
     		if (status == VOrdenPagoModel.PROCERROR_OK)
     		{
-	    		m_model.mostrarInforme(this);
+	    		m_model.mostrarInforme(this, isPrintRetentions());
 	    		
 	    		// Reset	    		
 	    		reset();
@@ -2064,6 +2084,10 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
     
     protected javax.swing.JLabel lblDateTrx;
     
+    protected javax.swing.JLabel lblPaymentRule;
+    protected CComboBox cboPaymentRule;
+    protected Map<String, ValueNamePair> paymentRules;
+    
     protected javax.swing.JLabel lblEfectivoImporte;
     protected javax.swing.JLabel lblEfectivoLibroCaja;
     protected javax.swing.JLabel lblMedioPago2;
@@ -2129,8 +2153,6 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
     
     protected static final int PAGO_ADELANTADO_TYPE_PAYMENT_INDEX = 0;
     protected static final int PAGO_ADELANTADO_TYPE_CASH_INDEX = 1;
-        
-    protected MSequence seq;
     
     private int m_PagoAdelantadoTabIndex = -1;
     private int m_chequeTerceroTabIndex = -1;
@@ -2158,8 +2180,6 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
     protected VOrdenPagoModel m_model = new VOrdenPagoModel();
     protected Properties m_ctx = Env.getCtx();
     private String m_trxName = m_model.getTrxName();
-    
-    private boolean actualizarNrosChequera = true;
     
     private Map<String, KeyStroke> actionKeys;
     
@@ -2189,6 +2209,8 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
     
     private AuthorizationDialog authDialog = null;
     
+    protected Map<String, String> preferenceDefaultValues = new HashMap<String, String>();
+    
 	public void init(int WindowNo, FormFrame frame) {
         m_WindowNo = WindowNo;
         m_frame    = frame;
@@ -2210,6 +2232,7 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
         initComponents();
         customInitComponents();
         initTranslations();
+        initDefaultValues();
         m_model.m_facturasTableModel.addTableModelListener(this);
         m_frame.pack();
         
@@ -2231,6 +2254,7 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		
 		//
 		
+		txtTotalPagar1.setValue(null);
 		txtTotalPagar1.setText("");
 		lblDateTrx.setText(getModel().isSOTrx()?"Fecha del recibo:":"Fecha de la O/P:");		
 		txtSaldo.setText("");
@@ -2514,6 +2538,7 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		name = VModelHelper.GetReferenceValueTrlFromColumn("I_ReportLine", "AmountType", "BT", "name");
 		lblSaldo.setText(name != null ? name : "");
 		
+		lblPaymentRule.setText(Msg.getElement(m_ctx, "PaymentRule"));
 		//
 		
 		cmdCancel.setText(Msg.getMsg(m_ctx, "Close")+" "+KeyUtils.getKeyStr(getActionKeys().get(GOTO_EXIT)));
@@ -2609,9 +2634,37 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		customUpdateCaptions();
 	}
 	
-	protected void clearMediosPago() {
+	protected void initDefaultValues() {
+		// Organización
+		String preferenceOrg = MPreference.searchCustomPreferenceValue(
+				VOrdenPagoModel.ORG_DEFAULT_VALUE_PREFERENCE_NAME, Env.getAD_Client_ID(m_ctx), Env.getAD_Org_ID(m_ctx),
+				Env.getAD_User_ID(m_ctx), true);
+		if(!Util.isEmpty(preferenceOrg, true)){
+			Integer preferenceOrgInt = Integer.parseInt(preferenceOrg);
+			cboOrg.setValue(preferenceOrgInt);
+			updateOrg(preferenceOrgInt);
+		}
 		
-		Date d = new Date();
+		// Tipo de Documento
+		String preferenceDocTypeKey = MPreference.searchCustomPreferenceValue(
+				VOrdenPagoModel.DOCTYPE_DEFAULT_VALUE_PREFERENCE_NAME, 
+				Env.getAD_Client_ID(m_ctx), Env.getAD_Org_ID(m_ctx),
+				Env.getAD_User_ID(m_ctx), true);
+		if(!Util.isEmpty(preferenceDocTypeKey, true)){
+			MDocType dt = MDocType.getDocType(m_ctx, preferenceDocTypeKey, m_trxName);
+			if(dt != null && cboDocumentType.getM_lookup().containsKey(dt.getID())){
+				
+				cboDocumentType.setValue(dt.getID());
+				try{
+					vetoableChange(new PropertyChangeEvent(cboDocumentType, "C_DocType_ID", null, dt.getID()));
+				} catch(Exception e){
+					e.printStackTrace();
+				}
+			}
+		}
+	}	
+	
+	protected void clearMediosPago() {
 		
 		// Efectivo
 		
@@ -2647,7 +2700,7 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 //			txtChequeALaOrden.setText(getModel().getBPartner().getName());
 		// -------------------------------------------------------------
 		else
-			txtChequeALaOrden.setText(getModel().getBPartner().getName());
+			txtChequeALaOrden.setText(getModel().getChequeALaOrden());
 		// -------------------------------------------------------------
 		txtChequeImporte.setText("");
 		txtChequeNroCheque.setText("");
@@ -2760,6 +2813,11 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		m_frame = null;
 		
 	}
+	
+	protected boolean isPrintRetentions(){
+		return m_model.getSumaRetenciones().compareTo(BigDecimal.ZERO) > 0
+				&& ADialog.ask(m_WindowNo, this, "PrintOPRetentions");
+	}
 
 	public void actionPerformed(ActionEvent arg0) {}
 
@@ -2827,9 +2885,16 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		
 		} else if (e.getSource() == cboDocumentType) {
 			if(e.getNewValue() != null){
-				m_model.setDocumentType((Integer)e.getNewValue());
-				seq = MSequence.get(m_ctx, getSeqName(), false, Env.getAD_Client_ID(m_ctx));
-				fldDocumentNo.setValue((seq.getPrefix()!=null?seq.getPrefix():"")+seq.getCurrentNext()+(seq.getSuffix()!=null?seq.getSuffix():""));
+				getModel().setDocumentType((Integer)e.getNewValue());
+				String documentNo = null;
+				try {
+					documentNo = getModel().nextDocumentNo();
+				} catch (Exception e2) {
+					m_model.setDocumentType(null);
+					fldDocumentNo.setValue(null);
+					showInfo(e2.getMessage());
+				}
+				fldDocumentNo.setValue(documentNo);
 			}
 			else{
 				fldDocumentNo.setValue(null);
@@ -2856,6 +2921,7 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 			cboDocumentType.setReadWrite(jTabbedPane1.getSelectedIndex() == 0);
 			fldDocumentNo.setReadWrite(jTabbedPane1.getSelectedIndex() == 0);
 			dateTrx.setReadWrite(jTabbedPane1.getSelectedIndex() == 0);
+			cboPaymentRule.setReadWrite(jTabbedPane1.getSelectedIndex() == 0);
 			
 		} else if (arg0.getSource() == jTabbedPane2) {
 			// TAB de medios de pago
@@ -3006,22 +3072,11 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 			X_C_BankAccountDoc bankAccountDoc = new X_C_BankAccountDoc(Env.getCtx(),C_BankAccountDoc_ID,null);
 			int nextNroCheque = bankAccountDoc.getCurrentNext();
 			txtChequeNroCheque.setText(String.valueOf(nextNroCheque));
-		} else
+			txtChequeNroCheque.setEditable(bankAccountDoc.isAllowManualCheckNo());
+		} else{
 			txtChequeNroCheque.setText("");
-	}
-
-	/**
-	 * @return the actualizarNrosChequera
-	 */
-	protected boolean isActualizarNrosChequera() {
-		return actualizarNrosChequera;
-	}
-
-	/**
-	 * @param actualizarNrosChequera the actualizarNrosChequera to set
-	 */
-	protected void setActualizarNrosChequera(boolean actualizarNrosChequera) {
-		this.actualizarNrosChequera = actualizarNrosChequera;
+			txtChequeNroCheque.setEditable(true);
+		}
 	}
 	
 	/**
@@ -3330,7 +3385,10 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 	 * Actualizar el total a pagar de la primer pestaña
 	 */
 	protected void updateTotalAPagar1(){
-		txtTotalPagar1.setText(numberFormat(m_model.getSumaTotalPagarFacturas()));
+		BigDecimal total = m_model.getSumaTotalPagarFacturas();
+		String n = numberFormat(total);
+		txtTotalPagar1.setValue(total);
+		txtTotalPagar1.setText(n);
 	}
 	
 	/**
@@ -3447,24 +3505,24 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		m_model.setDescription("");
 		checkPayAll.setSelected(false);
 		cboChequeBancoID.setValue(null);
-		// actualizar secuencia
-		seq.setCurrentNext(seq.getCurrentNext().add(BigDecimal.ONE));
-		seq.save();
-		fldDocumentNo.setValue((seq.getPrefix()!=null?seq.getPrefix():"") + seq.getCurrentNext() + (seq.getSuffix()!=null?seq.getSuffix():""));
+		
+		String documentNo = null;
+		Integer docTypeID = (Integer)cboDocumentType.getValue();
+		try {
+			documentNo = getModel().nextDocumentNo();
+		} catch (Exception e) {
+			documentNo = null;
+			docTypeID = null;
+		}
+		
+		m_model.setDocumentType(docTypeID);
+		cboDocumentType.setValue(docTypeID);
+		fldDocumentNo.setValue(documentNo);
+		m_model.setDocumentNo(documentNo);
 		
 		getAuthDialog().markAuthorized(UserAuthConstants.OPRC_FINISH_MOMENT, true);
 		
-		m_model.setDocumentNo("");
 		getModel().reset();
-	}
-	
-	protected String getSeqName()
-	{
-		if (m_model.getDocumentType() != null){
-			return DB.getSQLValueString( null,"SELECT s.name FROM AD_Sequence s INNER JOIN C_DocType d ON (s.AD_Sequence_ID = d.docnosequence_ID) WHERE C_DocType_ID =?",m_model.getDocumentType());
-		}
-		return null;
-		
 	}
 
 	protected void setActionKeys(Map<String, KeyStroke> actionKeys) {
@@ -3514,6 +3572,27 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 		for (ActionListener actionListener : listeners) {
 			actionListener.actionPerformed(event);
 		}
+	}
+	
+	protected CComboBox createPaymentRuleCombo(){
+		CComboBox paymentRuleCombo = new CComboBox();
+		paymentRules = new HashMap<String, ValueNamePair>();
+		List<ValueNamePair> list = getModel().getPaymentRulesList();
+		for (ValueNamePair paymentRule : list) {
+			paymentRuleCombo.addItem(paymentRule);
+			paymentRules.put(paymentRule.getValue(), paymentRule);
+		}
+		paymentRuleCombo.setMandatory(true);
+		paymentRuleCombo.setValue(paymentRules.get(getModel().getDefaultPaymentRule()));
+		getModel().setPaymentRule(getModel().getDefaultPaymentRule());
+		Env.setContext(m_ctx, m_WindowNo, "PaymentRule", getModel().getDefaultPaymentRule());
+		return paymentRuleCombo;
+	}
+	
+	protected void updatePaymentRule(){
+		getModel().setPaymentRule(((ValueNamePair)cboPaymentRule.getValue()).getValue());
+		Env.setContext(m_ctx, m_WindowNo, "PaymentRule", ((ValueNamePair) cboPaymentRule.getValue()).getValue());
+		getModel().actualizarFacturas();
 	}
 
 	/* === Contenido migrado de VOrdenPagoModel === */
@@ -3615,7 +3694,7 @@ public class VOrdenPago extends CPanel implements FormPanel,ActionListener,Table
 			m_nodoRetenciones.removeAllChildren();
 			
 			for (RetencionProcessor r : m_model.m_retenciones)
-				m_nodoRetenciones.add(new MyTreeNode(r.getRetencionTypeName() + ": " + numberFormat( r.getAmount() ), r, true));
+				m_nodoRetenciones.add(new MyTreeNode(r.getRetencionSchemaName() + ": " + numberFormat( r.getAmount() ), r, true));
 		}
 		
 		// Agrego los medios de pago

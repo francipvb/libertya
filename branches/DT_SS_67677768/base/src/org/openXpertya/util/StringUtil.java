@@ -37,11 +37,41 @@ public final class StringUtil {
      */
 
     public static String trim( String s,int length ) {
+    	if(s == null){
+    		return null;
+    	}
         if( s.length() >= length ) {
             return s.substring( 0,length - 1 );
         } else {
             return s;
         }
+    }
+    
+    public static String trimStrict( String s,int length ) {
+    	if(s == null){
+    		return null;
+    	}
+        if( s.length() > length ) {
+            return s.substring( 0,length );
+        } else {
+            return s;
+        }
+    }
+    
+    /**
+     * @param str
+     * @return string parámetro con la primer letra en mayúscula
+     */
+    public static String fuc(String str){
+    	String result = str;
+    	if(!Util.isEmpty(str, true)){
+        	char firstChar = str.charAt(0);
+        	if(Character.isLetter(firstChar)){
+        		String firstLetterStr = String.valueOf(firstChar);
+				result = result.replaceFirst(firstLetterStr, firstLetterStr.toUpperCase());
+        	}
+    	}
+    	return result;
     }
     
 	/**
@@ -83,6 +113,18 @@ public final class StringUtil {
     	}
     	bs.append(end);
     	return bs.toString();
+    }
+    
+    
+    public static String pad(String str, String filler, Integer length, boolean left){
+    	if(str.length() >= length){
+    		return str;
+    	}
+    	StringBuffer auxFiller = new StringBuffer();
+    	for (int i = length - str.length(); i > 0 ; i--) {
+			auxFiller.append(filler);
+		}
+    	return left?auxFiller.toString()+str:str+auxFiller.toString();
     }
 }
 

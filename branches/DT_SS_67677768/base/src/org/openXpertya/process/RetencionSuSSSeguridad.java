@@ -5,6 +5,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 
 import org.openXpertya.model.AbstractRetencionProcessor;
@@ -15,9 +17,11 @@ import org.openXpertya.model.MInvoiceLine;
 import org.openXpertya.model.MRetSchemaConfig;
 import org.openXpertya.model.MRetencionSchema;
 import org.openXpertya.model.X_M_Retencion_Invoice;
+import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.Util;
 
 public class RetencionSuSSSeguridad extends AbstractRetencionProcessor {
 
@@ -44,6 +48,7 @@ public class RetencionSuSSSeguridad extends AbstractRetencionProcessor {
 	private String fromPadron = "N";	
 
 	private X_M_Retencion_Invoice retencion = null;
+	private List<X_M_Retencion_Invoice> retenciones = null;
 	
 	public void loadConfig(MRetencionSchema retSchema) {
 		// Se asigna el esquema de retención a utilizar.
@@ -163,12 +168,12 @@ public class RetencionSuSSSeguridad extends AbstractRetencionProcessor {
 
 		return importeRetenido;
 	}
-
-	public boolean save(MAllocationHdr alloc) throws Exception {
+	
+	public List<X_M_Retencion_Invoice> save(MAllocationHdr alloc, boolean save) throws Exception {
 		// Si el monto de retención es menor o igual que cero, no se debe guardar
 		// la retención ya que no se retuvo nada.
 		if (getAmount().compareTo(Env.ZERO) <= 0)
-			return false;
+			return null;
 		
 		// Se asigna el allocation header como el actual.
 		setAllocationHrd(alloc);
@@ -195,9 +200,27 @@ public class RetencionSuSSSeguridad extends AbstractRetencionProcessor {
 		retencion.setimporte_determinado_amt(getImporteDeterminado());
 		retencion.setbaseimponible_amt(getBaseImponible());
 		retencion.setIsSOTrx(isSOTrx());
+		if (save)
+			if(!retencion.save())
+				throw new Exception(CLogger.retrieveErrorAsString());
 		
-		return retencion.save();
+		retenciones = new ArrayList<X_M_Retencion_Invoice>();
+		retenciones.add(retencion);
+		
+		return retenciones;
+	}
 
+	public boolean save(MAllocationHdr alloc) throws Exception {
+		List<X_M_Retencion_Invoice> retList = save(alloc, false);
+		if(Util.isEmpty(retList)){
+			return false;
+		}
+		for (X_M_Retencion_Invoice retInvoice : retList) {
+			if(!retInvoice.save()){
+				throw new Exception(CLogger.retrieveErrorAsString());
+			}
+		}
+		return true;
 	} // save 
 	
 //	private BigDecimal porcentajeFromPadron(){
@@ -231,7 +254,8 @@ public class RetencionSuSSSeguridad extends AbstractRetencionProcessor {
 		recaudador_fac.setDocAction(MInvoice.DOCACTION_Complete);
 		recaudador_fac.setC_BPartner_Location_ID(locationID);
 		recaudador_fac.setCUIT(null);
-		recaudador_fac.setPaymentRule(MInvoice.PAYMENTRULE_Check);
+		recaudador_fac.setPaymentRule(getPaymentRule());
+		recaudador_fac.setCurrentAccountVerified(true);
 		recaudador_fac.setC_Project_ID(getProjectID());
 		recaudador_fac.setC_Campaign_ID(getCampaignID());
 		
@@ -265,11 +289,12 @@ public class RetencionSuSSSeguridad extends AbstractRetencionProcessor {
 		fac_linea.setPriceActual(getAmount());
 		fac_linea.setC_Project_ID(recaudador_fac.getC_Project_ID());
 		if(! fac_linea.save())  
-			 throw new Exception( "@CollectorInvoiceLineSaveError@");
+			 throw new Exception( "@CollectorInvoiceLineSaveError@: "+CLogger.retrieveErrorAsString());
 		
 		/*Completo la factura*/
-		recaudador_fac.processIt( DocAction.ACTION_Complete );
-		recaudador_fac.save();
+		if(!DocumentEngine.processAndSave(recaudador_fac, MInvoice.DOCACTION_Complete, false)){
+			throw new Exception(recaudador_fac.getProcessMsg());
+		}
 		
 		return recaudador_fac;
 	}
@@ -302,7 +327,8 @@ public class RetencionSuSSSeguridad extends AbstractRetencionProcessor {
 		credito_prov.setDocAction(MInvoice.DOCACTION_Complete);
 		credito_prov.setC_BPartner_Location_ID(locationID);
 		credito_prov.setCUIT(getBPartner().getTaxID());
-		credito_prov.setPaymentRule(MInvoice.PAYMENTRULE_Check);
+		credito_prov.setPaymentRule(getPaymentRule());
+		credito_prov.setCurrentAccountVerified(true);
 		credito_prov.setC_Project_ID(getProjectID());
 		credito_prov.setC_Campaign_ID(getCampaignID());
 		
@@ -325,7 +351,7 @@ public class RetencionSuSSSeguridad extends AbstractRetencionProcessor {
 		credito_prov.setM_PriceList_ID(priceListID);
 		
 		if(!credito_prov.save())		   
-			throw new Exception("@VendorRetencionDocSaveError@");
+			throw new Exception("@VendorRetencionDocSaveError@: "+CLogger.retrieveErrorAsString());
 
 		/* Linea de la nota de credito */
 		MInvoiceLine cred_linea = new MInvoiceLine(Env.getCtx(),0,getTrxName());
@@ -339,11 +365,12 @@ public class RetencionSuSSSeguridad extends AbstractRetencionProcessor {
 		cred_linea.setPriceActual(getAmount());
 		cred_linea.setC_Project_ID(credito_prov.getC_Project_ID());
 		if(!cred_linea.save())		   
-			 throw new Exception( "@VendorRetencionDocLineSaveError@");
+			 throw new Exception( "@VendorRetencionDocLineSaveError@: "+CLogger.retrieveErrorAsString());
 		
 		/*Completo la factura*/
-		credito_prov.processIt(DocAction.ACTION_Complete );
-		credito_prov.save();
+		if(!DocumentEngine.processAndSave(credito_prov, MInvoice.DOCACTION_Complete, false)){
+			throw new Exception(credito_prov.getProcessMsg());
+		}
 		retencion.setC_InvoiceLine_ID(cred_linea.getC_InvoiceLine_ID());
 		
 		return credito_prov;

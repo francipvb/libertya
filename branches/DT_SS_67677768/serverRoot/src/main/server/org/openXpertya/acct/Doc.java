@@ -16,7 +16,6 @@
 
 package org.openXpertya.acct;
 
-import java.lang.reflect.Constructor;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -36,6 +35,7 @@ import org.openXpertya.model.MAmortization;
 import org.openXpertya.model.MBankStatement;
 import org.openXpertya.model.MCash;
 import org.openXpertya.model.MConversionRate;
+import org.openXpertya.model.MCreditCardSettlement;
 import org.openXpertya.model.MInOut;
 import org.openXpertya.model.MInventory;
 import org.openXpertya.model.MInvoice;
@@ -44,11 +44,9 @@ import org.openXpertya.model.MMatchInv;
 import org.openXpertya.model.MMatchPO;
 import org.openXpertya.model.MMovement;
 import org.openXpertya.model.MNote;
-import org.openXpertya.model.MOrder;
 import org.openXpertya.model.MPayment;
 import org.openXpertya.model.MPeriod;
 import org.openXpertya.model.MProjectIssue;
-import org.openXpertya.model.M_Table;
 import org.openXpertya.model.ModelValidationEngine;
 import org.openXpertya.model.ModelValidator;
 import org.openXpertya.model.PO;
@@ -73,46 +71,55 @@ public abstract class Doc {
 
     /** Descripción de Campos */
 
-    public static int[] documentsTableID = new int[] {
-        MInvoice.Table_ID,          // C_Invoice
-        MAllocationHdr.Table_ID,    // C_Allocation
-        MCash.Table_ID,             // C_Cash
-        MBankStatement.Table_ID,    // C_BankStatement
-        // Por ahora se comenta la contabilidad de los pedidos
-        // MOrder.Table_ID,            // C_Order
-        MPayment.Table_ID,          // C_Payment
-        MInOut.Table_ID,            // M_InOut
-        MInventory.Table_ID,        // M_Inventory
-        MMovement.Table_ID,         // M_Movement
-        X_M_Production.Table_ID,    // M_Production
-        MJournal.Table_ID,          // GL_Journal
-        MMatchInv.Table_ID,         // M_MatchInv
-        MMatchPO.Table_ID,          // M_MatchPO
-        MProjectIssue.Table_ID,     // C_ProjectIssue
-        MAmortization.Table_ID     // MAmortization        
-    };
+    public static int[] documentsTableID = null;
 
     /** Descripción de Campos */
 
-    public static String[] documentsTableName = new String[] {
-        MInvoice.Table_Name,          // C_Invoice
-        MAllocationHdr.Table_Name,    // C_Allocation
-        MCash.Table_Name,             // C_Cash
-        MBankStatement.Table_Name,    // C_BankStatement
-        // Por ahora se comenta la contabilidad de los pedidos
-        // MOrder.Table_Name,            // C_Order
-        MPayment.Table_Name,          // C_Payment
-        MInOut.Table_Name,            // M_InOut
-        MInventory.Table_Name,        // M_Inventory
-        MMovement.Table_Name,         // M_Movement
-        X_M_Production.Table_Name,    // M_Production
-        MJournal.Table_Name,          // GL_Journal
-        MMatchInv.Table_Name,         // M_MatchInv
-        MMatchPO.Table_Name,          // M_MatchPO
-        MProjectIssue.Table_Name,     // C_ProjectIssue
-        MAmortization.Table_Name	      // MAmortization
-    };
+    public static String[] documentsTableName = null;
 
+    static{
+    	documentsTableID = new int[] {
+    	        MInvoice.Table_ID,          // C_Invoice
+    	        MAllocationHdr.Table_ID,    // C_Allocation
+    	        MCash.Table_ID,             // C_Cash
+    	        MBankStatement.Table_ID,    // C_BankStatement
+    	        // Por ahora se comenta la contabilidad de los pedidos
+    	        // MOrder.Table_ID,            // C_Order
+    	        MPayment.Table_ID,          // C_Payment
+    	        MInOut.Table_ID,            // M_InOut
+    	        MInventory.Table_ID,        // M_Inventory
+    	        MMovement.Table_ID,         // M_Movement
+    	        X_M_Production.Table_ID,    // M_Production
+    	        MJournal.Table_ID,          // GL_Journal
+    	        MMatchInv.Table_ID,         // M_MatchInv
+    	        MMatchPO.Table_ID,          // M_MatchPO
+    	        MProjectIssue.Table_ID,     // C_ProjectIssue
+    	        MAmortization.Table_ID,     // MAmortization
+    	        MCreditCardSettlement.Table_ID // Credit Card Settlement
+    	    };
+    	
+    	documentsTableName = new String[] {
+    	        MInvoice.Table_Name,          // C_Invoice
+    	        MAllocationHdr.Table_Name,    // C_Allocation
+    	        MCash.Table_Name,             // C_Cash
+    	        MBankStatement.Table_Name,    // C_BankStatement
+    	        // Por ahora se comenta la contabilidad de los pedidos
+    	        // MOrder.Table_Name,            // C_Order
+    	        MPayment.Table_Name,          // C_Payment
+    	        MInOut.Table_Name,            // M_InOut
+    	        MInventory.Table_Name,        // M_Inventory
+    	        MMovement.Table_Name,         // M_Movement
+    	        X_M_Production.Table_Name,    // M_Production
+    	        MJournal.Table_Name,          // GL_Journal
+    	        MMatchInv.Table_Name,         // M_MatchInv
+    	        MMatchPO.Table_Name,          // M_MatchPO
+    	        MProjectIssue.Table_Name,     // C_ProjectIssue
+    	        MAmortization.Table_Name, 		// MAmortization
+    	        MCreditCardSettlement.Table_Name // Credit Card Settlement
+    	    };
+
+    }
+    
     /** Descripción de Campos */
 
     public static final String DOCTYPE_ARInvoice = "ARI";
@@ -197,6 +204,8 @@ public abstract class Doc {
 
     public static final String DOCTYPE_ProjectIssue = "PJI";
 
+    public static final String DOCTYPE_CreditCardSettlement = "CCS";
+    
     // Posting Status - AD_Reference_ID=234     //
 
     /** Descripción de Campos */
@@ -275,7 +284,9 @@ public abstract class Doc {
             doc = new Doc_ProjectIssue( ass,AD_Table_ID,MProjectIssue.Table_Name );
        	else if (AD_Table_ID == MAmortization.Table_ID)
             doc = new Doc_Amortization( ass,AD_Table_ID,MAmortization.Table_Name );
-
+       	else if (AD_Table_ID == MCreditCardSettlement.Table_ID)
+            doc = new Doc_CreditCardSettlement( ass,AD_Table_ID,MCreditCardSettlement.Table_Name );
+        
         if( doc == null ) {
             s_log.log( Level.SEVERE,"get - Unknown AD_Table_ID=" + AD_Table_ID );
         }
@@ -743,7 +754,7 @@ public abstract class Doc {
 		if (!force)
 			sql.append(" AND (Processing='N' OR Processing IS NULL)");
 		if (!repost)
-			sql.append(" AND Posted='N'");
+			sql.append(" AND Posted<>'Y'");
 		if (DB.executeUpdate(sql.toString(), trxName) == 1)
 			log.info("Locked: " + get_TableName() + "_ID=" + get_ID());
 		else
@@ -856,11 +867,14 @@ public abstract class Doc {
 			//  Insert Note
 			String AD_MessageValue = "PostingError-" + p_Status;
 			int AD_User_ID = p_po.getUpdatedBy();
-			MNote note = new MNote (getCtx(), AD_MessageValue, AD_User_ID, 
-				getAD_Client_ID(), getAD_Org_ID(), null);
-			note.setRecord(p_po.get_Table_ID(), p_po.getID());
+// Workaround performance: comentada la generación/persistencia de ad_notes dado que el uso de las mismas
+//							es mínimo, la generación de registros es constante; generando alto volumen de 
+//							datos y por consiguiente considerable degradacion de performance, principalmente bajo LY Web.
+//			MNote note = new MNote (getCtx(), AD_MessageValue, AD_User_ID, 
+//				getAD_Client_ID(), getAD_Org_ID(), null);
+//			note.setRecord(p_po.get_Table_ID(), p_po.getID());
 			//  Reference
-			note.setReference(toString());	//	Document
+//			note.setReference(toString());	//	Document
 			//	Text
 			StringBuffer Text = new StringBuffer (Msg.getMsg(Env.getCtx(), AD_MessageValue));
 			if (p_Error != null)
@@ -874,8 +888,8 @@ public abstract class Doc {
 				.append(", Sta=").append(p_Status)
 				.append(" - PeriodOpen=").append(isPeriodOpen())
 				.append(", Balanced=").append(isBalanced());
-			note.setTextMsg(Text.toString());
-			note.save();
+//			note.setTextMsg(Text.toString());
+//			note.save();
 			p_Error = Text.toString();
 		}
 
@@ -1028,7 +1042,7 @@ public abstract class Doc {
         sql.append( p_TableName ).append( " SET Processing='Y' WHERE " ).append( p_TableName ).append( "_ID=" ).append( Record_ID ).append( " AND Processed='Y' AND IsActive='Y'" );
 
         if( !force ) {
-            sql.append( " AND (Processing='N' OR Processing IS NULL) AND Posted='N'" );
+            sql.append( " AND (Processing='N' OR Processing IS NULL) AND Posted<>'Y'" );
         }
 
         if( DB.executeUpdate( sql.toString(),trxName ) != 1 ) {
@@ -1127,13 +1141,13 @@ public abstract class Doc {
 
             String AD_MessageValue = "PostingError-" + p_vo.Status;
             int    AD_User_ID      = p_vo.UpdatedBy;
-            MNote  note            = new MNote( getCtx(),AD_MessageValue,AD_User_ID,p_vo.AD_Client_ID,p_vo.AD_Org_ID,null );
+//            MNote  note            = new MNote( getCtx(),AD_MessageValue,AD_User_ID,p_vo.AD_Client_ID,p_vo.AD_Org_ID,null );
 
-            note.setRecord( p_AD_Table_ID,p_Record_ID );
+//            note.setRecord( p_AD_Table_ID,p_Record_ID );
 
             // Reference
 
-            note.setReference( toString());    // Document
+//            note.setReference( toString());    // Document
 
             // Text
 
@@ -1146,8 +1160,8 @@ public abstract class Doc {
             String cn = getClass().getName();
 
             Text.append( " - " ).append( cn.substring( cn.lastIndexOf( '.' ))).append( " (" ).append( p_vo.DocumentType ).append( " - DocumentNo=" ).append( p_vo.DocumentNo ).append( ", DateAcct=" ).append( p_vo.DateAcct.toString().substring( 0,10 )).append( ", Amount=" ).append( getAmount()).append( ", Sta=" ).append( p_vo.Status ).append( " - PeriodOpen=" ).append( isPeriodOpen()).append( ", Balanced=" ).append( isBalanced());
-            note.setTextMsg( Text.toString());
-            note.save();
+ //           note.setTextMsg( Text.toString());
+ //           note.save();
         }
 
         // dispose facts
@@ -1476,6 +1490,10 @@ public abstract class Doc {
                 } else if( col.equalsIgnoreCase( "UpdatedBy" )) {
                     p_vo.UpdatedBy = rs.getInt( i );
                 }
+                
+                else if( col.equalsIgnoreCase( "Accounting_C_Charge_ID" )) {
+                    p_vo.Accounting_C_Charge_ID = rs.getInt( i );
+                }
             }    // for all columns
 
             p_vo.Status = STATUS_NotPosted;
@@ -1779,7 +1797,7 @@ public abstract class Doc {
 
         // Is Period Open?
 
-        if( (period != null) && period.isOpen( p_vo.DocumentType )) {
+        if( (period != null) && (period.isOpen( p_vo.DocumentType ) || period.isPermanentlyOpen( p_vo.DocumentType ))) {
             p_vo.C_Period_ID = period.getC_Period_ID();
         } else {
             p_vo.C_Period_ID = -1;

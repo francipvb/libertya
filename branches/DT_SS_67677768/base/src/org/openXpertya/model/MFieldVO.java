@@ -24,6 +24,7 @@ import org.openXpertya.model.MFieldVO;
 import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DisplayType;
 import org.openXpertya.util.Env;
+import org.openXpertya.util.Util;
 
 //~--- Importaciones JDK ------------------------------------------------------
 
@@ -219,6 +220,8 @@ public class MFieldVO implements Serializable {
 
     /** Window No */
     public int	WindowNo;
+    
+    public boolean exportRealValue = false;
 
     /**
      *  protected constructor
@@ -265,11 +268,16 @@ public class MFieldVO implements Serializable {
             CLogger.get().fine(vo.ColumnName);
 
             ResultSetMetaData	rsmd	= rs.getMetaData();
+            String roleFieldAccess = role.getFieldAccess(vo.AD_Field_ID);
+            MFieldAccess fieldAccess = role.getMFieldAccess(vo.AD_Field_ID);
+			boolean hasReadOnlyLogicFieldAccess = MFieldAccess.ACCESSTYPE_ReadOnly.equals(roleFieldAccess)
+					&& !Util.isEmpty(fieldAccess.getAD_Val_Rule_ID(), true);
+			boolean hasNotDisplayLogicFieldAccess = MFieldAccess.ACCESSTYPE_NotDisplayed.equals(roleFieldAccess)
+					&& !Util.isEmpty(fieldAccess.getAD_Val_Rule_ID(), true);
 
             for (int i = 1; i <= rsmd.getColumnCount(); i++) {
 
                 String	columnName	= rsmd.getColumnName(i);
-                String roleFieldAccess = role.getFieldAccess(vo.AD_Field_ID);
                 
                 if (columnName.equalsIgnoreCase("Name")) {
                     vo.Header	= rs.getString(i);
@@ -282,25 +290,30 @@ public class MFieldVO implements Serializable {
                 } else if (columnName.equalsIgnoreCase("IsSameLine")) {
                     vo.IsSameLine	= "Y".equals(rs.getString(i));
                 } else if (columnName.equalsIgnoreCase("IsDisplayed")) {
-                    vo.IsDisplayed	= 
-                    	"Y".equals(rs.getString(i)) && 
-                    	!MFieldAccess.ACCESSTYPE_NotDisplayed.equals(roleFieldAccess);
+					vo.IsDisplayed = "Y".equals(rs.getString(i))
+							&& (!MFieldAccess.ACCESSTYPE_NotDisplayed.equals(roleFieldAccess)
+									|| hasNotDisplayLogicFieldAccess);
                 }else if (columnName.equalsIgnoreCase("IsDisplayedInGrid")) {
 					vo.IsDisplayedInGrid  = "Y".equals(rs.getString (i));
                 } else if (columnName.equalsIgnoreCase("DisplayLogic")) {
-                    vo.DisplayLogic	= rs.getString(i);
+                	vo.DisplayLogic	= rs.getString(i);
+                	if(hasNotDisplayLogicFieldAccess){
+						X_AD_Val_Rule valRule = new X_AD_Val_Rule(vo.ctx, fieldAccess.getAD_Val_Rule_ID(), null);
+                		vo.DisplayLogic	= valRule.getCode();
+                	}
                 } else if (columnName.equalsIgnoreCase("DefaultValue")) {
                     vo.DefaultValue	= rs.getString(i);
                 } else if (columnName.equalsIgnoreCase("IsMandatory")) {
                     vo.IsMandatory	= "Y".equals(rs.getString(i));
                 } else if (columnName.equalsIgnoreCase("IsReadOnly")) {
-                    vo.IsReadOnly	= 
-                    	"Y".equals(rs.getString(i)) ||
-                    	MFieldAccess.ACCESSTYPE_ReadOnly.equals(roleFieldAccess);
+					vo.IsReadOnly = "Y".equals(rs.getString(i))
+							|| (MFieldAccess.ACCESSTYPE_ReadOnly.equals(roleFieldAccess)
+									&& Util.isEmpty(fieldAccess.getAD_Val_Rule_ID(), true));
                 } else if (columnName.equalsIgnoreCase("IsUpdateable")) {
                     vo.IsUpdateable	= "Y".equals(rs.getString(i));
                 } else if (columnName.equalsIgnoreCase("IsAlwaysUpdateable")) {
-                    vo.IsAlwaysUpdateable	= "Y".equals(rs.getString(i));
+					vo.IsAlwaysUpdateable = "Y".equals(rs.getString(i))
+							|| MFieldAccess.ACCESSTYPE_AlwaysUpdateable.equals(roleFieldAccess);
                 } else if (columnName.equalsIgnoreCase("IsHeading")) {
                     vo.IsHeading	= "Y".equals(rs.getString(i));
                 } else if (columnName.equalsIgnoreCase("IsFieldOnly")) {
@@ -337,6 +350,10 @@ public class MFieldVO implements Serializable {
                     vo.AD_Process_ID	= rs.getInt(i);
                 } else if (columnName.equalsIgnoreCase("ReadOnlyLogic")) {
                     vo.ReadOnlyLogic	= rs.getString(i);
+                    if(hasReadOnlyLogicFieldAccess){
+						X_AD_Val_Rule valRule = new X_AD_Val_Rule(vo.ctx, fieldAccess.getAD_Val_Rule_ID(), null);
+                		vo.ReadOnlyLogic	= valRule.getCode();
+                	}
                 } else if (columnName.equalsIgnoreCase("ObscureType")) {
                     vo.ObscureType	= rs.getString(i);
                 } else if (columnName.equalsIgnoreCase("AD_Reference_Value_ID")) {
@@ -348,6 +365,8 @@ public class MFieldVO implements Serializable {
                 }
 				else if (columnName.equalsIgnoreCase("Included_Tab_ID"))
 					vo.Included_Tab_ID = rs.getInt(i);
+				else if (columnName.equalsIgnoreCase("ExportRealValue")) 
+                    vo.exportRealValue	= "Y".equalsIgnoreCase(rs.getString(i)); 
             }
             // En el caso que la columna IsReadOnly tenga el valor true, se setea el valor de la columna IsAlwaysUpdateable en false
             // Si el campo IsReadOnly es true, no se puede actualizar el valor del campo, independientemente de si es Siempre Actualizable o no.
@@ -382,7 +401,6 @@ public class MFieldVO implements Serializable {
         voT.isProcess		= true;
         voT.IsDisplayed		= true;
         voT.IsDisplayedInGrid = true;
-        voT.IsReadOnly		= false;
         voT.IsUpdateable	= true;
 
         //
@@ -401,7 +419,11 @@ public class MFieldVO implements Serializable {
         voT.ValueMin		= voF.ValueMin;
         voT.ValueMax		= voF.ValueMax;
         voT.isRange		= voF.isRange;
-
+        voT.IsReadOnly		= voF.IsReadOnly;
+        voT.ReadOnlyLogic	= voF.ReadOnlyLogic;
+        voT.Callout		= voF.Callout;
+        voT.CalloutAlsoOnLoad	= voF.CalloutAlsoOnLoad;
+        
         // Eloy Gomez
         // Permitimos rangos de VLookup
         voT.AD_Reference_Value_ID 	= voF.AD_Reference_Value_ID;
@@ -427,7 +449,6 @@ public class MFieldVO implements Serializable {
         vo.isProcess	= true;
         vo.IsDisplayed	= true;
         vo.IsDisplayedInGrid = true;
-        vo.IsReadOnly	= false;
         vo.IsUpdateable	= true;
 
         try {
@@ -456,6 +477,12 @@ public class MFieldVO implements Serializable {
             vo.AD_Reference_Value_ID	= rs.getInt("AD_Reference_Value_ID");
             vo.ValidationCode		= rs.getString("ValidationCode");
 
+            vo.ReadOnlyLogic	= rs.getString("ReadOnlyLogic");
+            vo.IsReadOnly	= rs.getString("IsReadOnly").equals("Y");
+            
+            vo.Callout	= rs.getString("Callout");
+            vo.CalloutAlsoOnLoad	= "Y".equalsIgnoreCase(rs.getString("CalloutAlsoOnLoad"));
+            
         } catch (SQLException e) {
             CLogger.get().log(Level.SEVERE, "createParameter", e);
         }
@@ -652,6 +679,7 @@ public class MFieldVO implements Serializable {
 		clone.ReadOnlyLogic = ReadOnlyLogic;
 		clone.MandatoryLogic = MandatoryLogic;
 		clone.ObscureType = ObscureType;
+		clone.exportRealValue = exportRealValue;
 		//	Lookup
 		clone.ValidationCode = ValidationCode;
 		clone.AD_Reference_Value_ID = AD_Reference_Value_ID;

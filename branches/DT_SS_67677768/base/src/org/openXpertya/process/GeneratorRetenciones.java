@@ -7,11 +7,8 @@ import java.util.Vector;
 
 import org.openXpertya.model.MAllocationHdr;
 import org.openXpertya.model.MBPartner;
-import org.openXpertya.model.MBPartnerLocation;
 import org.openXpertya.model.MCurrency;
 import org.openXpertya.model.MInvoice;
-import org.openXpertya.model.MLocation;
-import org.openXpertya.model.MRetSchemaConfig;
 import org.openXpertya.model.MRetencionSchema;
 import org.openXpertya.model.RetencionProcessor;
 import org.openXpertya.model.X_M_Retencion_Invoice;
@@ -41,13 +38,13 @@ public class GeneratorRetenciones {
 	private boolean isSOTrx;
 	private Integer projectID = 0;
 	private Integer campaignID = 0;
-	private boolean pororigenydestino = false;
+	private String paymentRule;
 	/* Listado de retenciones */
 	
 	Vector<RetencionProcessor> lista_retenciones = new Vector<RetencionProcessor>();
 	
 	/* Constructores */
-	public GeneratorRetenciones(int C_BPartner_ID, Vector<Integer> m_factura, Vector<BigDecimal> m_facturaManualAmount,BigDecimal amttotal, boolean isSOTrx){	
+	public GeneratorRetenciones(int C_BPartner_ID, Vector<Integer> m_factura, Vector<BigDecimal> m_facturaManualAmount,BigDecimal amttotal, boolean isSOTrx, String paymentRule){	
 		// seteo de variables
 		this.setC_BPartner_ID(C_BPartner_ID);
 		this.m_facturas = m_factura;
@@ -59,8 +56,9 @@ public class GeneratorRetenciones {
 		MCurrency currency = new MCurrency(Env.getCtx(),C_Currency_ID,null);
 		this.setM_C_Currency_ID(currency);
 		this.setPago_anticipado(m_facturas.isEmpty());
+		setPaymentRule(paymentRule);
 	}
-	public GeneratorRetenciones(int C_BPartner_ID, Vector<Integer> m_factura, Vector<BigDecimal> m_facturaManualAmount,BigDecimal amttotal, boolean isSOTrx, Timestamp dateTrx){
+	public GeneratorRetenciones(int C_BPartner_ID, Vector<Integer> m_factura, Vector<BigDecimal> m_facturaManualAmount,BigDecimal amttotal, boolean isSOTrx, Timestamp dateTrx, String paymentRule){
 		// seteo de variables
 		this.setC_BPartner_ID(C_BPartner_ID);
 		this.m_facturas = m_factura;
@@ -73,7 +71,9 @@ public class GeneratorRetenciones {
 		this.setM_C_Currency_ID(currency);
 		this.setPago_anticipado(m_facturas.isEmpty());
 		this.vfechaPago = dateTrx;
+		setPaymentRule(paymentRule);
 	}
+	
 	private void setM_C_Currency_ID(MCurrency currency) {	
 		m_C_Currency_ID = currency.getC_Currency_ID();
 		
@@ -116,17 +116,10 @@ public class GeneratorRetenciones {
 				 */
 				if(m_facturasManualAmounts.get(i).compareTo(Env.ZERO)>0){
 					MInvoice fc = new MInvoice(Env.getCtx(),m_facturas.get(i),getTrxName());
-					//Obtengo la region de la factura
-					int c_region_id = new MLocation(getM_ctx(), (new MBPartnerLocation(getM_ctx(), fc.getC_BPartner_Location_ID() ,getTrxName())).getC_Location_ID(), getTrxName()).getC_Region_ID();
-					// Se contempla el nuevo parámetro (Por Origen y Destino) del esquema de retención
-					if ((!pororigenydestino) || ((pororigenydestino) && 
-							((procesador.getRetencionSchema().getC_Region_ID() == c_region_id) || 
-									(procesador.getRetencionSchema().getC_Region_ID() == fc.getC_Region_Delivery_ID()))))
-						procesador.addInvoice(fc,m_facturasManualAmounts.get(i));
-			
+					procesador.addInvoice(fc,m_facturasManualAmounts.get(i));
 				}
 			}
-		}
+		}	
 	};
 	
 	
@@ -193,7 +186,9 @@ public class GeneratorRetenciones {
 			lista_retenciones.get(i).setTrxName(getTrxName());
 			lista_retenciones.get(i).setProjectID(getProjectID());
 			lista_retenciones.get(i).setCampaignID(getCampaignID());
-			lista_retenciones.get(i).save(alloc);
+			lista_retenciones.get(i).setPaymentRule(getPaymentRule());
+			m_retenciones.addAll(lista_retenciones.get(i).save(alloc, true));
+			//lista_retenciones.get(i).save(alloc);
 		}
 	}
 	
@@ -222,9 +217,6 @@ public class GeneratorRetenciones {
 			} catch (IllegalAccessException e) {
 				e.printStackTrace();
 			}
-			pororigenydestino= false;
-			if ((retSchema.getParameter(MRetSchemaConfig.NAME_PorRegionOrigenYDestino) != null) && (retSchema.getParameter(MRetSchemaConfig.NAME_PorRegionOrigenYDestino).getValor().equals("Y")))
-				pororigenydestino= true;
 			retProcessor.setIsSOTrx(isSOTrx()); 
 			retProcessor.loadConfig(retSchema);
 			retProcessor.setDateTrx(vfechaPago);
@@ -273,5 +265,11 @@ public class GeneratorRetenciones {
 
 	public Integer getCampaignID() {
 		return campaignID;
+	}
+	public String getPaymentRule() {
+		return paymentRule;
+	}
+	public void setPaymentRule(String paymentRule) {
+		this.paymentRule = paymentRule;
 	}
 }

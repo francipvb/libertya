@@ -1,7 +1,6 @@
 package org.openXpertya.JasperReport.DataSource;
 
 import java.math.BigDecimal;
-import java.sql.PreparedStatement;
 import java.util.Properties;
 
 import org.openXpertya.util.DB;
@@ -27,7 +26,7 @@ public class InvoicePerceptionsDataSource extends QueryDataSource {
 
 	@Override
 	protected String getQuery() {
-		return "select c_tax_id, name, taxbaseamt, taxamt, taxamt/taxbaseamt * 100 as alicuota " +
+		return "select c_tax_id, name, taxbaseamt, taxamt, (CASE WHEN taxbaseamt = 0 THEN 0 ELSE taxamt/taxbaseamt END) * 100 as alicuota " +
 			   "from (select t.c_tax_id, t.name, sum(it.taxbaseamt) as taxbaseamt, sum(it.taxamt) as taxamt " +
 			   "		from c_invoicetax as it " +
 			   "		inner join c_tax as t on t.c_tax_id = it.c_tax_id " +
@@ -36,7 +35,7 @@ public class InvoicePerceptionsDataSource extends QueryDataSource {
 			   "order by name";
 	}
 	
-	private String getTotalQuery(){
+	protected String getTotalQuery(){
 		return "select coalesce(sum(taxamt),0) as total from (" + getQuery() + ") as t";
 	}
 	

@@ -6,9 +6,9 @@
 		 columnCount="1"
 		 printOrder="Vertical"
 		 orientation="Portrait"
-		 pageWidth="595"
+		 pageWidth="700"
 		 pageHeight="842"
-		 columnWidth="535"
+		 columnWidth="640"
 		 columnSpacing="0"
 		 leftMargin="30"
 		 rightMargin="30"
@@ -54,7 +54,7 @@ WHERE (($P{AD_Org_ID} IS NULL) OR (0 = $P{AD_Org_ID}) OR (org.ad_org_id = $P{AD_
 	AND p.docstatus IN ('CO','CL') 
 ) as sc
 GROUP BY organizacion, datetrx, duedate, dateemissioncheck, documentno, bank_account, description, outamt, inamt
-ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck end)]]></queryString>
+ORDER BY (case when $P{Orden}::char = 'D' then duedate else datetrx end)]]></queryString>
 
 	<field name="organizacion" class="java.lang.String"/>
 	<field name="datetrx" class="java.sql.Timestamp"/>
@@ -71,6 +71,10 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 	</variable>
 	<variable name="SUMOUT" class="java.math.BigDecimal" resetType="Report" calculation="Sum">
 		<variableExpression><![CDATA[$F{outamt}]]></variableExpression>
+	</variable>
+	<variable name="SALDO" class="java.math.BigDecimal" resetType="Report" calculation="Sum">
+		<variableExpression><![CDATA[$F{balance}]]></variableExpression>
+		<initialValueExpression><![CDATA[new BigDecimal(10000)]]></initialValueExpression>
 	</variable>
 		<background>
 			<band height="0"  isSplitAllowed="true" >
@@ -110,17 +114,15 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 					<reportElement
 						x="90"
 						y="40"
-						width="50"
+						width="190"
 						height="15"
 						key="textField"
-						isRemoveLineWhenBlank="true">
-							<printWhenExpression><![CDATA[new Boolean($P{FechaCorte} != null)]]></printWhenExpression>
-						</reportElement>
+						isRemoveLineWhenBlank="true"/>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 					<textElement>
 						<font size="9"/>
 					</textElement>
-				<textFieldExpression   class="java.util.Date"><![CDATA[$P{FechaCorte}]]></textFieldExpression>
+				<textFieldExpression   class="java.util.Date"><![CDATA[$P{FechaCorte}==null?new java.util.Date():$P{FechaCorte}]]></textFieldExpression>
 				</textField>
 				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
@@ -139,7 +141,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				<staticText>
 					<reportElement
 						mode="Opaque"
-						x="0"
+						x="105"
 						y="91"
 						width="55"
 						height="16"
@@ -154,7 +156,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				<staticText>
 					<reportElement
 						mode="Opaque"
-						x="110"
+						x="215"
 						y="91"
 						width="60"
 						height="16"
@@ -169,7 +171,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				<staticText>
 					<reportElement
 						mode="Opaque"
-						x="270"
+						x="375"
 						y="91"
 						width="110"
 						height="16"
@@ -184,7 +186,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				<staticText>
 					<reportElement
 						mode="Opaque"
-						x="380"
+						x="485"
 						y="91"
 						width="50"
 						height="16"
@@ -199,7 +201,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				<staticText>
 					<reportElement
 						mode="Opaque"
-						x="430"
+						x="535"
 						y="91"
 						width="50"
 						height="16"
@@ -214,7 +216,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				<staticText>
 					<reportElement
 						mode="Opaque"
-						x="480"
+						x="585"
 						y="91"
 						width="55"
 						height="16"
@@ -273,7 +275,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</staticText>
 				<staticText>
 					<reportElement
-						x="438"
+						x="518"
 						y="0"
 						width="36"
 						height="15"
@@ -286,9 +288,9 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</staticText>
 				<textField isStretchWithOverflow="false" pattern="dd/MM/yyyy" isBlankWhenNull="false" evaluationTime="Report" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="474"
+						x="554"
 						y="0"
-						width="61"
+						width="86"
 						height="15"
 						key="textField-1"/>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
@@ -299,7 +301,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</textField>
 				<staticText>
 					<reportElement
-						x="438"
+						x="518"
 						y="15"
 						width="36"
 						height="13"
@@ -312,9 +314,9 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</staticText>
 				<textField isStretchWithOverflow="false" pattern="HH:mm" isBlankWhenNull="false" evaluationTime="Report" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="474"
+						x="554"
 						y="15"
-						width="61"
+						width="86"
 						height="13"
 						key="textField-2"/>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
@@ -326,7 +328,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				<staticText>
 					<reportElement
 						mode="Opaque"
-						x="170"
+						x="275"
 						y="91"
 						width="100"
 						height="16"
@@ -341,7 +343,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				<staticText>
 					<reportElement
 						mode="Opaque"
-						x="55"
+						x="160"
 						y="91"
 						width="55"
 						height="16"
@@ -360,14 +362,16 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 						width="90"
 						height="15"
 						key="staticText-17"
-						isRemoveLineWhenBlank="true"/>
+						isRemoveLineWhenBlank="true">
+							<printWhenExpression><![CDATA[new Boolean($P{AD_Org_ID} != null && $P{AD_Org_ID}.intValue() != 0)]]></printWhenExpression>
+						</reportElement>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 					<textElement>
 						<font size="9"/>
 					</textElement>
 				<text><![CDATA[Organización:]]></text>
 				</staticText>
-				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
+				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
 						x="90"
 						y="25"
@@ -375,7 +379,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 						height="15"
 						key="textField-6"
 						isRemoveLineWhenBlank="true">
-							<printWhenExpression><![CDATA[new Boolean($P{AD_Org_ID} != null)]]></printWhenExpression>
+							<printWhenExpression><![CDATA[new Boolean($P{AD_Org_ID} != null && $P{AD_Org_ID}.intValue() != 0)]]></printWhenExpression>
 						</reportElement>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
 					<textElement>
@@ -383,6 +387,21 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 					</textElement>
 				<textFieldExpression   class="java.lang.String"><![CDATA[$F{organizacion}]]></textFieldExpression>
 				</textField>
+				<staticText>
+					<reportElement
+						mode="Opaque"
+						x="0"
+						y="91"
+						width="105"
+						height="16"
+						backcolor="#EDEBEB"
+						key="staticText-18"/>
+					<box topBorder="Thin" topBorderColor="#000000" leftBorder="Thin" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="Thin" bottomBorderColor="#000000"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font/>
+					</textElement>
+				<text><![CDATA[Organización]]></text>
+				</staticText>
 			</band>
 		</title>
 		<pageHeader>
@@ -397,7 +416,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 			<band height="16"  isSplitAllowed="true" >
 				<textField isStretchWithOverflow="false" pattern="dd/MM/yyyy" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="0"
+						x="105"
 						y="0"
 						width="55"
 						height="15"
@@ -410,7 +429,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</textField>
 				<textField isStretchWithOverflow="true" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="110"
+						x="215"
 						y="0"
 						width="60"
 						height="15"
@@ -424,7 +443,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</textField>
 				<textField isStretchWithOverflow="true" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="270"
+						x="375"
 						y="0"
 						width="110"
 						height="15"
@@ -438,7 +457,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</textField>
 				<textField isStretchWithOverflow="false" pattern="##0.00" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="380"
+						x="485"
 						y="0"
 						width="50"
 						height="15"
@@ -453,7 +472,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</textField>
 				<textField isStretchWithOverflow="false" pattern="##0.00" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="430"
+						x="535"
 						y="0"
 						width="50"
 						height="15"
@@ -468,7 +487,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</textField>
 				<textField isStretchWithOverflow="true" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="170"
+						x="275"
 						y="0"
 						width="100"
 						height="15"
@@ -480,22 +499,9 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 					</textElement>
 				<textFieldExpression   class="java.lang.String"><![CDATA[$F{bank_account}]]></textFieldExpression>
 				</textField>
-				<textField isStretchWithOverflow="false" pattern="##0.00" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-						x="480"
-						y="0"
-						width="55"
-						height="15"
-						key="textField-3"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement textAlignment="Right" verticalAlignment="Middle">
-						<font size="8"/>
-					</textElement>
-				<textFieldExpression   class="java.math.BigDecimal"><![CDATA[$F{balance}]]></textFieldExpression>
-				</textField>
 				<textField isStretchWithOverflow="false" pattern="dd/MM/yyyy" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="55"
+						x="160"
 						y="0"
 						width="55"
 						height="15"
@@ -509,13 +515,40 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				<line direction="TopDown">
 					<reportElement
 						x="0"
-						y="15"
-						width="535"
+						y="13"
+						width="639"
 						height="0"
 						key="line-1"
 						positionType="Float"/>
 					<graphicElement stretchType="NoStretch"/>
 				</line>
+				<textField isStretchWithOverflow="false" pattern="##0.00" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
+					<reportElement
+						x="585"
+						y="1"
+						width="55"
+						height="15"
+						key="textField"/>
+					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
+					<textElement textAlignment="Right" verticalAlignment="Middle">
+						<font size="8"/>
+					</textElement>
+				<textFieldExpression   class="java.math.BigDecimal"><![CDATA[$V{SALDO}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="true" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
+					<reportElement
+						x="0"
+						y="0"
+						width="105"
+						height="15"
+						key="textField-8"
+						isPrintWhenDetailOverflows="true"/>
+					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
+					<textElement verticalAlignment="Middle">
+						<font size="8"/>
+					</textElement>
+				<textFieldExpression   class="java.lang.String"><![CDATA[$F{organizacion}]]></textFieldExpression>
+				</textField>
 			</band>
 		</detail>
 		<columnFooter>
@@ -533,7 +566,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 						mode="Opaque"
 						x="0"
 						y="0"
-						width="380"
+						width="485"
 						height="16"
 						backcolor="#EDEBEB"
 						key="staticText-9"/>
@@ -545,20 +578,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</staticText>
 				<textField isStretchWithOverflow="false" pattern="##0.00" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="480"
-						y="0"
-						width="55"
-						height="16"
-						key="textField"/>
-					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
-					<textElement textAlignment="Right" verticalAlignment="Middle">
-						<font size="8"/>
-					</textElement>
-				<textFieldExpression   class="java.math.BigDecimal"><![CDATA[$F{balance}]]></textFieldExpression>
-				</textField>
-				<textField isStretchWithOverflow="false" pattern="##0.00" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
-					<reportElement
-						x="430"
+						x="535"
 						y="0"
 						width="50"
 						height="16"
@@ -571,7 +591,7 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 				</textField>
 				<textField isStretchWithOverflow="false" pattern="##0.00" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="380"
+						x="485"
 						y="0"
 						width="50"
 						height="16"
@@ -581,6 +601,19 @@ ORDER BY (case when $P{Orden}::char = 'D' then duedate else dateemissioncheck en
 						<font size="8"/>
 					</textElement>
 				<textFieldExpression   class="java.math.BigDecimal"><![CDATA[$V{SUMOUT}]]></textFieldExpression>
+				</textField>
+				<textField isStretchWithOverflow="false" pattern="##0.00" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
+					<reportElement
+						x="585"
+						y="0"
+						width="55"
+						height="16"
+						key="textField-7"/>
+					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
+					<textElement textAlignment="Right" verticalAlignment="Middle">
+						<font size="8"/>
+					</textElement>
+				<textFieldExpression   class="java.math.BigDecimal"><![CDATA[$V{SALDO}]]></textFieldExpression>
 				</textField>
 			</band>
 		</summary>

@@ -2,7 +2,7 @@
 <!-- Created with iReport - A designer for JasperReports -->
 <!DOCTYPE jasperReport PUBLIC "//JasperReports//DTD Report Design//EN" "http://jasperreports.sourceforge.net/dtds/jasperreport.dtd">
 <jasperReport
-		 name="LDiario"
+		 name="LibroDiario"
 		 columnCount="1"
 		 printOrder="Vertical"
 		 orientation="Portrait"
@@ -30,75 +30,46 @@
 	<parameter name="Rsocial" isForPrompting="false" class="java.math.BigDecimal"/>
 	<parameter name="p_c_acctschema_id" isForPrompting="false" class="java.lang.Integer"/>
 	<queryString><![CDATA[SELECT 
-	f.dateacct, 
-	f.record_id, 
-	f.ncuenta, 
-	f.amtacctcr, 
-	f.amtacctdr, 
-	f.description, 
-	t.name as tcomp, 
-	g.name as ncateg, 
+	fa.dateacct, 
+	fa.record_id,
+	e.name AS ncuenta,
+	fa.amtacctcr, 
+	fa.amtacctdr, 
+	fa.description,
+	t.name as tcomp,
+	g.name as ncateg,
 	org.name as norg, 
-	f.ad_table_id, 
-	f.n_asiento, 
-	(case when f.ad_table_id = 318 then (select i.documentno from c_invoice i where i.c_invoice_id = f.record_id) || ' - ' || bp.name
-	when f.ad_table_id = 335 then 
-		case when py.checkno <> '' then 'Cheque: ' || py.checkno || ' - ' || py.a_name
-		else py.documentno || ' - ' || bp.name
-		end
-	when f.ad_table_id = 735 then  (select i.documentno from c_invoice i, c_allocationline al where f.ad_table_id = 735 and fa.line_id = al.c_allocationline_id and i.c_invoice_id = al.c_invoice_id) || ' - ' || bp.name
-	when f.ad_table_id = 224 then 'Asiento Manual: ' || jo.description
-	when f.ad_table_id = 407 then 'Cierre de Caja'
-	when f.ad_table_id = 392 then 'Conciliación Bancaria'
-	else t.name 
+	fa.ad_table_id, 
+	fa.journalno AS n_asiento,
+	(case 
+		when fa.ad_table_id = 318 then (select i.documentno from c_invoice i where i.c_invoice_id = fa.record_id) || ' - ' || bp.name
+		when fa.ad_table_id = 335 then 
+		  case 
+		    when py.checkno <> '' then 'Cheque: ' || py.checkno || ' - ' || py.a_name
+		    else py.documentno || ' - ' || bp.name
+		  end
+		when fa.ad_table_id = 735 then (select i.documentno from c_invoice i, c_allocationline al where fa.ad_table_id = 735 and fa.line_id = al.c_allocationline_id and i.c_invoice_id = al.c_invoice_id) || ' - ' || bp.name
+		when fa.ad_table_id = 224 then 'Asiento Manual: ' || jo.description
+		when fa.ad_table_id = 407 then 'Cierre de Caja'
+		when fa.ad_table_id = 392 then 'Conciliación Bancaria'
+		else t.name 
 	end) as name_case
-
-FROM (
-	SELECT 
-		fa.ad_org_id,
-		fa.dateacct, 
-		view_f.record_id, 
-		view_f.ncuenta,
-		fa.gl_category_id,
-		fa.c_bpartner_id,
-		view_f.sum_amtacctcr AS amtacctcr, 
-		view_f.sum_amtacctdr AS amtacctdr, 
-		text '' AS description,
-		fa.ad_table_id, 
-		fa.journalno as n_asiento
-	FROM ( 
-		SELECT 
-			f_a.record_id, 
-			e.name as ncuenta, 
-			SUM(f_a.amtacctcr) AS sum_amtacctcr, 
-			SUM(f_a.amtacctdr) AS sum_amtacctdr
-		FROM fact_acct AS f_a
-		left join c_elementvalue e on f_a.account_id = e.c_elementvalue_id 
-		GROUP BY record_id, ncuenta		
-		) AS view_f
-	INNER JOIN fact_acct AS fa ON fa.record_id = view_f.record_id
-	WHERE (fa.amtacctcr <> 0 or fa.amtacctdr <> 0)
-		AND (($P{p_fechadesde}::date IS NULL) OR (fa.dateacct::date >= $P{p_fechadesde}::date)) 
-		AND (($P{p_fechahasta}::date IS NULL) OR (fa.dateacct::date <= $P{p_fechahasta}::date)) 
-		AND (($P{p_c_acctschema_id} IS NULL) OR (fa.c_acctschema_id = $P{p_c_acctschema_id}))
-		AND (($P{AD_Org_ID} IS NULL) OR (fa.ad_org_id = $P{AD_Org_ID}))
-	GROUP BY fa.ad_org_id, fa.dateacct, view_f.record_id, view_f.ncuenta, fa.gl_category_id, fa.c_bpartner_id, n_asiento, fa.ad_table_id, view_f.sum_amtacctcr, view_f.sum_amtacctdr
-	) AS f
-LEFT JOIN fact_acct AS fa	ON fa.record_id = f.record_id
-LEFT JOIN ad_table AS t		ON f.ad_table_id = t.ad_table_id
-LEFT JOIN gl_category AS g  	ON f.gl_category_id = g.gl_category_id
-LEFT JOIN ad_org AS org	 	ON org.ad_org_id = f.ad_org_id
-LEFT JOIN c_bpartner AS bp  	ON bp.c_bpartner_id = f.c_bpartner_id
-LEFT JOIN c_payment AS py 	ON py.c_payment_id = f.record_id
-LEFT JOIN gl_journal AS jo  	ON jo.gl_journal_id = f.record_id
-
-WHERE (($P{CUIT} IS NULL) OR ($P{CUIT} = '') OR (bp.taxid LIKE '%$P!{CUIT}%'))
-AND (($P{Rsocial} IS NULL) OR (bp.c_bpartner_id = $P{Rsocial}))
-AND (($P{AD_Org_ID} IS NULL) OR (fa.ad_org_id = $P{AD_Org_ID}))
-
-GROUP BY f.dateacct, f.record_id, f.ncuenta, f.amtacctcr, f.amtacctdr, f.description, tcomp, ncateg, norg, f.ad_table_id, f.n_asiento, name_case
-
-ORDER BY f.n_asiento, f.dateacct , f.record_id, f.amtacctcr]]></queryString>
+FROM fact_acct AS fa
+  LEFT JOIN c_elementvalue e ON fa.account_id = e.c_elementvalue_id
+  LEFT JOIN ad_table t ON fa.ad_table_id = t.ad_table_id
+  LEFT JOIN gl_category AS g ON fa.gl_category_id = g.gl_category_id
+  LEFT JOIN ad_org AS org ON org.ad_org_id = fa.ad_org_id
+  LEFT JOIN c_bpartner AS bp ON bp.c_bpartner_id = fa.c_bpartner_id
+  LEFT JOIN c_payment AS py ON py.c_payment_id = fa.record_id
+  LEFT JOIN gl_journal AS jo ON jo.gl_journal_id = fa.record_id
+WHERE (fa.amtacctcr <> 0 or fa.amtacctdr <> 0)
+  AND (($P{p_fechadesde}::date IS NULL) OR (fa.dateacct::date >= $P{p_fechadesde}::date)) 
+  AND (($P{p_fechahasta}::date IS NULL) OR (fa.dateacct::date <= $P{p_fechahasta}::date)) 
+  AND (($P{p_c_acctschema_id} IS NULL) OR (fa.c_acctschema_id = $P{p_c_acctschema_id}))
+  AND (($P{CUIT} IS NULL) OR ($P{CUIT} = '') OR (bp.taxid LIKE '%$P!{CUIT}%'))
+  AND (($P{Rsocial} IS NULL) OR (bp.c_bpartner_id = $P{Rsocial}))
+  AND (($P{AD_Org_ID} IS NULL) OR (fa.ad_org_id = $P{AD_Org_ID}))
+ORDER BY fa.journalno, fa.dateacct , fa.record_id, fa.amtacctcr;]]></queryString>
 
 	<field name="dateacct" class="java.sql.Timestamp"/>
 	<field name="record_id" class="java.math.BigDecimal"/>
@@ -154,9 +125,9 @@ ORDER BY f.n_asiento, f.dateacct , f.record_id, f.amtacctcr]]></queryString>
 				</rectangle>
 				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="86"
+						x="112"
 						y="3"
-						width="66"
+						width="50"
 						height="15"
 						key="textField"/>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
@@ -167,9 +138,9 @@ ORDER BY f.n_asiento, f.dateacct , f.record_id, f.amtacctcr]]></queryString>
 				</textField>
 				<textField isStretchWithOverflow="false" isBlankWhenNull="true" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="277"
+						x="287"
 						y="3"
-						width="257"
+						width="247"
 						height="15"
 						key="textField"/>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
@@ -180,7 +151,7 @@ ORDER BY f.n_asiento, f.dateacct , f.record_id, f.amtacctcr]]></queryString>
 				</textField>
 				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
-						x="167"
+						x="177"
 						y="3"
 						width="110"
 						height="15"
@@ -191,11 +162,11 @@ ORDER BY f.n_asiento, f.dateacct , f.record_id, f.amtacctcr]]></queryString>
 					</textElement>
 				<textFieldExpression   class="java.lang.String"><![CDATA[$F{ncateg}]]></textFieldExpression>
 				</textField>
-				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
+				<textField isStretchWithOverflow="false" pattern="dd/MM/yyyy" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
 						x="0"
 						y="3"
-						width="44"
+						width="70"
 						height="15"
 						key="textField"/>
 					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
@@ -206,7 +177,7 @@ ORDER BY f.n_asiento, f.dateacct , f.record_id, f.amtacctcr]]></queryString>
 				</textField>
 				<staticText>
 					<reportElement
-						x="44"
+						x="70"
 						y="3"
 						width="42"
 						height="15"
@@ -219,7 +190,7 @@ ORDER BY f.n_asiento, f.dateacct , f.record_id, f.amtacctcr]]></queryString>
 				</staticText>
 				<staticText>
 					<reportElement
-						x="157"
+						x="167"
 						y="3"
 						width="5"
 						height="15"

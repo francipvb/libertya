@@ -137,7 +137,7 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 		
 		MLetraComprobante mletra = MLetraComprobante.buscarLetraComprobante(clientID, letra, null);
 		
-		if (mletra.getID() > 0) {
+		if (mletra != null && mletra.getID() > 0) {
 			hm.put("C_Letra_Comprobante_ID", mletra.getID());
 			hm.put("PuntoDeVenta", Integer.parseInt(puntoDeVenta));
 			hm.put("NumeroComprobante", Integer.parseInt(numeroComprobante));
@@ -408,6 +408,28 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 		return letraId;
 	}
 	
+	public static MLetraAceptaIva darLetraAceptaIVA(Properties ctx, int categoriaIvaCustomer, int categoriaIvaVendor, String trxName) {
+		
+		MLetraAceptaIva letraAceptaIVA = null;
+		
+		String sq1 = "SELECT * FROM C_LETRA_ACEPTA_IVA "
+			+ "WHERE CATEGORIA_CUSTOMER = ? AND CATEGORIA_VENDOR = ?";
+
+		PreparedStatement pstmt = DB.prepareStatement(sq1);
+		try {
+			pstmt.setInt(1, categoriaIvaCustomer);
+			pstmt.setInt(2, categoriaIvaVendor);
+		
+			ResultSet rs = pstmt.executeQuery();
+			if (rs.next()) {
+				letraAceptaIVA = new MLetraAceptaIva(ctx, rs, trxName);
+			} 
+		} catch (SQLException e) {
+			return null;
+		}		
+		return letraAceptaIVA;
+	}
+	
 	// Sobrecargo metodos para guardar compatibilidad con codigo existente
 	public static Integer darCategoriaIvaClient(){
 		return darCategoriaIvaClient(0);
@@ -521,9 +543,15 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 				if (priceListId != 0){
 					mTab.setValue("M_PriceList_ID", priceListId);
 				}
+				
+                /* Se comenta ya que el campo puede tener un valor por defecto 
+                 * en el campo de tarifa y estar como sólo lectura, 
+                 * este código modifica la tarifa
+                 * *******************************************************
 				else {
 					setPriceList(ctx, WindowNo, mTab, mField, value);
 				}
+				*******************************************************/
 				
 
 				// PaymentRule
@@ -754,7 +782,7 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 			// Env.getContextAsDate(ctx, WindowNo, "DateInvoiced");
 			if (C_BPartner_ID != null
 					&& (letra == null || !letra.getLetra().equals("C")))
-				buscarCai(mTab, AD_Client_ID, AD_Org_ID, C_BPartner_ID
+				buscarCai(ctx, mTab, AD_Client_ID, AD_Org_ID, C_BPartner_ID
 						.intValue(), pto);
 		}
 
@@ -911,43 +939,34 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 	 * @Parametros: 
 	 * @return:
 	 */
-	private String buscarCai(MTab mTab ,int AD_Client_ID, int AD_Org_ID, int part, int pto)
+	private String buscarCai(Properties ctx, MTab mTab ,int AD_Client_ID, int AD_Org_ID, int part, int pto)
 	{	
 		if(part != 0 && pto != 0){
-			Timestamp fechaVencimiento = null;
 			Timestamp date = (Timestamp)mTab.getValue("DateInvoiced");
 			mTab.setValue("CAI",null);
 			mTab.setValue("DATECAI",null);
 			
-			String sql = "SELECT * FROM AD_CAI WHERE AD_CLIENT_ID = ? " +
-					"AND PUNTODEVENTA = ? AND C_BPARTNER_ID = ? " +
-					"ORDER BY FECHA_VENCIMIENTO ";
+			String sql = "SELECT * FROM C_BPartner_CAI WHERE AD_CLIENT_ID = ? " +
+					"AND posnumber = ? AND C_BPARTNER_ID = ? AND datecai::date >= ?::date " +
+					"ORDER BY datecai ";
 			try
 			{
-				PreparedStatement pstmt = DB.prepareStatement(sql.toString());
+				PreparedStatement pstmt = DB.prepareStatement(sql.toString(), null, true);
 				pstmt.setInt(1,AD_Client_ID);
-
 				pstmt.setInt(2,pto);
 				pstmt.setInt(3,part);
+				pstmt.setTimestamp(4, date);
 				
 				ResultSet rs = pstmt.executeQuery();
-				while (rs.next()){
-					//setear cai y fecha no vencido
-					fechaVencimiento = rs.getTimestamp("FECHA_VENCIMIENTO");
-					if(!fechaVencimiento.before(date)){
-						mTab.setValue("CAI",rs.getBigDecimal("CAI"));
-						mTab.setValue("DATECAI",rs.getTimestamp("FECHA_VENCIMIENTO"));
-					}
+				if (rs.next()){
+					mTab.setValue("CAI",rs.getString("cai"));
+					mTab.setValue("DATECAI",rs.getTimestamp("datecai"));
 				}
 			}
 			catch (SQLException e)
 			{
 				log.log(Level.SEVERE, "puntoVenta", e);
 				return e.getLocalizedMessage();
-			}
-			if(mTab.getValue("CAI") == null){
-				//mTab.setValue("PUNTODEVENTA",null);
-				return "Numero de CAI vencido o no encontrado";
 			}
 		}
 		return "";
@@ -1002,19 +1021,19 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 		 * */
 		int C_Tax_ID = 0;
 		int C_BPartner_ID = Env.getContextAsInt(ctx, WindowNo, "C_BPartner_ID");
-		MBPartner partner = new MBPartner(ctx,C_BPartner_ID,trxName);
-		X_C_Categoria_Iva categoria_Iva = new X_C_Categoria_Iva(ctx,partner.getC_Categoria_Iva_ID(),trxName);
-		if(partner.getC_Categoria_Iva_ID() > 0 && categoria_Iva.getCodigo() == 4){ // 4: Categoria "Exenta"
-			String sql ="SELECT t.C_TAX_ID FROM C_TAXCATEGORY tc INNER JOIN " +
-				"C_TAX t ON (tc.C_TAXCATEGORY_ID=t.C_TAXCATEGORY_ID) " +
-				"WHERE tc.NAME='Exento'";
-			C_Tax_ID = DB.getSQLValue(trxName, sql);
-					
-		}else /***************************************************/
-		//
+		boolean isSOTrx = Env.getContext(ctx, WindowNo, "IsSOTrx").equals("Y");
+		
+		// Obtengo el impuesto en base a la entidad comercial
+		MTax tax = getTax(ctx, isSOTrx, C_BPartner_ID, null);
+		if(tax != null){
+			C_Tax_ID = tax.getID();
+		}
+		
+		if(C_Tax_ID <= 0){
 			C_Tax_ID = Tax.get(ctx, M_Product_ID, C_Charge_ID, billDate, shipDate,
-			AD_Org_ID, M_Warehouse_ID, billC_BPartner_Location_ID, shipC_BPartner_Location_ID,
-			Env.getContext(ctx, WindowNo, "IsSOTrx").equals("Y"));
+					AD_Org_ID, M_Warehouse_ID, billC_BPartner_Location_ID, shipC_BPartner_Location_ID, isSOTrx);
+		}
+		
 		log.info("Tax ID=" + C_Tax_ID);
 		//
 		if (C_Tax_ID == 0)
@@ -1025,6 +1044,28 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 		return amt (ctx, WindowNo, mTab, mField, value);
 	}	//	tax
 	
+	
+	public static MTax getTax(Properties ctx, boolean isSOTrx, Integer bPartnerID, String trxName){
+		MBPartner partner = new MBPartner(ctx,bPartnerID,trxName);
+		MTax tax = null;
+		int C_Tax_ID = 0;
+		if(partner.getC_Categoria_Iva_ID() > 0){
+			X_C_Categoria_Iva categoria_Iva = new X_C_Categoria_Iva(ctx, partner.getC_Categoria_Iva_ID(), trxName);
+			// 1) verificamos en letra acepta iva
+			Integer clientCatIVA = darCategoriaIvaClient(Env.getAD_Org_ID(ctx));
+			MLetraAceptaIva laiva = darLetraAceptaIVA(ctx, isSOTrx ? categoria_Iva.getID() : clientCatIVA,
+					isSOTrx ? clientCatIVA : categoria_Iva.getID(), trxName);
+			C_Tax_ID = laiva != null?laiva.getC_Tax_ID():0;
+			// 2) el impuesto de la categoría de iva
+			if(C_Tax_ID <= 0){
+				C_Tax_ID = categoria_Iva.getC_Tax_ID();
+			}
+		}
+		if(C_Tax_ID > 0){
+			tax = new MTax(ctx, C_Tax_ID, trxName);
+		}
+		return tax;
+	}
 	
 	public String documentNo( Properties ctx,int WindowNo,MTab mTab,MField mField,Object value ) {
 		try {
@@ -1095,6 +1136,28 @@ public class CalloutInvoiceExt extends CalloutInvoice {
 		}
 		
 		return true;
+	}
+	
+	public String puntoVenta(Properties ctx, int WindowNo, MTab mTab, MField mField, Object value){
+		if(value == null){
+			return "";
+		}
+		int pto = ((Integer)value).intValue();
+		Integer partner = (Integer)mTab.getValue("C_BPartner_ID");
+		int AD_Org_ID = Env.getContextAsInt(ctx, WindowNo, "AD_Org_ID");
+		int AD_Client_ID = Env.getContextAsInt(ctx, WindowNo, "AD_Client_ID");
+		
+		X_C_Letra_Comprobante letra = null;
+		Integer letraId = (Integer)mTab.getValue("C_Letra_Comprobante_ID");
+		if( letraId != null)
+			 letra = new X_C_Letra_Comprobante(ctx,letraId.intValue(),null);
+		
+		
+		if(partner != null && (letra == null || !letra.getLetra().equals("C")))	{
+			return buscarCai(ctx, mTab, AD_Client_ID, AD_Org_ID,partner.intValue(),pto);
+		}
+		
+		return "";
 	}
 	
 }

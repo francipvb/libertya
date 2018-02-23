@@ -246,8 +246,12 @@ public class DataEngine {
                      + "pfi.IsMinCalc,pfi.IsMaxCalc, "                                                                                                                                                                                                                                                                                                                    // 18..19
                      + "pfi.isRunningTotal,pfi.RunningTotalLines, "                                                                                                                                                                                                                                                                                                       // 20..21
                      + "pfi.IsVarianceCalc, pfi.IsDeviationCalc "                                                                                                                                                                                                                                                                                                         // 22..23
-                     + "FROM AD_PrintFormat pf" + " INNER JOIN AD_PrintFormatItem pfi ON (pf.AD_PrintFormat_ID=pfi.AD_PrintFormat_ID)" + " INNER JOIN AD_Column c ON (pfi.AD_Column_ID=c.AD_Column_ID)" + " LEFT OUTER JOIN AD_ReportView_Col rvc ON (pf.AD_ReportView_ID=rvc.AD_ReportView_ID AND c.AD_Column_ID=rvc.AD_Column_ID) " + "WHERE pf.AD_PrintFormat_ID=?"    // #1
-                     + " AND pfi.IsActive='Y' AND (pfi.IsPrinted='Y' OR c.IsKey='Y' OR pfi.SortNo > 0) " + "ORDER BY pfi.IsPrinted DESC, pfi.SeqNo";    // Functions are put in first column
+                     + "FROM AD_PrintFormat pf" 
+                     + " INNER JOIN AD_PrintFormatItem pfi ON (pf.AD_PrintFormat_ID=pfi.AD_PrintFormat_ID)" 
+                     + " INNER JOIN AD_Column c ON (pfi.AD_Column_ID=c.AD_Column_ID)" 
+                     + " LEFT JOIN AD_ReportView_Col rvc ON (pf.AD_ReportView_ID=rvc.AD_ReportView_ID AND c.AD_Column_ID=rvc.AD_Column_ID) " + "WHERE pf.AD_PrintFormat_ID=?"    // #1
+                     + " AND pfi.IsActive='Y' AND (pfi.IsPrinted='Y' OR c.IsKey='Y' OR pfi.SortNo > 0) " 
+                     + "ORDER BY pfi.IsPrinted DESC, pfi.SeqNo";    // Functions are put in first column
 
         try {
             PreparedStatement pstmt = DB.prepareStatement( sql );
@@ -816,6 +820,8 @@ public class DataEngine {
         return tr;
     }    // getTableReference
 
+
+    PreparedStatement pstmt;
     /**
      * Descripción de Método
      *
@@ -823,7 +829,6 @@ public class DataEngine {
      * @param pd
      * @param format
      */
-
     private void loadPrintData( PrintData pd,MPrintFormat format ) {
 
         // Translate Spool Output
@@ -848,7 +853,7 @@ public class DataEngine {
         try {
         	log.info("SQL: " + pd.getSQL());
         	
-            PreparedStatement pstmt = DB.prepareStatement( pd.getSQL());
+            pstmt = DB.prepareStatement(pd.getSQL());
             ResultSet         rs    = pstmt.executeQuery();
 
             // Row Loop

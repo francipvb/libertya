@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por C_DocType
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2016-06-10 21:54:52.17 */
+ *  @version  - 2017-10-30 12:54:16.145 */
 public class X_C_DocType extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -18,7 +18,9 @@ super (ctx, C_DocType_ID, trxName);
 {
 setAllowChangePriceList (false);
 setAllowDeliveryReturned (false);
+setAllowOtherBatchPaymentDate (false);
 setAllowProposalDue (false);
+setApplyPerception (false);
 setC_DocType_ID (0);
 setDocBaseType (null);
 setDocTypeKey (null);
@@ -47,13 +49,17 @@ setIsSOTrx (false);
 setIsSplitWhenDifference (false);	// N
 setIsWarehouseClosureControl (false);
 setLinesCountMax (0);
+setLockSeq (false);
 setName (null);
+setOnlyVendorProducts (false);
+setopen_close_by_pos (false);	// N
 setPOSEnableDue (false);
 setPOSEnableDueDays (0);
 setPrintName (null);
 setReserveStockManagment (false);
 setReuseDocumentNo (false);
 setsigno_issotrx (null);
+setSkipCurrentAccounts (false);
 setUniqueDocumentno (false);
 setUseOrderWarehouse (true);	// Y
 }
@@ -165,6 +171,22 @@ if (oo != null)
 }
 return false;
 }
+/** Set Allow Other Batch Payment Date */
+public void setAllowOtherBatchPaymentDate (boolean AllowOtherBatchPaymentDate)
+{
+set_Value ("AllowOtherBatchPaymentDate", new Boolean(AllowOtherBatchPaymentDate));
+}
+/** Get Allow Other Batch Payment Date */
+public boolean isAllowOtherBatchPaymentDate() 
+{
+Object oo = get_Value("AllowOtherBatchPaymentDate");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
 /** Set Allow Proposal Due */
 public void setAllowProposalDue (boolean AllowProposalDue)
 {
@@ -174,6 +196,24 @@ set_Value ("AllowProposalDue", new Boolean(AllowProposalDue));
 public boolean isAllowProposalDue() 
 {
 Object oo = get_Value("AllowProposalDue");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
+/** Set Apply Perceptions.
+Apply Perceptions Automatically when is sales transaction document type */
+public void setApplyPerception (boolean ApplyPerception)
+{
+set_Value ("ApplyPerception", new Boolean(ApplyPerception));
+}
+/** Get Apply Perceptions.
+Apply Perceptions Automatically when is sales transaction document type */
+public boolean isApplyPerception() 
+{
+Object oo = get_Value("ApplyPerception");
 if (oo != null) 
 {
  if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
@@ -430,12 +470,18 @@ public static final String DOCBASETYPE_ProjectIssue = "PJI";
 public static final String DOCBASETYPE_Amortization = "AMO";
 /** Bank List = BLB */
 public static final String DOCBASETYPE_BankList = "BLB";
+/** Check Printing = CHP */
+public static final String DOCBASETYPE_CheckPrinting = "CHP";
+/** AP Payment Batch = APB */
+public static final String DOCBASETYPE_APPaymentBatch = "APB";
+/** Credit Card Settlement = CCS */
+public static final String DOCBASETYPE_CreditCardSettlement = "CCS";
 /** Set Document BaseType.
 Logical type of document */
 public void setDocBaseType (String DocBaseType)
 {
-if (DocBaseType.equals("MMP") || DocBaseType.equals("MXI") || DocBaseType.equals("MXP") || DocBaseType.equals("ARF") || DocBaseType.equals("MMS") || DocBaseType.equals("MMR") || DocBaseType.equals("MMM") || DocBaseType.equals("POO") || DocBaseType.equals("POR") || DocBaseType.equals("MMI") || DocBaseType.equals("MOR") || DocBaseType.equals("MOU") || DocBaseType.equals("MOM") || DocBaseType.equals("MOV") || DocBaseType.equals("MOP") || DocBaseType.equals("MOF") || DocBaseType.equals("GLJ") || DocBaseType.equals("GLD") || DocBaseType.equals("API") || DocBaseType.equals("APP") || DocBaseType.equals("ARI") || DocBaseType.equals("ARR") || DocBaseType.equals("SOO") || DocBaseType.equals("MOI") || DocBaseType.equals("CMB") || DocBaseType.equals("CMC") || DocBaseType.equals("CMA") || DocBaseType.equals("APC") || DocBaseType.equals("ARC") || DocBaseType.equals("PJI") || DocBaseType.equals("AMO") || DocBaseType.equals("BLB"));
- else throw new IllegalArgumentException ("DocBaseType Invalid value - Reference = DOCBASETYPE_AD_Reference_ID - MMP - MXI - MXP - ARF - MMS - MMR - MMM - POO - POR - MMI - MOR - MOU - MOM - MOV - MOP - MOF - GLJ - GLD - API - APP - ARI - ARR - SOO - MOI - CMB - CMC - CMA - APC - ARC - PJI - AMO - BLB");
+if (DocBaseType.equals("MMP") || DocBaseType.equals("MXI") || DocBaseType.equals("MXP") || DocBaseType.equals("ARF") || DocBaseType.equals("MMS") || DocBaseType.equals("MMR") || DocBaseType.equals("MMM") || DocBaseType.equals("POO") || DocBaseType.equals("POR") || DocBaseType.equals("MMI") || DocBaseType.equals("MOR") || DocBaseType.equals("MOU") || DocBaseType.equals("MOM") || DocBaseType.equals("MOV") || DocBaseType.equals("MOP") || DocBaseType.equals("MOF") || DocBaseType.equals("GLJ") || DocBaseType.equals("GLD") || DocBaseType.equals("API") || DocBaseType.equals("APP") || DocBaseType.equals("ARI") || DocBaseType.equals("ARR") || DocBaseType.equals("SOO") || DocBaseType.equals("MOI") || DocBaseType.equals("CMB") || DocBaseType.equals("CMC") || DocBaseType.equals("CMA") || DocBaseType.equals("APC") || DocBaseType.equals("ARC") || DocBaseType.equals("PJI") || DocBaseType.equals("AMO") || DocBaseType.equals("BLB") || DocBaseType.equals("CHP") || DocBaseType.equals("APB") || DocBaseType.equals("CCS") || ( refContainsValue("CORE-AD_Reference-183", DocBaseType) ) );
+ else throw new IllegalArgumentException ("DocBaseType Invalid value: " + DocBaseType + ".  Valid: " +  refValidOptions("CORE-AD_Reference-183") );
 if (DocBaseType == null) throw new IllegalArgumentException ("DocBaseType is mandatory");
 if (DocBaseType.length() > 3)
 {
@@ -496,10 +542,10 @@ public static final String DOCSUBTYPECAE_FacturaDeExportaciónE = "19";
 public static final String DOCSUBTYPECAE_NotaDeCréditoPorOperacionesEnElExterior = "21";
 /** Facturas C = 11 */
 public static final String DOCSUBTYPECAE_FacturasC = "11";
-/** Notas de Debito C = 12 */
-public static final String DOCSUBTYPECAE_NotasDeDebitoC = "12";
 /** Notas de Credito C = 13 */
 public static final String DOCSUBTYPECAE_NotasDeCreditoC = "13";
+/** Notas de Debito C = 12 */
+public static final String DOCSUBTYPECAE_NotasDeDebitoC = "12";
 /** Notas de Venta al contado C = 16 */
 public static final String DOCSUBTYPECAE_NotasDeVentaAlContadoC = "16";
 /** Recibos C = 15 */
@@ -507,8 +553,8 @@ public static final String DOCSUBTYPECAE_RecibosC = "15";
 /** Set docsubtypecae */
 public void setdocsubtypecae (String docsubtypecae)
 {
-if (docsubtypecae == null || docsubtypecae.equals("01") || docsubtypecae.equals("02") || docsubtypecae.equals("03") || docsubtypecae.equals("04") || docsubtypecae.equals("05") || docsubtypecae.equals("06") || docsubtypecae.equals("07") || docsubtypecae.equals("08") || docsubtypecae.equals("09") || docsubtypecae.equals("10") || docsubtypecae.equals("20") || docsubtypecae.equals("19") || docsubtypecae.equals("21") || docsubtypecae.equals("11") || docsubtypecae.equals("12") || docsubtypecae.equals("13") || docsubtypecae.equals("16") || docsubtypecae.equals("15"));
- else throw new IllegalArgumentException ("docsubtypecae Invalid value - Reference = DOCSUBTYPECAE_AD_Reference_ID - 01 - 02 - 03 - 04 - 05 - 06 - 07 - 08 - 09 - 10 - 20 - 19 - 21 - 11 - 12 - 13 - 16 - 15");
+if (docsubtypecae == null || docsubtypecae.equals("01") || docsubtypecae.equals("02") || docsubtypecae.equals("03") || docsubtypecae.equals("04") || docsubtypecae.equals("05") || docsubtypecae.equals("06") || docsubtypecae.equals("07") || docsubtypecae.equals("08") || docsubtypecae.equals("09") || docsubtypecae.equals("10") || docsubtypecae.equals("20") || docsubtypecae.equals("19") || docsubtypecae.equals("21") || docsubtypecae.equals("11") || docsubtypecae.equals("13") || docsubtypecae.equals("12") || docsubtypecae.equals("16") || docsubtypecae.equals("15") || ( refContainsValue("CORE-AD_Reference-1010096", docsubtypecae) ) );
+ else throw new IllegalArgumentException ("docsubtypecae Invalid value: " + docsubtypecae + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1010096") );
 if (docsubtypecae != null && docsubtypecae.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -533,8 +579,8 @@ public static final String DOCSUBTYPEINV_Fiscal = "SF";
 /** Set docsubtypeinv */
 public void setdocsubtypeinv (String docsubtypeinv)
 {
-if (docsubtypeinv == null || docsubtypeinv.equals("EL") || docsubtypeinv.equals("IF") || docsubtypeinv.equals("NF") || docsubtypeinv.equals("SF"));
- else throw new IllegalArgumentException ("docsubtypeinv Invalid value - Reference = DOCSUBTYPEINV_AD_Reference_ID - EL - IF - NF - SF");
+if (docsubtypeinv == null || docsubtypeinv.equals("EL") || docsubtypeinv.equals("IF") || docsubtypeinv.equals("NF") || docsubtypeinv.equals("SF") || ( refContainsValue("CORE-AD_Reference-1010095", docsubtypeinv) ) );
+ else throw new IllegalArgumentException ("docsubtypeinv Invalid value: " + docsubtypeinv + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1010095") );
 if (docsubtypeinv != null && docsubtypeinv.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -570,8 +616,8 @@ public static final String DOCSUBTYPESO_Tender = "TR";
 Sales Order Sub Type */
 public void setDocSubTypeSO (String DocSubTypeSO)
 {
-if (DocSubTypeSO == null || DocSubTypeSO.equals("WP") || DocSubTypeSO.equals("RM") || DocSubTypeSO.equals("WI") || DocSubTypeSO.equals("PR") || DocSubTypeSO.equals("OB") || DocSubTypeSO.equals("WR") || DocSubTypeSO.equals("SO") || DocSubTypeSO.equals("ON") || DocSubTypeSO.equals("TR"));
- else throw new IllegalArgumentException ("DocSubTypeSO Invalid value - Reference = DOCSUBTYPESO_AD_Reference_ID - WP - RM - WI - PR - OB - WR - SO - ON - TR");
+if (DocSubTypeSO == null || DocSubTypeSO.equals("WP") || DocSubTypeSO.equals("RM") || DocSubTypeSO.equals("WI") || DocSubTypeSO.equals("PR") || DocSubTypeSO.equals("OB") || DocSubTypeSO.equals("WR") || DocSubTypeSO.equals("SO") || DocSubTypeSO.equals("ON") || DocSubTypeSO.equals("TR") || ( refContainsValue("CORE-AD_Reference-148", DocSubTypeSO) ) );
+ else throw new IllegalArgumentException ("DocSubTypeSO Invalid value: " + DocSubTypeSO + ".  Valid: " +  refValidOptions("CORE-AD_Reference-148") );
 if (DocSubTypeSO != null && DocSubTypeSO.length() > 2)
 {
 log.warning("Length > 2 - truncated");
@@ -726,8 +772,8 @@ public static final String FISCALDOCUMENT_DebitNote = "D";
 /** Set Fiscal Document */
 public void setFiscalDocument (String FiscalDocument)
 {
-if (FiscalDocument.equals("I") || FiscalDocument.equals("C") || FiscalDocument.equals("D"));
- else throw new IllegalArgumentException ("FiscalDocument Invalid value - Reference = FISCALDOCUMENT_AD_Reference_ID - I - C - D");
+if (FiscalDocument.equals("I") || FiscalDocument.equals("C") || FiscalDocument.equals("D") || ( refContainsValue("CORE-AD_Reference-1000080", FiscalDocument) ) );
+ else throw new IllegalArgumentException ("FiscalDocument Invalid value: " + FiscalDocument + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1000080") );
 if (FiscalDocument == null) throw new IllegalArgumentException ("FiscalDocument is mandatory");
 if (FiscalDocument.length() > 1)
 {
@@ -1128,6 +1174,22 @@ Integer ii = (Integer)get_Value("LinesCountMax");
 if (ii == null) return 0;
 return ii.intValue();
 }
+/** Set Lock Sequence */
+public void setLockSeq (boolean LockSeq)
+{
+set_Value ("LockSeq", new Boolean(LockSeq));
+}
+/** Get Lock Sequence */
+public boolean isLockSeq() 
+{
+Object oo = get_Value("LockSeq");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
 /** Set m_trannaturecodea_id */
 public void setm_trannaturecodea_id (BigDecimal m_trannaturecodea_id)
 {
@@ -1173,6 +1235,40 @@ return (String)get_Value("Name");
 public KeyNamePair getKeyNamePair() 
 {
 return new KeyNamePair(getID(), getName());
+}
+/** Set Only Vendor Products.
+Only is allowed vendor products */
+public void setOnlyVendorProducts (boolean OnlyVendorProducts)
+{
+set_Value ("OnlyVendorProducts", new Boolean(OnlyVendorProducts));
+}
+/** Get Only Vendor Products.
+Only is allowed vendor products */
+public boolean isOnlyVendorProducts() 
+{
+Object oo = get_Value("OnlyVendorProducts");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
+/** Set open_close_by_pos */
+public void setopen_close_by_pos (boolean open_close_by_pos)
+{
+set_Value ("open_close_by_pos", new Boolean(open_close_by_pos));
+}
+/** Get open_close_by_pos */
+public boolean isopen_close_by_pos() 
+{
+Object oo = get_Value("open_close_by_pos");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
 }
 /** Set POS Enable Due.
 Document enable in POS with due days */
@@ -1283,8 +1379,8 @@ public static final String SIGNO_ISSOTRX_1 = "1";
 /** Set Signo IsSOTrx */
 public void setsigno_issotrx (String signo_issotrx)
 {
-if (signo_issotrx.equals("-1") || signo_issotrx.equals("1"));
- else throw new IllegalArgumentException ("signo_issotrx Invalid value - Reference = SIGNO_ISSOTRX_AD_Reference_ID - -1 - 1");
+if (signo_issotrx.equals("-1") || signo_issotrx.equals("1") || ( refContainsValue("CORE-AD_Reference-1000069", signo_issotrx) ) );
+ else throw new IllegalArgumentException ("signo_issotrx Invalid value: " + signo_issotrx + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1000069") );
 if (signo_issotrx == null) throw new IllegalArgumentException ("signo_issotrx is mandatory");
 if (signo_issotrx.length() > 4)
 {
@@ -1297,6 +1393,48 @@ set_Value ("signo_issotrx", signo_issotrx);
 public String getsigno_issotrx() 
 {
 return (String)get_Value("signo_issotrx");
+}
+/** Set Skip Current Accounts */
+public void setSkipCurrentAccounts (boolean SkipCurrentAccounts)
+{
+set_Value ("SkipCurrentAccounts", new Boolean(SkipCurrentAccounts));
+}
+/** Get Skip Current Accounts */
+public boolean isSkipCurrentAccounts() 
+{
+Object oo = get_Value("SkipCurrentAccounts");
+if (oo != null) 
+{
+ if (oo instanceof Boolean) return ((Boolean)oo).booleanValue();
+ return "Y".equals(oo);
+}
+return false;
+}
+public static final int TRANSACTIONTYPEFRONTLIVA_AD_Reference_ID = MReference.getReferenceID("Transactions Application");
+/** Sales = S */
+public static final String TRANSACTIONTYPEFRONTLIVA_Sales = "S";
+/** Purchases = P */
+public static final String TRANSACTIONTYPEFRONTLIVA_Purchases = "P";
+/** Both = B */
+public static final String TRANSACTIONTYPEFRONTLIVA_Both = "B";
+/** Set Tipo Frente al Libro de IVA.
+Tipo de transacción frente al libro de iva */
+public void setTransactionTypeFrontLIva (String TransactionTypeFrontLIva)
+{
+if (TransactionTypeFrontLIva == null || TransactionTypeFrontLIva.equals("S") || TransactionTypeFrontLIva.equals("P") || TransactionTypeFrontLIva.equals("B") || ( refContainsValue("CORE-AD_Reference-1010304", TransactionTypeFrontLIva) ) );
+ else throw new IllegalArgumentException ("TransactionTypeFrontLIva Invalid value: " + TransactionTypeFrontLIva + ".  Valid: " +  refValidOptions("CORE-AD_Reference-1010304") );
+if (TransactionTypeFrontLIva != null && TransactionTypeFrontLIva.length() > 1)
+{
+log.warning("Length > 1 - truncated");
+TransactionTypeFrontLIva = TransactionTypeFrontLIva.substring(0,1);
+}
+set_Value ("TransactionTypeFrontLIva", TransactionTypeFrontLIva);
+}
+/** Get Tipo Frente al Libro de IVA.
+Tipo de transacción frente al libro de iva */
+public String getTransactionTypeFrontLIva() 
+{
+return (String)get_Value("TransactionTypeFrontLIva");
 }
 /** Set Unique Documentno */
 public void setUniqueDocumentno (boolean UniqueDocumentno)

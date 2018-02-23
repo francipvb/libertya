@@ -39,7 +39,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 	/** Moneda en la que se realizan los cálculos. */
 	private MCurrency m_currency;
 	/** Importe de la retención */
-	private BigDecimal amount;
+	protected BigDecimal amount;
 	/** [EP] Importe total de/l pago/s. */
 	private BigDecimal payTotalAmount = Env.ZERO;
 	/** Nro. de Retención manual */
@@ -65,6 +65,9 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 	 * han modificado algunas de sus configuraciones.
 	 */
 	private boolean recalculateAmount = true;
+	
+	/** Forma de Pago de los comprobantes a crear */
+	private String paymentRule;
 
 	public void setRetencionSchema(MRetencionSchema schema) {
 		this.m_Esquema = schema;
@@ -127,6 +130,22 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 	 */
 	public List<BigDecimal> getAmountList() {
 		return m_List_Amount;
+	}
+	
+	/**
+	 * Setea la lista de facturas
+	 * @param invoices nueva lista de facturas
+	 */
+	public void setInvoiceList(List<MInvoice> invoices) {
+		m_List_Invoice = invoices;
+	}
+
+	/**
+	 * Setea la lista de importes 
+	 * @param amts nueva lista de importes
+	 */
+	public void setAmountList(List<BigDecimal> amts) {
+		m_List_Amount = amts;
 	}
 
 	/**
@@ -316,7 +335,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		// acorde a este porcentaje.
 		if (exceptionPercent.compareTo(Env.ZERO) > 0) {
 			BigDecimal rate = Env.ONE.subtract(exceptionPercent
-					.divide(Env.ONEHUNDRED));
+					.divide(Env.ONEHUNDRED, 2, BigDecimal.ROUND_HALF_EVEN));
 			newAmt = ammount.multiply(rate);
 		}
 
@@ -505,12 +524,27 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		for (int i = 0; i < invoices.size(); i++) {
 			MInvoiceLine[] lines = invoices.get(i).getLines();
 			for (int j = 0; j < lines.length; j++) {
-				amount = lines[j].getTaxAmt();
+				amount = amount.add(lines[j].getTaxAmt());
 			}
 		}
 		return amount;
 	}
 
+	/**
+	 * Obtener el neto del pago de la factura
+	 * 
+	 * @param invoice
+	 *            factura
+	 * @param amt
+	 *            importe pago
+	 * @return neto del pago
+	 */
+	public BigDecimal getPayNetAmt(MInvoice invoice, BigDecimal amt){
+		BigDecimal net = invoice.getNetAmount();
+		BigDecimal grandTotal = invoice.getGrandTotal();
+		return net.multiply(amt).divide(grandTotal, 2, BigDecimal.ROUND_HALF_EVEN);
+	}
+	
 	/**
 	 * Obtengo el neto de los montos para cada factura. Los montos y las
 	 * facturas parámetros deben ir en orden.
@@ -524,7 +558,6 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 	public BigDecimal getPayNetAmt(List<MInvoice> invoices,
 			List<BigDecimal> amounts) {
 		BigDecimal netTotal = Env.ZERO;
-		BigDecimal totalLines, grandTotal;
 		Integer invoicesSize = invoices.size();
 		Integer amountsSize = amounts.size();
 		if(invoicesSize == 0 && amountsSize > 0){
@@ -536,10 +569,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		}
 		else{
 			for (int i = 0; i < invoices.size(); i++) {
-				totalLines = invoices.get(i).getTotalLinesNet();
-				grandTotal = invoices.get(i).getGrandTotal();
-				netTotal = netTotal.add(totalLines.multiply(amounts.get(i)).divide(
-						grandTotal, 2, BigDecimal.ROUND_HALF_EVEN));
+				netTotal = netTotal.add(getPayNetAmt(invoices.get(i),amounts.get(i)));
 			}
 		}
 		return netTotal;
@@ -548,28 +578,18 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 	public BigDecimal getPayNetAmt() {
 		return getPayNetAmt(getInvoiceList(), getAmountList());
 	}
-
-	/**
-	 * Obtiene las facturas imputadas al crédito parámetro.
-	 * 
-	 * @param allocationLineCreditColumn
-	 *            nombre de columna de la tabla c_allocationline que posee el
-	 *            crédito parámetro
-	 * @param creditID
-	 *            id del crédito
-	 * @return map con clave factura y monto imputado a ella
-	 * @throws Exception
-	 *             en caso de error
-	 */
+	
 	public Map<MInvoice, BigDecimal> getAllocatedInvoicesAmts(
-			String allocationLineCreditColumn, Integer creditID)
+			String allocationLineCreditColumn, Integer creditID, 
+			boolean calculateRetencionPorcentaje)
 			throws Exception {
 		Map<MInvoice, BigDecimal> allocatedAmts = new HashMap<MInvoice, BigDecimal>();
 		// Query que permite obtener las facturas (débitos) y el monto imputado
 		// del crédito parámetro
 		// TODO: conversión del monto imputado a la moneda del crédito, la fecha
 		// de conversión es la fecha del crédito o la de imputación?
-		BigDecimal amountRet = getRetencionPorcentaje(allocationLineCreditColumn,creditID);
+		BigDecimal amountRet = calculateRetencionPorcentaje
+				? getRetencionPorcentaje(allocationLineCreditColumn, creditID) : BigDecimal.ZERO;
 		String sql = "SELECT DISTINCT c_allocationline_id, c_invoice_id, amount "
 				+ "FROM c_allocationhdr as ah "
 				+ "INNER JOIN c_allocationline as al ON al.c_allocationhdr_id = ah.c_allocationhdr_id "
@@ -657,13 +677,11 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 			Timestamp dateTo, MRetencionSchema retSchema) throws Exception {
 		Map<Integer, BigDecimal> pays = new HashMap<Integer, BigDecimal>();
 		String sql = "SELECT DISTINCT p.c_payment_id, currencybase(p.payamt, p.c_currency_id, p.datetrx, p.ad_client_id, p.ad_org_id) as prepayamt "
-				+ "FROM   m_retencion_invoice ri "
-				+ "INNER JOIN c_allocationhdr ah ON ri.c_allocationhdr_id = ah.c_allocationhdr_id "
-				+ "INNER JOIN c_allocationline al ON al.c_allocationhdr_id = ah.c_allocationhdr_id "
-				+ "INNER JOIN c_payment p ON al.c_payment_id = p.c_payment_id "
+				+ "FROM c_payment as p "
 				+ "WHERE p.docstatus in ('CO','CL') AND "
-				+ "			p.c_bpartner_id = ?	AND " + "			p.isreceipt = 'N' AND "
-				+ "			p.AD_Client_ID = ? AND ri.c_retencionschema_id = ? AND ";
+				+ "			p.c_bpartner_id = ?	AND " 
+				+ "			p.isreceipt = 'N' AND "
+				+ "			p.AD_Client_ID = ? AND ";
 		// Fecha desde
 		if (dateFrom != null) {
 			sql += "			p.DateTrx::date >= ?::date AND ";
@@ -699,8 +717,6 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		}
 		// Compañía
 		ps.setInt(i++, clientID);
-		// Esquema de retención en consulta principal
-		ps.setInt(i++, retSchema.getID());
 		// Fecha desde
 		if (dateFrom != null) {
 			ps.setTimestamp(i++, dateFrom);
@@ -743,13 +759,11 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 			Timestamp dateTo, MRetencionSchema retSchema) throws Exception {
 		Map<Integer, BigDecimal> pays = new HashMap<Integer, BigDecimal>();
 		String sql = "SELECT DISTINCT p.c_payment_id, p.isallocated "
-				+ "FROM   m_retencion_invoice ri "
-				+ "INNER JOIN c_allocationhdr ah ON ri.c_allocationhdr_id = ah.c_allocationhdr_id "
-				+ "INNER JOIN c_allocationline al ON al.c_allocationhdr_id = ah.c_allocationhdr_id "
-				+ "INNER JOIN c_payment p ON al.c_payment_id = p.c_payment_id "
+				+ "FROM c_payment p  "
 				+ "WHERE p.docstatus in ('CO','CL') AND "
-				+ "			p.c_bpartner_id = ?	AND " + "			p.isreceipt = 'N' AND "
-				+ "			p.AD_Client_ID = ? AND ri.c_retencionschema_id = ? AND ";
+				+ "			p.c_bpartner_id = ?	AND " 
+				+ "			p.isreceipt = 'N' AND "
+				+ "			p.AD_Client_ID = ? AND ";
 		// Fecha desde
 		if (dateFrom != null) {
 			sql += "			p.DateTrx::date >= ?::date AND ";
@@ -758,7 +772,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		if (dateTo != null) {
 			sql += "			p.DateTrx::date <= ?::date AND ";
 		}
-		sql += "				EXISTS (SELECT c_payment_id "
+		sql += "				p.c_payment_id IN (SELECT c_payment_id "
 				+ "							FROM c_allocationhdr as ah "
 				+ "							INNER JOIN c_allocationline as al ON al.c_allocationhdr_id = ah.c_allocationhdr_id "
 				+ "							WHERE ah.isactive = 'Y' AND ah.docstatus in ('CO','CL') AND al.c_payment_id = p.c_payment_id AND allocationtype <> 'OPA') AND "
@@ -781,8 +795,6 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		}
 		// Compañía
 		ps.setInt(i++, clientID);
-		//Esquema de retención en la consulta principal
-		ps.setInt(i++, retSchema.getID());
 		// Fecha desde
 		if (dateFrom != null) {
 			ps.setTimestamp(i++, dateFrom);
@@ -800,7 +812,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		while (rs.next()) {
 			paymentID = rs.getInt("c_payment_id");
 			// Determinar las facturas imputadas al pago y obtener su neto
-			allocatedAmts = getAllocatedInvoicesAmts("c_payment_id", paymentID);
+			allocatedAmts = getAllocatedInvoicesAmts("c_payment_id", paymentID, false);
 			netTotal = getPayNetAmt(
 					new ArrayList<MInvoice>(allocatedAmts.keySet()),
 					new ArrayList<BigDecimal>(allocatedAmts.values()));
@@ -986,8 +998,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		while (rs.next()) {
 			cashlineID = rs.getInt("c_cashline_id");
 			// Determinar las facturas imputadas al cashline y obtener su neto
-			allocatedAmts = getAllocatedInvoicesAmts("c_cashline_id",
-					cashlineID);
+			allocatedAmts = getAllocatedInvoicesAmts("c_cashline_id", cashlineID, false);
 			netTotal = getPayNetAmt(
 					new ArrayList<MInvoice>(allocatedAmts.keySet()),
 					new ArrayList<BigDecimal>(allocatedAmts.values()));
@@ -1071,6 +1082,12 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		return cashlines;
 	}
 
+	public Map<Integer, BigDecimal> getSumaRetencionesPagosAnteriores(
+			MBPartner bpartner, Integer clientID, Timestamp dateFrom,
+			Timestamp dateTo, MRetencionSchema retSchema) throws Exception {
+		return getSumaRetencionesPagosAnteriores(bpartner, clientID, dateFrom, dateTo, retSchema, null);
+	}
+	
 	/**
 	 * Obtener las retenciones anteriores tomadas como pagos, las retenciones
 	 * aplicadas son siempre al neto.
@@ -1087,6 +1104,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 	 *            por fecha de fin
 	 * @param retSchema
 	 *            esquema de retención
+	 * @param srcInvoiceID comprobante original
 	 * @return map con clave id de payment y valor el monto total del pago
 	 *         convertido
 	 * @throws Exception
@@ -1094,13 +1112,18 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 	 */
 	public Map<Integer, BigDecimal> getSumaRetencionesPagosAnteriores(
 			MBPartner bpartner, Integer clientID, Timestamp dateFrom,
-			Timestamp dateTo, MRetencionSchema retSchema) throws Exception {
+			Timestamp dateTo, MRetencionSchema retSchema, 
+			Integer srcInvoiceID) throws Exception {
 		Map<Integer, BigDecimal> retenciones = new HashMap<Integer, BigDecimal>();
 		String sql = "SELECT DISTINCT ri.c_invoice_id, currencybase(ri.amt_retenc, ri.c_currency_id, i.dateinvoiced, ri.ad_client_id, ri.ad_org_id) as retamt "
 				+ "FROM m_retencion_invoice ri "
 				+ "INNER JOIN c_invoice i ON ri.c_invoice_id = i.c_invoice_id "
 				+ "WHERE i.docstatus in ('CO','CL') AND "
-				+ "			i.c_bpartner_id = ? AND " + "			i.ad_client_id = ? AND ri.c_retencionschema_id = ? AND ";
+				+ "			i.c_bpartner_id = ? AND " 
+				+ "			i.ad_client_id = ? AND ";
+		if(!Util.isEmpty(srcInvoiceID, true)){
+			sql += "		ri.c_invoice_src_id = "+srcInvoiceID+" AND ";
+		}
 		// Fecha desde
 		if (dateFrom != null) {
 			sql += "			i.dateinvoiced::date >= to_date(?,'YYYY-mm-dd') AND ";
@@ -1128,8 +1151,6 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 		}
 		// Compañía
 		ps.setInt(i++, clientID);
-		// Esquema de retención en consulta principal
-		ps.setInt(i++, retSchema.getID());
 		// Fecha desde
 		if (dateFrom != null) {
 			ps.setTimestamp(i++, dateFrom);
@@ -1148,7 +1169,7 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 			retencionCreditID = rs.getInt("c_invoice_id");
 			// Determinar las facturas imputadas al cashline y obtener su neto
 			allocatedAmts = getAllocatedInvoicesAmts("c_invoice_credit_id",
-					retencionCreditID);
+					retencionCreditID, false);
 			netTotal = getPayNetAmt(
 					new ArrayList<MInvoice>(allocatedAmts.keySet()),
 					new ArrayList<BigDecimal>(allocatedAmts.values()));
@@ -1249,13 +1270,11 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 			total = total.add(getSumAmts(new ArrayList<BigDecimal>(cashlines
 					.values())));
 			// 3) Retenciones
-			// Se comenta ya que los algoritmos no restan las retenciones como
-			// parte de los pagos anteriores, sino al final
-			/*Map<Integer, BigDecimal> retenciones = getSumaRetencionesPagosAnteriores(
+			Map<Integer, BigDecimal> retenciones = getSumaRetencionesPagosAnteriores(
 					getBPartner(), clientID, dateFrom, dateTo,
 					getRetencionSchema());
 			total = total.add(getSumAmts(new ArrayList<BigDecimal>(retenciones
-					.values())));*/
+					.values())));
 		} catch (Exception ex) {
 			log.info("Error al buscar el total del monto pagado en el mes !!!! ");
 			ex.printStackTrace();
@@ -1276,16 +1295,18 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 	 *         por defecto si no encuentra ninguno
 	 */
 	protected BigDecimal getPorcentajePadron(List<String> padronTypes, BigDecimal defaultPorcentaje){
-		BigDecimal porcentaje = BigDecimal.ZERO;
-		for (int i = 0; i < padronTypes.size()
-				&& Util.isEmpty(porcentaje, true); i++) {
+		BigDecimal porcentaje = null;
+		for (int i = 0; i < padronTypes.size() && porcentaje == null; i++) {
 			porcentaje = MBPartnerPadronBsAs.getBPartnerPerc("retencion",
 					getBPartner().getTaxID(), Env.getDate(), padronTypes.get(i),
 					getTrxName());
 		}
 		// Si no lo encuentra, entonces el valor por defecto parámetro
-		if(Util.isEmpty(porcentaje, true)){
+		if(porcentaje == null){
 			porcentaje = defaultPorcentaje;
+		}
+		if(porcentaje == null){
+			porcentaje = BigDecimal.ZERO;
 		}
 		return porcentaje;
 	}
@@ -1304,5 +1325,15 @@ public abstract class AbstractRetencionProcessor implements RetencionProcessor {
 
 	public Integer getCampaignID() {
 		return campaignID;
+	}
+
+	@Override
+	public String getPaymentRule() {
+		return paymentRule;
+	}
+
+	@Override
+	public void setPaymentRule(String paymentRule) {
+		this.paymentRule = paymentRule;
 	}
 }

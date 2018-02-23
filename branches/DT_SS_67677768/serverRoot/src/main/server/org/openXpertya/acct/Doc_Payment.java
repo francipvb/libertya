@@ -26,6 +26,8 @@ import java.util.logging.Level;
 import org.openXpertya.model.MAccount;
 import org.openXpertya.model.MAcctSchema;
 import org.openXpertya.model.MCharge;
+import org.openXpertya.model.MDocType;
+import org.openXpertya.model.MPayment;
 import org.openXpertya.util.CPreparedStatement;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
@@ -85,6 +87,10 @@ public class Doc_Payment extends Doc implements DocProjectSplitterInterface {
             if( p_vo.Amounts[ Doc.AMTTYPE_Gross ] == null ) {
                 p_vo.Amounts[ Doc.AMTTYPE_Gross ] = Env.ZERO;
             }
+            
+            //Columna de cuenta contable auxiliar
+            p_vo.Accounting_C_Charge_ID = rs.getInt("Accounting_C_Charge_ID");
+            
         } catch( SQLException e ) {
             log.log( Level.SEVERE,"loadDocumentDetails",e );
         }
@@ -117,9 +123,7 @@ public class Doc_Payment extends Doc implements DocProjectSplitterInterface {
      */
 
     public Fact createFact( MAcctSchema as ) {
-
         // create Fact Header
-
         Fact fact = new Fact( this,as,Fact.POST_Actual );
 
         // Cash Transfer
@@ -128,11 +132,23 @@ public class Doc_Payment extends Doc implements DocProjectSplitterInterface {
             return fact;
         }
 
+        // Publicar contabilidad en debe/haber dependiendo el signo del tipo de documento
+        MDocType dt = MDocType.get(getCtx(), p_vo.C_DocType_ID, getTrxName());
+                
         if( p_vo.DocumentType.equals( DOCTYPE_ARReceipt )) {
-            fact.createLine( null,getAccount( Doc.ACCTTYPE_BankInTransit,as ),p_vo.C_Currency_ID,getAmount(),null );
-
-            //
-
+        	BigDecimal debitAmt = dt.getsigno_issotrx().equals(MDocType.SIGNO_ISSOTRX_1)?null:getAmount();
+        	BigDecimal creditAmt = dt.getsigno_issotrx().equals(MDocType.SIGNO_ISSOTRX_1)?getAmount():null;
+                	
+        	/*
+        	 * Si el pago tiene asociado una cuenta contable (cargo) uso esa,
+        	 * si no, uso la cuenta por defecto.
+        	 */
+        	if(p_vo.Accounting_C_Charge_ID > 0) {
+        		fact.createLine( null, MCharge.getAccount(p_vo.Accounting_C_Charge_ID, as, new BigDecimal(-1)),p_vo.C_Currency_ID,debitAmt,creditAmt);
+        	} else {
+        		fact.createLine( null,getAccount( Doc.ACCTTYPE_BankInTransit,as ),p_vo.C_Currency_ID,debitAmt,creditAmt);
+        	}
+        	
             MAccount acct = null;
 
             if( p_vo.C_Charge_ID != 0 ) {
@@ -143,13 +159,15 @@ public class Doc_Payment extends Doc implements DocProjectSplitterInterface {
                 acct = getAccount( Doc.ACCTTYPE_UnallocatedCash,as );
             }
 
-            fact.createLine( null,acct,p_vo.C_Currency_ID,null,getAmount());
+            fact.createLine( null,acct,p_vo.C_Currency_ID,creditAmt, debitAmt);
         }
 
         // APP
 
         else if( p_vo.DocumentType.equals( DOCTYPE_APPayment )) {
             MAccount acct = null;
+            BigDecimal debitAmt = dt.getsigno_issotrx().equals(MDocType.SIGNO_ISSOTRX_1)?getAmount():null;
+        	BigDecimal creditAmt = dt.getsigno_issotrx().equals(MDocType.SIGNO_ISSOTRX_1)?null:getAmount();
 
             if( p_vo.C_Charge_ID != 0 ) {
                 acct = MCharge.getAccount( p_vo.C_Charge_ID,as,getAmount());
@@ -159,11 +177,22 @@ public class Doc_Payment extends Doc implements DocProjectSplitterInterface {
                 acct = getAccount( Doc.ACCTTYPE_PaymentSelect,as );
             }
 
-            fact.createLine( null,acct,p_vo.C_Currency_ID,getAmount(),null );
+            fact.createLine( null,acct,p_vo.C_Currency_ID,debitAmt,creditAmt);
             // 9/1/09 -> Antonio 
             // La siguiente linea habia sido comentada en la revision: 1342. 
             // Al parecer por error ya que con la linea comentada, el asiento no balancea
-            fact.createLine( null,getAccount( Doc.ACCTTYPE_BankInTransit,as ),p_vo.C_Currency_ID,null,getAmount());
+            
+            /*
+        	 * Si el pago tiene asociado una cuenta contable (cargo) uso esa,
+        	 * si no, uso la cuenta por defecto.
+        	 */
+        	if(p_vo.Accounting_C_Charge_ID > 0) {
+        		fact.createLine( null, MCharge.getAccount(p_vo.Accounting_C_Charge_ID, as, null),p_vo.C_Currency_ID,creditAmt, debitAmt);
+        	} else {
+        		fact.createLine( null,getAccount( Doc.ACCTTYPE_BankInTransit,as ),p_vo.C_Currency_ID,creditAmt, debitAmt);
+        	}
+        	
+            
         } else {
             p_vo.Error = "DocumentType unknown: " + p_vo.DocumentType;
             log.log( Level.SEVERE,"createFact - " + p_vo.Error );

@@ -16,10 +16,12 @@
 
 package org.openXpertya.model;
 
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.openXpertya.util.CCache;
+import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 
 /**
@@ -148,6 +150,51 @@ public class MBankAccount extends X_C_BankAccount {
 			setIsChequesEnCartera(false);
 			
 		return true;
+	}
+	
+	protected X_C_BankAccountDoc getFirstBankAccountDoc() {
+		X_C_BankAccountDoc bad = null;
+		//Construyo la query
+		String sql = "SELECT * " + 
+					 "FROM C_BankAccountDoc bad " +
+					 "WHERE " + 
+					  "c_bankaccount_id = ? " +
+					 " AND bad.isactive = 'Y' " +
+					 " AND (startno <= currentnext AND (endno = 0 OR endno >= currentnext)) " +
+					 " AND (bad.IsUserAssigned = 'N' OR (EXISTS (SELECT C_BankAccountDocUser_ID "
+												+ "					FROM C_BankAccountDocUser bau "
+												+ "					WHERE bau.C_BankAccountDoc_ID = bad.C_BankAccountDoc_ID "
+												+ "						AND bau.IsActive = 'Y'"
+												+ "						AND bau.AD_User_ID = ?))) " + 
+					  "ORDER BY " +
+					  "currentnext ASC " +
+					  "LIMIT 1";
+		
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		try {
+			ps = DB.prepareStatement(sql, get_TrxName());
+			
+			//Parámetros
+			ps.setInt(1, this.getID());
+			ps.setInt(2, Env.getAD_User_ID(getCtx()));
+			rs = ps.executeQuery();
+			if (rs.next()) {
+				bad = new X_C_BankAccountDoc(getCtx(), rs, get_TrxName());
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				if (ps != null)
+					ps.close();
+				if (rs != null)
+					rs.close();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		return bad;
 	}
     
     

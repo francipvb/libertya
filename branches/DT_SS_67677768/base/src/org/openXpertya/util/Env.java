@@ -35,7 +35,9 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Properties;
 import java.util.logging.Level;
 
@@ -71,6 +73,10 @@ public final class Env {
     
     //Cache de imagenes para no leer siempre del disco
     private static CCache  s_cacheImg  = new CCache("imagenes",10,5);
+    
+    /** Formato de fechas: yyyy-MM-dd */
+    private static DateFormat dateFormat_yyyyMMdd = new SimpleDateFormat("yyyy-MM-dd");
+    
     /**
      * Descripción de Método
      *
@@ -921,6 +927,10 @@ public final class Env {
         return Env.getContextAsInt( ctx,"C_PaymentTerm_ID" );
     }    // getC_PaymentTerm_ID
 
+    
+    public static int getC_Currency_ID( Properties ctx ) {
+    	return Env.getContextAsInt(ctx, "$C_Currency_ID");
+    }
    
     /**
      * Descripción de Método
@@ -966,6 +976,22 @@ public final class Env {
                 :retValue );
     }    // getPreference
 
+    
+    public static Map<String, String> getPreferences( Properties ctx, int AD_Window_ID ) {
+    	Map<String, String> retValue = new HashMap<String, String>();
+    	String contextKey;
+    	String contextWindowPreffix = "P" + AD_Window_ID + "|";
+    	for (Object fullContext : ctx.keySet()) {
+    		contextKey = (String) fullContext;
+			if(contextKey.startsWith(contextWindowPreffix)){
+				contextKey = contextKey.substring(contextKey.indexOf(contextWindowPreffix));
+				retValue.put(contextKey, ctx.getProperty(contextKey));
+			}
+		}
+
+    	return retValue;
+    }
+    
     /** Descripción de Campos */
 
     static public final String LANGUAGE = "#AD_Language";
@@ -1696,6 +1722,15 @@ public final class Env {
         DateFormat dateFormat = new SimpleDateFormat(format);
         Date date = new Date();
         return dateFormat.format(date);
+    }
+    
+    /**
+     * Retorna el formato yyyy-MM-dd para la fecha parámetro
+     * @param date
+     * @return
+     */
+    public static String getDateFormatted(Timestamp date) {
+        return dateFormat_yyyyMMdd.format(date);
     }
     
     

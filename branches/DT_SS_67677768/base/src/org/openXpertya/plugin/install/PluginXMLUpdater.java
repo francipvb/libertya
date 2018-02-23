@@ -68,18 +68,17 @@ public class PluginXMLUpdater {
 	protected final static String savePointName = "installSavePoint";
 	
 	/** Indicador de actividad. Version optimizada para disfrutar la instalacion. */
-	protected String[] animation = {"__________", "_________I", "________I_", "_______I__", "______I___", "_____I____", "____I_____", "___I______", "__I_______", "_I________", 
-									"I_________", "I________N", "I_______N_", "I______N__", "I_____N___", "I____N____", "I___N_____", "I__N______", "I_N_______",  
-									"IN________", "IN_______S", "IN______S_", "IN_____S__", "IN____S___", "IN___S____", "IN__S_____", "IN_S______", 
-									"INS_______", "INS______T", "INS_____T_", "INS____T__", "INS___T___", "INS__T____", "INS_T_____", 
-									"INST______", "INST_____A", "INST____A_", "INST___A__", "INST__A___", "INST_A____", 
-									"INSTA_____", "INSTA____L", "INSTA___L_", "INSTA__L__", "INSTA_L___", 
-									"INSTAL____", "INSTAL___L", "INSTAL__L_", "INSTAL_L__", 
-									"INSTALL___", "INSTALL__I", "INSTALL_I_", 
-									"INSTALLI__", "INSTALLI_N",
-									"INSTALLIN_", 
-									"INSTALLING", "INSTALLING", "INSTALLING", "INSTALLING", "INSTALLING",
-									"NSTALLING_", "STALLING__", "TALLING___", "ALLING____", "LLING_____", "LING______", "ING_______", "NG________", "G_________", "__________" }; // {"-", "\\", "|", "/"};
+	protected String[] animation = {
+									"__________", "__________", "_____L____", "_____L____", "_N___L____", "_N___L____", "_N___L___G", "_N___L___G",
+									"_N_T_L___G", "_N_T_L___G", "IN_T_L___G", "IN_T_L___G", "IN_T_L_I_G", "IN_T_L_I_G", "IN_TAL_I_G", "IN_TAL_I_G",
+									"IN_TALLI_G", "IN_TALLI_G", "IN_TALLING", "IN_TALLING", "INSTALLING", "INSTALLING", "INSTALLING", "INSTALLING",
+									"*NSTALLING", "I*STALLING", "IN*TALLING", "INS*ALLING", "INST*LLING", "INSTA*LING", "INSTAL*ING", "INSTALL*NG",
+									"INSTALLI*G", "INSTALLIN*", "INSTALLI*G", "INSTALL*NG", "INSTAL*ING", "INSTA*LING", "INST*LLING", "INS*ALLING",
+									"IN*TALLING", "I*STALLING", "*NSTALLING", "INSTALLING", "INSTALLING", "INSTALLING", "INSTALLING", "INSTALLING",
+									"INSTALLING", "I_STALLING", "I_STALLING", "I_STALL_NG", "I_STALL_NG", "I_ST_LL_NG", "I_ST_LL_NG",
+									"I_ST_LL_N_", "I_ST_LL_N_", "I__T_LL_NG", "I__T_LL_NG", "I__T_LL_N_", "I__T_LL_N_", "I__T__L_N_", "I__T__L_N_",
+									"I__T__L___", "I__T__L___", "I_____L___", "I_____L___", "______L___", "______L___", "__________", "__________",   
+									};
 	
 	/** Si esta activado, la instalacion de un componente implicará no solo impactar en las tablas, sino que tambien copiará 
 	 *  la instalación en el changelog, quedando la base de datos destino como lista a exportar dicho componente */
@@ -171,7 +170,7 @@ public class PluginXMLUpdater {
 				if (sentence != null && sentence.length() > 0)
 				{
 					/* Impactar la bitácora */
-					appendStatus("[" + iter + "]: " + sentence);
+					appendStatus("[" + iter + "." + changeGroup.getChangelogGroupID() + "]: " + sentence);
 					executeUpdate(sentence, m_trxName);
 					
 					/* Impactar en el changelog */ 
@@ -354,19 +353,19 @@ public class PluginXMLUpdater {
 	
 	/** Eleva una excepcion a fin de notificar que el intento de inserción no fue llevado a cabo dado que el registro en cuestion ya existía */
 	protected StringBuffer handleRecordExistsOnInsert(ChangeGroup changeGroup) throws Exception	{
-		raiseException(WARNING_UID_ALREADY_EXISTS + " Referencia: (" + getUniversalReference(changeGroup) + ") en tabla: " + changeGroup.getTableName() );
+		raiseException(WARNING_UID_ALREADY_EXISTS + " Referencia: (" + getUniversalReference(changeGroup) + ") en tabla: " + changeGroup.getTableName() + " - changelogGroupID:" + changeGroup.getChangelogGroupID());
 		return null;
 	}
 
 	/** Eleva una excepcion a fin de notificar que el intento de modificación no fue llevado a cabo dado que el registro en cuestion no existía */
 	protected StringBuffer handleRecordNotExistsOnModify(ChangeGroup changeGroup) throws Exception	{
-		raiseException(WARNING_UID_NOT_EXISTS_UPDATE + " Referencia: " + getUniversalReference(changeGroup) + ". Tabla:" + changeGroup.getTableName());
+		raiseException(WARNING_UID_NOT_EXISTS_UPDATE + " Referencia: " + getUniversalReference(changeGroup) + ". Tabla:" + changeGroup.getTableName() + " - changelogGroupID:" + changeGroup.getChangelogGroupID());
 		return null;
 	}
 	
 	/** Eleva una excepcion a fin de notificar que el intento de eliminaciòn no fue llevado a cabo dado que el registro en cuestion no existía */
 	protected StringBuffer handleRecordNotExistsOnDelete(ChangeGroup changeGroup) throws Exception	{
-		raiseException(WARNING_UID_NOT_EXISTS_DELETE + " Referencia: (" + getUniversalReference(changeGroup) + ") .Tabla: " + changeGroup.getTableName() );
+		raiseException(WARNING_UID_NOT_EXISTS_DELETE + " Referencia: (" + getUniversalReference(changeGroup) + ") .Tabla: " + changeGroup.getTableName() + " - changelogGroupID:" + changeGroup.getChangelogGroupID());
 		return null;
 	}
 	
@@ -388,7 +387,7 @@ public class PluginXMLUpdater {
 		
 		/* Si no existe la referenciaUniversal es imposible eliminar/modificar algo */
 		if (!validateUniversalReference(changeGroup)) { 
-			raiseException(WARNING_CHANGEGROUP_HAS_NO_UID + " Operacion: " + changeGroup.getOperation() + "  (valor en null) - tabla: " + tableName );
+			raiseException(WARNING_CHANGEGROUP_HAS_NO_UID + " Operacion: " + changeGroup.getOperation() + "  (valor en null) - tabla: " + tableName + " - changelogGroupID:" + changeGroup.getChangelogGroupID());
 			return false;
 		}
 		
@@ -397,7 +396,7 @@ public class PluginXMLUpdater {
 		
 		/* Si recordExists devuelve -1 entonces la tabla no contiene la estructura adecuada para el procesamiento */
 		if ( recordExists == -1 )
-			raiseException(WARNING_STRUCTURE_MISSING + " Operacion: " + changeGroup.getOperation() + " - tabla: " + tableName );
+			raiseException(WARNING_STRUCTURE_MISSING + " Operacion: " + changeGroup.getOperation() + " - tabla: " + tableName + " - changelogGroupID:" + changeGroup.getChangelogGroupID());
 		
 		/* Retornar true si al menos hay un registro con dicho UID */
 		return recordExists > 0;
@@ -507,7 +506,7 @@ public class PluginXMLUpdater {
 		}
 		catch (Exception e)
 		{
-			raiseException("ERROR: Error generando sentencia de inserción. " + e.getMessage() + " - tableName:" + tableName + " - column:" + column.getName() + " - columnValues: " + columnValues.toString() + " - columnNames:" + columnNames.toString());
+			raiseException("ERROR: Error generando sentencia de inserción. " + e.getMessage() + " - changelogGroupID:" + changeGroup.getChangelogGroupID() + " - tableName:" + tableName + " - column:" + column.getName() + " - columnValues: " + columnValues.toString() + " - columnNames:" + columnNames.toString());
 		}
 	}
 	
@@ -554,7 +553,7 @@ public class PluginXMLUpdater {
 		}
 		catch (Exception e)
 		{
-			raiseException("ERROR: Error generando sentencia de actualización. " + e.getMessage() + " - tableName:" + tableName + " - column:" + column.getName() + " - sql: " + sql.toString());
+			raiseException("ERROR: Error generando sentencia de actualización. " + e.getMessage() + " - changelogGroupID:" + changeGroup.getChangelogGroupID() + " - tableName:" + tableName + " - column:" + column.getName() + " - sql: " + sql.toString());
 		}
 		
 	}
@@ -568,7 +567,7 @@ public class PluginXMLUpdater {
 	 */
 	protected void appendQuotedValue(StringBuffer sql, String value) throws Exception
 	{
-		value = value.replaceAll("'", "\\\\'");
+		value = value.replaceAll("'", "''");
 		value = value.replaceAll("\\\"", "\\\\\"");
 		sql.append( "'" + value + "'," );
 	}
@@ -866,17 +865,19 @@ public class PluginXMLUpdater {
 		private String tableName = null;
 		private String operation = null;
 		private String uid = null;
+		private int changelogGroupID = -1;
 		private boolean mapped = false;
 		private boolean processed = false;
 		
 		/* Constructor */
-		public ChangeGroup(String tableName, String operation, String uid, Vector<Column> columns)
+		public ChangeGroup(String tableName, String operation, String uid, int changelogGroupID, Vector<Column> columns)
 		{
 			this.uid = uid;
 			this.columns = columns;
 			this.tableName = tableName;
 			this.operation = operation;
 			this.processed = false;
+			this.changelogGroupID = changelogGroupID;
 		}
 		
 		/* Retorna una columna a partir del nombre la misma */
@@ -903,7 +904,8 @@ public class PluginXMLUpdater {
 		public void setMapped(boolean mapped) 			{			this.mapped = mapped;			}
 		public boolean isProcessed()					{			return processed;				}
 		public void setProcessed(boolean processed)		{			this.processed = processed;		}
-		
+		public int getChangelogGroupID()				{			return changelogGroupID;		}
+		public void setChangelogGroupID(int clgID)		{			this.changelogGroupID = clgID;	}
 	}
 	
 	
@@ -962,7 +964,11 @@ public class PluginXMLUpdater {
 				columns.add(fillColumns((Element)nodes.item(j)));
 		
 			// retornar el changeGroup completo
-			ChangeGroup changeGroup = new ChangeGroup(elem.getAttribute("tableName"), elem.getAttribute("operation"), elem.getAttribute("uid"), columns);
+			int changelogGroupID = -1;
+			try { 
+				changelogGroupID = Integer.parseInt(elem.getAttribute("changelogGroupID"));
+			} catch (Exception e) { }
+			ChangeGroup changeGroup = new ChangeGroup(elem.getAttribute("tableName"), elem.getAttribute("operation"), elem.getAttribute("uid"), changelogGroupID, columns);
 			return changeGroup;
 		}
 		
@@ -1084,6 +1090,17 @@ public class PluginXMLUpdater {
 			if (componentVersion <= 0)
 				throw new Exception("Version de componente incorrecta: " + componentVersion);
 
+			// Si estoy eliminando, registrar dicha actividad en el changelog
+			if (MChangeLog.OPERATIONTYPE_Deletion.equals(changeGroup.getOperation())) {
+				// Instanciar y persistir en el changelog
+				MChangeLog aChangeLog = null;
+				/* DisplayType: usamos siempre String dado que asi esta en el XML. El AD_Column es uno dummy dado que no se requiere en eliminaciones */
+				aChangeLog = new MChangeLog(Env.getCtx(), 0, m_trxName, 666, M_Table.getID(changeGroup.getTableName(), m_trxName), DB.getSQLValue(null, "SELECT min(ad_column_id) FROM AD_Column"), recordID, Env.getAD_Client_ID(Env.getCtx()), Env.getAD_Org_ID(Env.getCtx()), null, null, changeGroup.getUid(), componentVersion, changeGroup.getOperation(), DisplayType.String, changelogGroupID);
+				if (!aChangeLog.insertDirect())
+					throw new Exception(" Error al guardar el changelog: UID:" + changeGroup.getTableName() + " - OP:" + changeGroup.getOperation());
+				return;
+			}
+			
 			// Si estoy insertando, utilizar el nextValue correspondiente a la tabla, en caso contrario usar el UID
 			if (MChangeLog.OPERATIONTYPE_Insertion.equals(changeGroup.getOperation()))
 				recordID = keyColumnValue;
@@ -1107,7 +1124,7 @@ public class PluginXMLUpdater {
 					{
 						String refKeyColumnName = getKeyColumnName(column.getRefTable());
 						int refRecordID = getReferenceRecordID(refKeyColumnName, column);
-						newValue = (refRecordID == -1 ? "null" : Integer.toString(refRecordID));
+						newValue = (refRecordID == -1 ? MChangeLog.NULL : Integer.toString(refRecordID));
 					}
 				}
 				// Instanciar y persistir en el changelog

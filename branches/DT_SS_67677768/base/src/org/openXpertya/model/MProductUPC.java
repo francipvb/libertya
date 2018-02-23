@@ -10,6 +10,7 @@ import java.util.logging.Level;
 
 import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
+import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
 
 /**
@@ -26,6 +27,32 @@ public class MProductUPC extends X_M_ProductUPC {
 	/** Indica si la operación en este UPC de artículo se está efectuando a partir
 	 * de un cambio en el campo UPC del artículo (M_Product.UPC) */
 	private boolean productUPCUpdate = false;
+	
+	/***
+	 * @param ctx contexto
+	 * @param upc upc
+	 * @param 
+	 * @param excludeProductUPCID id de la tabla a excluir
+	 * @param trxName nombre de la transacción actual
+	 * @return primer ID del artículo con ese UPC
+	 */
+	public static int getProductIDFromUPC(Properties ctx, String upc, Integer excludeProductID, Integer excludeProductUPCID, String trxName){
+		String sql = "SELECT M_Product_ID "
+					+ "FROM M_ProductUPC "
+					+ "WHERE AD_Client_ID =  " + Env.getAD_Client_ID(ctx)
+					+ "		AND UPC = '"+upc+"' "
+					+ "		AND isactive = 'Y' ";
+		
+		if(excludeProductID != null && excludeProductID > 0){
+			sql += "	AND M_Product_ID <> "+excludeProductID;
+		}
+		
+		if(excludeProductUPCID != null && excludeProductUPCID > 0){
+			sql += "	AND M_ProductUPC_ID <> "+excludeProductUPCID;
+		}
+		
+		return DB.getSQLValue(trxName, sql);
+	}
 	
 	/**
 	 * Constructor de la clase
@@ -152,6 +179,13 @@ public class MProductUPC extends X_M_ProductUPC {
 			return false;
 		}
 		
+		// Gestión de predeterminado por artículo, sólo uno puede haber
+		if(isDefault()){
+			int no = DB.getSQLValue(get_TrxName(), "SELECT count(*) from " + Table_Name + " where isdefault = 'Y' and m_product_id = "+getM_Product_ID()
+					+ (newRecord ? "" : " and m_productupc_id <> " + getID()));
+			setIsDefault(no <= 0);
+		}
+		
 		// Si se desactiva el registro se le quita la marca de predeterminado.
 		// Un UPC inactivo no puede ser el predeterminado.
 		if (is_ValueChanged("IsActive") && !isActive()) {
@@ -217,18 +251,14 @@ public class MProductUPC extends X_M_ProductUPC {
 	 * indicando cual es el artículo que tiene asociado el código UPC ingresado.
 	 */
 	private boolean validateUniqueUPC() {
-		String sql = 
-			"SELECT M_Product_ID FROM M_ProductUPC " +
-			"WHERE AD_Client_ID = ? AND UPC = ? AND M_ProductUPC_ID <> ? ";
-		Integer productID = (Integer)DB.getSQLObject(get_TrxName(), sql, 
-				new Object[] { getAD_Client_ID(), getUPC(), getM_ProductUPC_ID()});
+		Integer productID = getProductIDFromUPC(getCtx(), getUPC(), null, getM_ProductUPC_ID(), get_TrxName());
 		if (productID != null && productID > 0) {
 			MProduct product = MProduct.get(getCtx(), productID);
 			String productStr = "'" + product.getValue() + " " + product.getName() + "'";
 			log.saveError("SaveError", 
 					Msg.translate(getCtx(), "DuplicateUPCError") + " " + productStr);
 		}
-		return productID == null || productID == 0;
+		return productID == null || productID <= 0;
 	}
 	
 	/**

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Properties;
 
 import org.openXpertya.process.DocAction;
+import org.openXpertya.reflection.CallResult;
 import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
@@ -56,9 +57,16 @@ public class AllocationGenerator {
 	private List<Document> debits;
 	/** Lista de créditos de la Asignación */
 	private List<Document> credits;
-
 	/** Encabezado de la Asignación */
 	private MAllocationHdr allocationHdr;
+	/** Tipo de documento del allocation */
+	private MDocType docType;
+	/** Secuencia del allocation */
+	private MSequence docTypeSeq;
+	/** Número de Documento */
+	private String documentNo;
+	/** Bloqueo actual */
+	private MSequenceLock currentSeqLock;
 	
 	/** Locale AR activo? */
 	public final boolean LOCALE_AR_ACTIVE = CalloutInvoiceExt.ComprobantesFiscalesActivos();
@@ -213,6 +221,8 @@ public class AllocationGenerator {
 	 * Crea un nuevo encabezado de asignación seteando la mayoría de sus atributos por defecto
 	 * a partir de los valores del contexto.
 	 * @param allocationType tipo de asignación del encabezado <code>X_C_AllocationHdr.ALLOCATIONTYPE_XXX</code>
+	 * @param orgID ID de la organización del allocation
+	 * @param bPartnerID ID de la Entidad Comercial
 	 * @throws IllegalStateException si el generador fue instanciado mediante el constructor
 	 * que permite asociar un MAllocationHdr existente.
 	 * @throws AllocationGeneratorException cuando se produce un error al guardar el nuevo
@@ -220,7 +230,7 @@ public class AllocationGenerator {
 	 * @return el <code>MAllocationHdr</code> recientemente creado. (Accesible también
 	 * invocando el método {@link #getAllocationHdr()}.
 	 */
-	public MAllocationHdr createAllocationHdr(String allocationType) throws AllocationGeneratorException {
+	public MAllocationHdr createAllocationHdr(String allocationType, Integer orgID, Integer bPartnerID) throws AllocationGeneratorException {
 		MAllocationHdr newAllocationHdr = null;
 		// No se permite crear un nuevo encabezado si ya fue asignado uno mediante el
 		// constructor que permite asociar un Hdr a este generador.
@@ -232,14 +242,57 @@ public class AllocationGenerator {
 		Timestamp systemDate = Env.getContextAsDate(getCtx(), "#Date");         // Fecha actual
 		// Se asignan los valores por defecto requeridos al encabezado
 		newAllocationHdr = new MAllocationHdr(getCtx(), 0, getTrxName());
+		newAllocationHdr.setAD_Org_ID(orgID);
+		if(!Util.isEmpty(bPartnerID, true)){
+			newAllocationHdr.setC_BPartner_ID(bPartnerID);
+		}
 		newAllocationHdr.setAllocationType(allocationType);
 		newAllocationHdr.setC_Currency_ID(clientCurrencyID);
 		newAllocationHdr.setDateAcct(systemDate);
 		newAllocationHdr.setDateTrx(systemDate);
+		if(getDocType() != null){
+			newAllocationHdr.setC_DocType_ID(getDocType().getID());
+			try{
+				newAllocationHdr.setDocumentNo(getDocumentNo());
+			} catch(Exception e){
+				throw new AllocationGeneratorException(e.getMessage());
+			}
+		}
 		// Se guarda el nuevo encabezado.
 		saveAllocationHdr(newAllocationHdr);
 		setAllocationHdr(newAllocationHdr);
 		return newAllocationHdr;
+	}
+	
+	/**
+	 * Crea un nuevo encabezado de asignación seteando la mayoría de sus atributos por defecto
+	 * a partir de los valores del contexto.
+	 * @param allocationType tipo de asignación del encabezado <code>X_C_AllocationHdr.ALLOCATIONTYPE_XXX</code>
+	 * @param orgID ID de la organización del allocation
+	 * @throws IllegalStateException si el generador fue instanciado mediante el constructor
+	 * que permite asociar un MAllocationHdr existente.
+	 * @throws AllocationGeneratorException cuando se produce un error al guardar el nuevo
+	 * encabezado de asignación.
+	 * @return el <code>MAllocationHdr</code> recientemente creado. (Accesible también
+	 * invocando el método {@link #getAllocationHdr()}.
+	 */
+	public MAllocationHdr createAllocationHdr(String allocationType, Integer orgID) throws AllocationGeneratorException {
+		return createAllocationHdr(allocationType, orgID, null);
+	}
+	
+	/**
+	 * Crea un nuevo encabezado de asignación seteando la mayoría de sus atributos por defecto
+	 * a partir de los valores del contexto.
+	 * @param allocationType tipo de asignación del encabezado <code>X_C_AllocationHdr.ALLOCATIONTYPE_XXX</code>
+	 * @throws IllegalStateException si el generador fue instanciado mediante el constructor
+	 * que permite asociar un MAllocationHdr existente.
+	 * @throws AllocationGeneratorException cuando se produce un error al guardar el nuevo
+	 * encabezado de asignación.
+	 * @return el <code>MAllocationHdr</code> recientemente creado. (Accesible también
+	 * invocando el método {@link #getAllocationHdr()}.
+	 */
+	public MAllocationHdr createAllocationHdr(String allocationType) throws AllocationGeneratorException {
+		return createAllocationHdr(allocationType, Env.getAD_Org_ID(getCtx()));
 	}
 	
 	/**
@@ -389,7 +442,7 @@ public class AllocationGenerator {
 	/**
 	 * @param allocationHdr the allocationHdr to set
 	 */
-	protected void setAllocationHdr(MAllocationHdr allocationHdr) {
+	public void setAllocationHdr(MAllocationHdr allocationHdr) {
 		this.allocationHdr = allocationHdr;
 	}
 
@@ -422,6 +475,11 @@ public class AllocationGenerator {
 		// No se permiten montos de imputación iguales a cero.
 		if (document.amount.compareTo(BigDecimal.ZERO) == 0)
 			throw new IllegalArgumentException("Allocation amount must be greather than zero");
+		// Validaciones custom
+		CallResult result = customValidationsAddDocument(document); 
+		if(result.isError()){
+			throw new IllegalArgumentException(result.getMsg());
+		}
 		// Se busca si el documento existe en la lista.
 		if (list.contains(document)) {
 			// En ese caso se incrementa el monto a impuatar del documento existente.
@@ -451,13 +509,15 @@ public class AllocationGenerator {
 		
 		for(Document doc : getDebits()){
 			if (!doc.validateAmount()){
-				throw new AllocationGeneratorException(getMsg("CreditDebitAmountsMatchError"));
+				throw new AllocationGeneratorException(getMsg("DebitAmountValidationError",
+						new Object[] { doc.getDocumentNo(), doc.getAmount(), doc.getOpenAmt() }));
 			}
 		}
 		
 		for(Document doc : getCredits()){
 			if (!doc.validateAmount()){
-				throw new AllocationGeneratorException(getMsg("CreditDebitAmountsMatchError"));
+				throw new AllocationGeneratorException(getMsg("CreditAmountValidationError",
+						new Object[] { doc.getDocumentNo(), doc.getAmount(), doc.getOpenAmt() }));
 			}
 		}
 		
@@ -469,7 +529,8 @@ public class AllocationGenerator {
 			// esta comparación.
 			if (getDebitsAmount().compareTo(getCreditsAmount() ) != 0) {
 				if ( Math.abs(  (getDebitsAmount().subtract(getCreditsAmount())).doubleValue() ) >  (Double.parseDouble(MPreference.GetCustomPreferenceValue("AllowExchangeDifference"))) )
-				throw new AllocationGeneratorException(getMsg("CreditDebitAmountsMatchError"));
+					throw new AllocationGeneratorException(getMsg("CreditDebitAmountsMatchError",
+							new Object[] { getDebitsAmount(), getCreditsAmount() }));
 			}
 		}
 		
@@ -844,7 +905,15 @@ public class AllocationGenerator {
 	 * @return Devuelve un mensaje traducido.
 	 */
 	protected String getMsg(String name) {
-		return Msg.translate(Env.getCtx(), name);
+		return Msg.translate(getCtx(), name);
+	}
+	
+	/**
+	 * @param params parámetros del mesaje
+	 * @return Devuelve un mensaje traducido.
+	 */
+	protected String getMsg(String adMessage, Object[] params) {
+		return Msg.getMsg(getCtx(), adMessage, params);
 	}
 	
 	/**
@@ -880,6 +949,8 @@ public class AllocationGenerator {
 		public Timestamp date;
 		public Integer orgID;
 		private BigDecimal amountAllocated = BigDecimal.ZERO;
+		private boolean isAuthorized = true; 
+		private String documentNo;
 		
 		/**
 		 * @param id ID del documento
@@ -981,6 +1052,26 @@ public class AllocationGenerator {
 		public BigDecimal getAvailableAmt(){
 			return getAmount().subtract(getAmountAllocated());
 		}
+
+		public boolean isAuthorized() {
+			return isAuthorized;
+		}
+
+		public void setAuthorized(boolean isAuthorized) {
+			this.isAuthorized = isAuthorized;
+		}
+
+		public String getDocumentNo() {
+			return documentNo;
+		}
+
+		public void setDocumentNo(String documentNo) {
+			this.documentNo = documentNo;
+		}
+		
+		public BigDecimal getOpenAmt(){
+			return getAvailableAmt();
+		}
 	}
 	
 	/**
@@ -996,6 +1087,7 @@ public class AllocationGenerator {
 			super(id, AllocationDocumentType.INVOICE, amount);
 			this.currencyId = getSqlCurrencyId();
 			this.date = getSqlDate();
+			setAuthorized(getSqlAuthorized());
 		}
 		
 		/**
@@ -1013,6 +1105,12 @@ public class AllocationGenerator {
 			return DB.getSQLValueTimestamp(getTrxName(), "SELECT DateAcct FROM C_Invoice WHERE C_Invoice_ID = "+ id);
 		}
 
+		public boolean getSqlAuthorized(){
+			return DB.getSQLValue(getTrxName(),
+					"SELECT c_invoice_id FROM C_Invoice WHERE C_Invoice_ID = ? AND (authorizationchainstatus is null OR authorizationchainstatus = 'A')",
+					id) > 0;
+		}
+		
 		@Override
 		public void setAsCreditIn(MAllocationLine allocationLine) {
 			allocationLine.setC_Invoice_Credit_ID(id);			
@@ -1037,7 +1135,17 @@ public class AllocationGenerator {
 		}
 		
 		public boolean validateAmount() {
-			return ( (DB.getSQLValueBD(getTrxName(), "SELECT invoiceopen(?,0)", id, true)).subtract(amount.setScale(2, RoundingMode.HALF_EVEN)).compareTo(BigDecimal.ZERO) >= 0 );
+			return (getOpenAmt().subtract(amount.setScale(2, RoundingMode.HALF_EVEN)).setScale(2, RoundingMode.HALF_EVEN).compareTo(BigDecimal.ZERO) >= 0 );
+		}
+		
+		@Override
+		public String getDocumentNo() {
+			return DB.getSQLValueString(getTrxName(), "SELECT documentno FROM C_Invoice WHERE c_invoice_id = "+ id);
+		}
+
+		@Override
+		public BigDecimal getOpenAmt(){
+			return DB.getSQLValueBD(getTrxName(), "SELECT invoiceopen(?,0)", id, true);
 		}
 	}
 
@@ -1082,7 +1190,17 @@ public class AllocationGenerator {
 		}
 		
 		public boolean validateAmount() {
-			return ( (DB.getSQLValueBD(getTrxName(), "SELECT abs(cashlineavailable(?))", id,true)).subtract(amount.setScale(2, RoundingMode.HALF_EVEN)).compareTo(BigDecimal.ZERO) >= 0 );
+			return (getOpenAmt().subtract(amount.setScale(2, RoundingMode.HALF_EVEN)).setScale(2, RoundingMode.HALF_EVEN).compareTo(BigDecimal.ZERO) >= 0 );
+		}
+		
+		@Override
+		public String getDocumentNo() {
+			return DB.getSQLValueString(getTrxName(), "SELECT c.name || ' # ' || cl.line FROM C_Cash c INNER JOIN C_CashLine cl ON c.C_Cash_ID = cl.C_Cash_ID WHERE C_CashLine_ID = "+ id);
+		}
+		
+		@Override
+		public BigDecimal getOpenAmt(){
+			return DB.getSQLValueBD(getTrxName(), "SELECT abs(cashlineavailable(?))", id,true);
 		}
 	}
 
@@ -1127,8 +1245,19 @@ public class AllocationGenerator {
 		}
 		
 		public boolean validateAmount() {
-			return ( (DB.getSQLValueBD(getTrxName(), "SELECT paymentavailable(?)", id,true)).subtract(amount.setScale(2, RoundingMode.HALF_EVEN)).compareTo(BigDecimal.ZERO) >= 0 );
+			return (getOpenAmt().subtract(amount.setScale(2, RoundingMode.HALF_EVEN)).setScale(2, RoundingMode.HALF_EVEN).compareTo(BigDecimal.ZERO) >= 0 );
 		}
+		
+		@Override
+		public String getDocumentNo() {
+			return DB.getSQLValueString(getTrxName(), "SELECT documentno FROM c_payment WHERE c_payment_id = "+ id);
+		}
+		
+		@Override
+		public BigDecimal getOpenAmt(){
+			return DB.getSQLValueBD(getTrxName(), "SELECT paymentavailable(?)", id,true);
+		}
+
 	}
 	
 	public static BigDecimal getExchangeDifference(HashMap<Integer, BigDecimal> facts, ArrayList<PaymentMediumInfo> pays, Properties ctx, String trxName, Date allocDate) {
@@ -1577,6 +1706,81 @@ public class AllocationGenerator {
 		return invoice;
 	}
 	
+	protected CallResult customValidationsAddDocument(Document document){
+		return new CallResult();
+	}
+
+	public MDocType getDocType() {
+		return docType;
+	}
+
+	public void setDocType(MDocType docType) {
+		this.docType = docType;
+		MSequence seq = null;
+		if(docType != null && !Util.isEmpty(docType.getDocNoSequence_ID(), true)){
+			seq = new MSequence(getCtx(), docType.getDocNoSequence_ID(), getTrxName());
+		}
+		setDocTypeSeq(seq);
+	}
+
+	public MSequence getDocTypeSeq() {
+		return docTypeSeq;
+	}
+
+	public void setDocTypeSeq(MSequence docTypeSeq) {
+		this.docTypeSeq = docTypeSeq;
+	}
+	
+	public void setDocType(Integer docTypeID){
+		setDocType(Util.isEmpty(docTypeID, true) ? null : MDocType.get(getCtx(), docTypeID));
+	}
+	
+	public String getDocumentNo() throws Exception{
+		String documentNo = this.documentNo;
+		
+		if(getDocType() != null){
+			if (getDocTypeSeq() == null && !Util.isEmpty(getDocType().getDocNoSequence_ID(), true)) {
+				setDocTypeSeq(new MSequence(getCtx(), getDocType().getDocNoSequence_ID(), getTrxName()));
+			}
+			if(getDocTypeSeq() != null && Util.isEmpty(this.documentNo, true)){
+				// Realizar las validaciones de la secuencia
+				validateSeq();
+
+				// Obtener el siguiente número de secuencia
+				documentNo = !Util.isEmpty(this.documentNo, true) ? this.documentNo
+						: MSequence.getDocumentNo(getDocType().getID(), null);
+			}
+		}
+		
+		setDocumentNo(documentNo);
+		
+		return documentNo;
+	}	
+
+	public void validateSeq() throws Exception{
+		// No debe existir un bloqueo en la secuencia
+		if (getDocType() != null && getDocType().isLockSeq() && getDocTypeSeq() != null) {
+			MSequenceLock seqLock = MSequence.getCurrentLock(getCtx(), getDocType().getID(),
+					(getCurrentSeqLock() != null ? getCurrentSeqLock().getID() : 0), getTrxName());
+			if(seqLock != null){
+				setDocumentNo(null);
+				throw new Exception(getMsg("SequenceLocked", new Object[] { seqLock.getDescription() }));
+			}
+		}
+	}
+	
+	public void setDocumentNo(String documentNo) {
+		this.documentNo = documentNo;
+	}
+
+	public MSequenceLock getCurrentSeqLock() {
+		return currentSeqLock;
+	}
+
+	public void setCurrentSeqLock(MSequenceLock currentSeqLock) {
+		this.currentSeqLock = currentSeqLock;
+	}
+
 	public class PaymentMediumInfo{
 		private BigDecimal amount;
 		private Integer currencyId;

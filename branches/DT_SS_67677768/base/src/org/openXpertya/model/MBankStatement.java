@@ -26,9 +26,11 @@ import java.util.logging.Level;
 
 import org.openXpertya.process.DocAction;
 import org.openXpertya.process.DocumentEngine;
+import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.Util;
 
 /**
  * Descripción de Clase
@@ -259,6 +261,13 @@ public class MBankStatement extends X_C_BankStatement implements DocAction {
      */
 
     protected boolean beforeSave( boolean newRecord ) {
+    	
+    	// NO es posible guardar un extracto bancario para la org *
+    	if(Util.isEmpty(getAD_Org_ID(), true)){
+    		log.saveError("SaveError", Msg.getMsg(getCtx(), "InvalidOrg"));
+    		return false;
+    	}
+    	
         if( getBeginningBalance().compareTo( Env.ZERO ) == 0 ) {
             MBankAccount ba = MBankAccount.get( getCtx(),getC_BankAccount_ID());
 
@@ -456,17 +465,29 @@ public class MBankStatement extends X_C_BankStatement implements DocAction {
 
             if( line.getC_Payment_ID() != 0 ) {
                 MPayment payment = new MPayment( getCtx(),line.getC_Payment_ID(),get_TrxName());
-
                 payment.setIsReconciled( true );
-                payment.save( get_TrxName());
+                payment.setUpdateBPBalance(false);
+                if(!payment.save()){
+                	setProcessMsg(CLogger.retrieveErrorAsString());
+                	return DOCSTATUS_Invalid;
+                }
             }
             
             if ( line.getM_BoletaDeposito_ID() != 0 ) {
             	MBoletaDeposito boleta = new MBoletaDeposito( getCtx(),line.getM_BoletaDeposito_ID(),get_TrxName());
             	if ( ! boleta.isReconciled() ) {
             		boleta.setConciliado(true);
-            		boleta.save();
+            		if(!boleta.save()){
+            			setProcessMsg(CLogger.retrieveErrorAsString());
+                    	return DOCSTATUS_Invalid;
+            		}
             	}
+            }
+            // Se concilian las líneas de extracto bancario
+            line.setIsReconciled(true);
+            if(!line.save()){
+            	setProcessMsg(CLogger.retrieveErrorAsString());
+            	return DOCSTATUS_Invalid;
             }
         }
 
@@ -475,7 +496,10 @@ public class MBankStatement extends X_C_BankStatement implements DocAction {
         MBankAccount ba = MBankAccount.get( getCtx(),getC_BankAccount_ID());
 
         ba.setCurrentBalance( getEndingBalance());
-        ba.save( get_TrxName());
+        if(!ba.save( get_TrxName())){
+        	setProcessMsg(CLogger.retrieveErrorAsString());
+        	return DOCSTATUS_Invalid;
+        }
 
         // User Validation
 
@@ -576,7 +600,10 @@ public class MBankStatement extends X_C_BankStatement implements DocAction {
                 line.setTrxAmt( Env.ZERO );
                 line.setChargeAmt( Env.ZERO );
                 line.setInterestAmt( Env.ZERO );
-                line.save( get_TrxName());
+                if(!line.save( get_TrxName())){
+                	setProcessMsg(CLogger.retrieveErrorAsString());
+                	return false;
+                }
 
                 //
 
@@ -584,13 +611,19 @@ public class MBankStatement extends X_C_BankStatement implements DocAction {
                     MPayment payment = new MPayment( getCtx(),line.getC_Payment_ID(),get_TrxName());
 
                     payment.setIsReconciled( false );
-                    payment.save( get_TrxName());
+                    if(!payment.save()){
+                    	setProcessMsg(CLogger.retrieveErrorAsString());
+                    	return false;
+                    }
                 }
                 if ( line.getM_BoletaDeposito_ID() != 0 ) {
                 	MBoletaDeposito boleta = new MBoletaDeposito( getCtx(),line.getM_BoletaDeposito_ID(),get_TrxName());
                 	if ( ! boleta.isReconciled() ) {
                 		boleta.setConciliado(false);
-                		boleta.save();
+                		if(!boleta.save()){
+                			setProcessMsg(CLogger.retrieveErrorAsString());
+                        	return false;
+                		}
                 	}
                 }                
             }

@@ -1,19 +1,26 @@
 package org.openXpertya.process;
 
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Properties;
 
 import org.openXpertya.model.MBankList;
 import org.openXpertya.model.MDocType;
 import org.openXpertya.model.MExpFormat;
+import org.openXpertya.model.MPayment;
 import org.openXpertya.model.MSequence;
 import org.openXpertya.model.PO;
 import org.openXpertya.model.X_C_BankList_Config;
+import org.openXpertya.util.CLogger;
+import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
+import org.openXpertya.util.Msg;
 import org.openXpertya.util.Util;
 
 public abstract class ExportBankList extends ExportProcess {
@@ -49,9 +56,10 @@ public abstract class ExportBankList extends ExportProcess {
 		setBankList(bankList);
 		setExportFormat(getBankListExportFormat());
 		setDocType(new MDocType(ctx, getBankList().getC_DocType_ID(), trxName));
-		setBankListConfig((X_C_BankList_Config) PO.findFirst(ctx, X_C_BankList_Config.Table_Name,
-				"ad_client_id = ? and isactive = 'Y' and c_doctype_id = ?",
-				new Object[] { Env.getAD_Client_ID(ctx), bankList.getC_DocType_ID() }, null, trxName));
+		Object[] params = new Object[] { Env.getAD_Client_ID(ctx), bankList.getC_DocType_ID() };
+		String whereClause = "ad_client_id = ? AND isactive = 'Y' AND c_doctype_id = ?";
+		String tableName = X_C_BankList_Config.Table_Name;
+		setBankListConfig((X_C_BankList_Config) PO.findFirst(ctx, tableName, whereClause, params, null, trxName));
 		MDocType opDocType = MDocType.getDocType(getCtx(), MDocType.DOCTYPE_Orden_De_Pago, get_TrxName());
 		// Obtener prefijo y sufijo de la secuencia de la OP
 		String opPrefix = MSequence.getPrefix(opDocType.getDocNoSequence_ID(), get_TrxName());
@@ -68,9 +76,11 @@ public abstract class ExportBankList extends ExportProcess {
 	
 	protected abstract String getFileFooter();
 	
-	protected MExpFormat getBankListExportFormat(){
-		return (MExpFormat) MExpFormat.findFirst(getCtx(), MExpFormat.Table_Name,
-				"value = '" + getBankListExportFormatValue() + "'", null, null, get_TrxName());
+	protected abstract void validate() throws Exception;
+
+	protected MExpFormat getBankListExportFormat() {
+		String whereClause = "value = '" + getBankListExportFormatValue() + "'";
+		return (MExpFormat) MExpFormat.findFirst(getCtx(), MExpFormat.Table_Name, whereClause, null, null, get_TrxName());
 	}
 	
 	protected List<Object> getWhereClauseParams() {
@@ -85,13 +95,44 @@ public abstract class ExportBankList extends ExportProcess {
 		write(getFileHeader());
 		// Separador de líneas
 		writeRowSeparator();
-		// Exportar las líneas del archivo
-		super.fillDocument();
+		// Exportar las líneas del archivo y actualizar los payments
+		// Ejecutar la query
+		PreparedStatement ps = DB.prepareStatement(getQuery(), get_TrxName(), true);
+		// Agregar los parámetros
+		setWhereClauseParams(ps);
+		ResultSet rs = ps.executeQuery();
+		// Iterar por los resultados
+		while(rs.next()){
+			//Si la fecha del payment es anterior a la del vencimiento (hoy + 1), actualizo el payment
+			Calendar duedate = Calendar.getInstance();
+			duedate.setTime(rs.getTimestamp("duedate"));
+			if (rs.getTimestamp("duedate").compareTo(rs.getTimestamp("paymentduedate")) > 0 ||
+					getNextWorkingDay(rs.getTimestamp("duedate")).compareTo(duedate) > 0) {
+				MPayment payment = new MPayment(getCtx(), rs.getInt("c_payment_id"), get_TrxName());
+				payment.setDueDate(new Timestamp(getNextWorkingDay(rs.getTimestamp("duedate")).getTimeInMillis()));
+				if (!payment.save()) {
+					throw new Exception(CLogger.retrieveErrorAsString());
+				}
+			}
+			// Escribe al línea en el archivo
+			writeLine(rs);
+		}
 		// Exportar líneas totalizadoras
 		write(getFileFooter());
 	}
 	
+	protected void doValidations() throws Exception{
+		if(getBankListConfig() == null){
+			throw new Exception(
+					Msg.getMsg(getCtx(), "BankListConfigNotExists", new Object[] { getDocType().getName() }));
+		}
+		validate();
+	}
+	
 	public String export() throws Exception {
+		// Validaciones 
+		doValidations();
+		// Exportar
 		return super.doIt();
 	}
 	
@@ -151,5 +192,18 @@ public abstract class ExportBankList extends ExportProcess {
 
 	protected void setOpSuffix(String opSuffix) {
 		this.opSuffix = opSuffix;
+	}
+	
+	protected Calendar getNextWorkingDay(Timestamp date) {
+		Calendar calendarDateTrx = Calendar.getInstance();
+		calendarDateTrx.setTime(date);
+		int deltaDate = 0;
+		if (calendarDateTrx.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY) {
+			deltaDate = 2;
+		} else if (calendarDateTrx.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
+			deltaDate = 1;
+		}
+		calendarDateTrx.add(Calendar.DATE, deltaDate);
+		return calendarDateTrx;
 	}
 }

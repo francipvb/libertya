@@ -122,7 +122,6 @@ import org.openXpertya.util.TimeStatsAccumulator;
 import org.openXpertya.util.TimeStatsLogger;
 import org.openXpertya.util.Trx;
 import org.openXpertya.util.Util;
-import org.openXpertya.util.ValueNamePair;
 
 public class PoSOnline extends PoSConnectionState {
 
@@ -202,6 +201,8 @@ public class PoSOnline extends PoSConnectionState {
 	
 	private int dolarCurrencyID = 0;
 	
+	private MDocType allocationDocType = null;
+	
 	public PoSOnline() {
 		super();
 		setCreatePOSPaymentValidations(new CreatePOSPaymentValidations());
@@ -213,27 +214,17 @@ public class PoSOnline extends PoSConnectionState {
 				MDocType.DOCTYPE_CustomerReceipt, null));
 		setTaxExento(MTax.getTaxExemptRate(ctx, null));
 		setRole(MRole.get(getCtx(), Env.getAD_Role_ID(getCtx())));
+		setAllocationDocType(MDocType.getDocType(ctx,
+				MDocType.DOCTYPE_POS, null));
 	}
 	
 	private static void throwIfFalse(boolean b, DocAction sourceDocActionPO, Class posExceptionClass) throws PosException {
 		if (!b) 
 		{
-			ValueNamePair np = CLogger.retrieveError();
 			String msg = null;
 			// Se intenta obtener el mensaje a partir del Logger.
-			if (np != null) {
-
-				String name = (np.getName() != null) ? Msg.translate(Env.getCtx(), np.getName()) : "";
-				String value = (np.getValue() != null) ? Msg.translate(Env.getCtx(), np.getValue()) : "";
-				if (name.length() > 0 && value.length() > 0)
-					msg = value + ": " + name;
-				else if (name.length() > 0)
-					msg = name;
-				else if (value.length() > 0)
-					msg = value;
-				else
-					msg = "";
-			
+			if (sourceDocActionPO == null) {
+				msg = CLogger.retrieveErrorAsString();
 			// Se intenta obtener un mensaje a partir del mensaje de los POs que implementan DocAction.
 			} else if (sourceDocActionPO != null && sourceDocActionPO.getProcessMsg() != null &&
 					 sourceDocActionPO.getProcessMsg().length() > 0) {
@@ -832,6 +823,14 @@ public class PoSOnline extends PoSConnectionState {
 			cashChange = cashChange.subtract(changeAux); 
 		}
 		
+		// Forma de pago del pedido
+		if(Util.isEmpty(sumaCreditPayments, true)){
+			order.setPaymentRule(MInvoice.PAYMENTRULE_Cash);
+		}
+		else{
+			order.setPaymentRule(MInvoice.PAYMENTRULE_OnCredit);
+		}
+		
 		if (invalidPayment)
 			throw new InvalidPaymentException();
 	}
@@ -990,68 +989,70 @@ public class PoSOnline extends PoSConnectionState {
 	 */
 	private void checkCredit(Order order) throws InsufficientCreditException, Exception {
 		currentAccountSalesConditions = new HashMap<String, BigDecimal>();
-		MBPartner bp = new MBPartner(getCtx(), order.getBusinessPartner().getId(), getTrxName());
-		MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), getTrxName());
-		// Obtengo el manager actual
-		CurrentAccountManager manager = CurrentAccountManagerFactory
-				.getManager();
-		// Seteo el estado actual del cliente y lo obtengo
-		CallResult result = manager.setCurrentAccountStatus(getCtx(), bp, org,
-				null);
-		// Si hubo error, obtengo el mensaje y tiro la excepción
-		if (result.isError()) {
-			throw new InsufficientCreditException(result.getMsg());
-		}
-		// Me guardo el estado de la entidad comercial
-		String creditStatus = (String)result.getResult(); 
-		// Determino los tipos de pago a verificar el estado de crédito
-		result = manager.getTenderTypesToControlStatus(getCtx(), org, bp,
-				getTrxName());
-		// Si hubo error, obtengo el mensaje y tiro la excepción
-		if (result.isError()) {
-			throw new Exception(result.getMsg());
-		}
-		// Me guardo la lista de tipos de pago a verificar
-		Set<String> tenderTypesAllowed = (Set<String>)result.getResult();
-		Map<String, BigDecimal> pays = new HashMap<String, BigDecimal>();
-		BigDecimal convertedPayAmt;
-		String paymentRule;
-		for (Payment pay : order.getPayments()) {
-			// Verificar por el manager de cuentas corrientes si debo verificar
-			// el estado de crédito en base a los tipos de pago obtenidos
-			paymentRule = CurrentAccountBalanceStrategy
-					.getPaymentRuleEquivalent(pay.getTenderType());
-			if(!Util.isEmpty(paymentRule, true)){
-				if (tenderTypesAllowed != null
-						&& tenderTypesAllowed.contains(pay.getTenderType())) {
-					shouldUpdateBPBalance = true;
-					// Verificar la situación de crédito de la entidad comercial
-					result = manager.validateCurrentAccountStatus(getCtx(), org, bp, 
-							creditStatus, getTrxName());
-					// Si hubo error, obtengo el mensaje y tiro la excepción
-					if (result.isError()) {
-						throw new InsufficientCreditException(result.getMsg());
-					}
-					currentAccountSalesConditions.put(paymentRule, BigDecimal.ZERO);
-				}
-				// Convierto el monto del pago a partir de su moneda
-				convertedPayAmt = MConversionRate.convertBase(getCtx(), pay
-						.getAmount(), pay.getCurrencyId(), order.getDate(), 0, Env
-						.getAD_Client_ID(getCtx()), Env.getAD_Org_ID(getCtx()));
-				pays.put(paymentRule, convertedPayAmt);
-				// Si existe el payment rule significa que se agregó porque es
-				// paymentrule de cuenta corriente, entonces actualizar su monto
-				if(currentAccountSalesConditions.get(paymentRule) != null){
-					currentAccountSalesConditions.put(paymentRule, convertedPayAmt);
-				}
+		if(MBPartner.PAYMENTRULE_OnCredit.equals(order.getPaymentRule())){
+			MBPartner bp = new MBPartner(getCtx(), order.getBusinessPartner().getId(), getTrxName());
+			MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), getTrxName());
+			// Obtengo el manager actual
+			CurrentAccountManager manager = CurrentAccountManagerFactory
+					.getManager(this);
+			// Seteo el estado actual del cliente y lo obtengo
+			CallResult result = manager.setCurrentAccountStatus(getCtx(), bp, org,
+					null);
+			// Si hubo error, obtengo el mensaje y tiro la excepción
+			if (result.isError()) {
+				throw new InsufficientCreditException(result.getMsg());
 			}
-		}		
-		// Verificar el crédito con la factura
-		result = manager.checkInvoicePaymentRulesBalance(getCtx(), bp, org,
-				pays, getTrxName());
-		// Si hubo error, obtengo el mensaje y tiro la excepción
-		if (result.isError()) {
-			throw new InsufficientCreditException(result.getMsg());
+			// Me guardo el estado de la entidad comercial
+			String creditStatus = (String)result.getResult(); 
+			// Determino los tipos de pago a verificar el estado de crédito
+			result = manager.getTenderTypesToControlStatus(getCtx(), org, bp,
+					getTrxName());
+			// Si hubo error, obtengo el mensaje y tiro la excepción
+			if (result.isError()) {
+				throw new Exception(result.getMsg());
+			}
+			// Me guardo la lista de tipos de pago a verificar
+			Set<String> tenderTypesAllowed = (Set<String>)result.getResult();
+			Map<String, BigDecimal> pays = new HashMap<String, BigDecimal>();
+			BigDecimal convertedPayAmt;
+			String paymentRule;
+			for (Payment pay : order.getPayments()) {
+				// Verificar por el manager de cuentas corrientes si debo verificar
+				// el estado de crédito en base a los tipos de pago obtenidos
+				paymentRule = CurrentAccountBalanceStrategy
+						.getPaymentRuleEquivalent(pay.getTenderType());
+				if(!Util.isEmpty(paymentRule, true)){
+					if (tenderTypesAllowed != null
+							&& tenderTypesAllowed.contains(pay.getTenderType())) {
+						shouldUpdateBPBalance = true;
+						// Verificar la situación de crédito de la entidad comercial
+						result = manager.validateCurrentAccountStatus(getCtx(), org, bp, 
+								creditStatus, getTrxName());
+						// Si hubo error, obtengo el mensaje y tiro la excepción
+						if (result.isError()) {
+							throw new InsufficientCreditException(result.getMsg());
+						}
+						currentAccountSalesConditions.put(paymentRule, BigDecimal.ZERO);
+					}
+					// Convierto el monto del pago a partir de su moneda
+					convertedPayAmt = MConversionRate.convertBase(getCtx(), pay
+							.getAmount(), pay.getCurrencyId(), order.getDate(), 0, Env
+							.getAD_Client_ID(getCtx()), Env.getAD_Org_ID(getCtx()));
+					pays.put(paymentRule, convertedPayAmt);
+					// Si existe el payment rule significa que se agregó porque es
+					// paymentrule de cuenta corriente, entonces actualizar su monto
+					if(currentAccountSalesConditions.get(paymentRule) != null){
+						currentAccountSalesConditions.put(paymentRule, convertedPayAmt);
+					}
+				}
+			}		
+			// Verificar el crédito con la factura
+			result = manager.checkInvoicePaymentRulesBalance(getCtx(), bp, org,
+					pays, getTrxName());
+			// Si hubo error, obtengo el mensaje y tiro la excepción
+			if (result.isError()) {
+				throw new InsufficientCreditException(result.getMsg());
+			}
 		}
 	}
 
@@ -1123,7 +1124,7 @@ public class PoSOnline extends PoSConnectionState {
 		MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), getTrxName());
 		// Obtengo el manager actual
 		CurrentAccountManager manager = CurrentAccountManagerFactory
-				.getManager();
+				.getManager(this);
 		// Realizo las tareas adicionales necesarias
 		// Factura
 		if(invoice != null){
@@ -1188,7 +1189,7 @@ public class PoSOnline extends PoSConnectionState {
 		MOrg org = new MOrg(getCtx(), Env.getAD_Org_ID(getCtx()), getTrxName());
 		// Obtengo el manager actual
 		CurrentAccountManager manager = CurrentAccountManagerFactory
-				.getManager();
+				.getManager(this);
 		// Actualizo el crédito
 		CallResult result = new CallResult();
 		try{
@@ -1246,8 +1247,10 @@ public class PoSOnline extends PoSConnectionState {
 		mo.setInvoice_Adress(order.getBusinessPartner().getCustomerAddress());
 		mo.setNroIdentificCliente(order.getBusinessPartner().getCustomerIdentification());
 		
+		mo.setPaymentRule(order.getPaymentRule());
+		
 		debug("Guardando el Pedido (Encabezado, sin líneas aún)");
-		throwIfFalse(mo.save(), mo);
+		throwIfFalse(mo.save());
 		
 		// obtener el total lineas a generar 
 		int currentProduct = 0;
@@ -1310,7 +1313,7 @@ public class PoSOnline extends PoSConnectionState {
 	        manualLinesDiscounts.put(line.getID(), op.getLineManualDiscountID());
 		}
 		debug("Guardando el Pedido (Encabezado, con líneas ya creadas)");
-		throwIfFalse(mo.save(), mo);
+		throwIfFalse(mo.save());
 		
 		// Descuentos: leer las líneas del pedido para ya tenerlas cacheadas y setear 
 		// 				el shouldUpdateHeader a false en todas menos la última
@@ -1330,7 +1333,7 @@ public class PoSOnline extends PoSConnectionState {
 		debug("Aplicando descuentos al Pedido (DiscountCalculator)");
 		discountCalculator.applyDiscounts();
 		debug("Guardando el Pedido nuevamente (luego de aplicar descuentos)");
-		throwIfFalse(mo.save(), mo);
+		throwIfFalse(mo.save());
 		
 		// Cargar los impuestos adicionales en C_Order_Tax
 		createOXPOrderTaxes(mo, order);
@@ -1348,7 +1351,7 @@ public class PoSOnline extends PoSConnectionState {
 		debug("Completando el pedido");
 		throwIfFalse(mo.processIt(DocAction.ACTION_Complete), mo);
 		debug("Guardando el pedido (luego de completar)");
-		throwIfFalse(mo.save(), mo);
+		throwIfFalse(mo.save());
 		
 		// Actualizo la instancia del documento del discount calculator, ya que
 		// son instancias diferentes
@@ -1370,7 +1373,7 @@ public class PoSOnline extends PoSConnectionState {
 			orderTax.setC_Tax_ID(tax.getId());
 			orderTax.setTaxAmt(totalNet.multiply(tax.getTaxRateMultiplier()));
 			orderTax.setTaxBaseAmt(totalNet);
-			throwIfFalse(orderTax.save(), mo);
+			throwIfFalse(orderTax.save());
 		}
 	}
 	
@@ -1413,7 +1416,9 @@ public class PoSOnline extends PoSConnectionState {
 			inv.setC_POSPaymentMedium_Credit_ID(order.getCreditPOSPaymentMediumID());
 		}
 		
-		throwIfFalse(inv.save(), inv, InvoiceCreateException.class);
+		inv.setPaymentRule(order.getPaymentRule());
+		
+		throwIfFalse(inv.save(), InvoiceCreateException.class);
 		
 		MOrderLine[] moLines = morder.getLines(true);
 		int lineNumber = 10;
@@ -1493,7 +1498,7 @@ public class PoSOnline extends PoSConnectionState {
 		inv.setIgnoreFiscalPrint(true);
 		inv.skipAfterAndBeforeSave = true;
 		throwIfFalse(inv.processIt(DocAction.ACTION_Complete), inv, InvoiceCreateException.class);
-		throwIfFalse(inv.save(), inv, InvoiceCreateException.class);
+		throwIfFalse(inv.save(), InvoiceCreateException.class);
 		
 		order.setGeneratedInvoiceID(inv.getC_Invoice_ID());
 		morder.setTpvGeneratedInvoiceID(inv.getC_Invoice_ID());
@@ -1514,7 +1519,7 @@ public class PoSOnline extends PoSConnectionState {
 				invoiceTax.setC_Tax_ID(tax.getId());
 				invoiceTax.setTaxAmt(totalNet.multiply(tax.getTaxRateMultiplier()));
 				invoiceTax.setTaxBaseAmt(totalNet);
-				throwIfFalse(invoiceTax.save(), mi);
+				throwIfFalse(invoiceTax.save());
 			}
 		}
 	}
@@ -1606,7 +1611,7 @@ public class PoSOnline extends PoSConnectionState {
 				shipment.setC_DocType_ID(getPoSCOnfig().getInoutDocTypeID());
 			}
 			
-			throwIfFalse(shipment.save(), shipment);
+			throwIfFalse(shipment.save());
 			
 			//Ader: evitar que se reelean las MOrderLInes; esto evita 20 accesos
 			//y otros tantos potencialemten (al evitar acceer a la cache tradcionale
@@ -1747,10 +1752,10 @@ public class PoSOnline extends PoSConnectionState {
 	 * @throws PosException
 	 */
 	private MAllocationLine createOxpMAllocationLine(Integer debitInvoiceID, Payment p, MPayment pay, MCashLine cashLine, Integer creditInvoiceID) throws PosException {
-		return createOxpMAllocationLine(debitInvoiceID, p, pay, cashLine, creditInvoiceID, null);
+		return createOxpMAllocationLine(debitInvoiceID, p, pay, cashLine, creditInvoiceID, null, false);
 	}
 	
-	private MAllocationLine createOxpMAllocationLine(Integer debitInvoiceID, Payment p, MPayment pay, MCashLine cashLine, Integer creditInvoiceID, BigDecimal amount) throws PosException {
+	private MAllocationLine createOxpMAllocationLine(Integer debitInvoiceID, Payment p, MPayment pay, MCashLine cashLine, Integer creditInvoiceID, BigDecimal amount, boolean isReturn) throws PosException {
 		BigDecimal allocLineAmt = currencyConvert(amount == null ? p
 				.getAmount().abs() : amount.abs(), p.getCurrencyId(),
 				allocHdr.getC_Currency_ID());
@@ -1763,7 +1768,8 @@ public class PoSOnline extends PoSConnectionState {
 		}
 		
 		// Si el monto de la línea del allocation es distinto al total del payment, entonces va a writeoff
-		if((allocLineAmt.add(changeAmt)).compareTo(p.getConvertedAmount()) != 0){
+		if (!isReturn && p.getCurrencyId() != allocHdr.getC_Currency_ID()
+				&& (allocLineAmt.add(changeAmt)).compareTo(p.getConvertedAmount()) != 0) {
 			writeOffAmt = writeOffAmt.add(p.getConvertedAmount().subtract((allocLineAmt.add(changeAmt))));
 		}
 		
@@ -1822,7 +1828,7 @@ public class PoSOnline extends PoSConnectionState {
 			// que se realiza luego al finalizar las operaciones
 			p.setUpdateBPBalance(false);
 			throwIfFalse(p.processIt(DocAction.ACTION_Complete), p);
-			throwIfFalse(p.save(), p);
+			throwIfFalse(p.save());
 		}
 		// Ajustar el cambio a entregar al cliente dependiendo del remanente en
 		// efectivo existente y las devoluciones de efectivo de las NC
@@ -1885,9 +1891,9 @@ public class PoSOnline extends PoSConnectionState {
 		}
 		cashLine.setIgnoreInvoiceOpen(true);
 		
-		throwIfFalse(cashLine.save(), cashLine); // Necesario para que se asigne el C_CashLine_ID
+		throwIfFalse(cashLine.save()); // Necesario para que se asigne el C_CashLine_ID
 		throwIfFalse(cashLine.processIt(MCashLine.ACTION_Complete),cashLine);
-		throwIfFalse(cashLine.save(), cashLine);
+		throwIfFalse(cashLine.save());
 
 		// Agrego el cashline para llevar su registro
 		if(addToCashLineList){
@@ -1907,8 +1913,8 @@ public class PoSOnline extends PoSConnectionState {
 		
 		MPayment pay = createOxpMPayment(MPayment.TENDERTYPE_Check, getClientCurrencyID(), p.getAmount(), null);
 		String sucursal = VModelHelper.getSQLValueString(null, " select AccountNo from c_bankaccount where c_bankaccount.c_bankaccount_id = ? ", p.getBankAccountID() );
-		pay.setDateAcct(p.getDateTrx()); 
-		pay.setDateTrx(p.getDateAcct()); 
+		pay.setDateAcct(invoice.getDateAcct()); 
+		pay.setDateTrx(p.getDateTrx()); 
 		pay.setDateEmissionCheck(p.getEmissionDate());
 		
 		pay.setC_BankAccount_ID(p.getBankAccountID());
@@ -1921,7 +1927,7 @@ public class PoSOnline extends PoSConnectionState {
 		pay.setDescription(p.getDescription());
 		pay.setC_POSPaymentMedium_ID(p.getPaymentMedium().getId());
 		
-		throwIfFalse(pay.save(), pay);
+		throwIfFalse(pay.save());
 		mpayments.put(pay.getC_Payment_ID(), pay);
 		MAllocationLine allocLine = createOxpMAllocationLine(p, pay);
 		
@@ -1960,7 +1966,7 @@ public class PoSOnline extends PoSConnectionState {
 		pay.setPosnet(p.getPosnet());
 		pay.setC_POSPaymentMedium_ID(p.getPaymentMedium().getId());
 		
-		throwIfFalse(pay.save(), pay);
+		throwIfFalse(pay.save());
 		mpayments.put(pay.getC_Payment_ID(), pay);
 		createOxpMAllocationLine(p, pay);
 		
@@ -1981,7 +1987,7 @@ public class PoSOnline extends PoSConnectionState {
 		creditCardRetirementInvoice.setNombreCli(order.getBusinessPartner().getCustomerName());
 		creditCardRetirementInvoice.setInvoice_Adress(order.getBusinessPartner().getCustomerAddress());
 		creditCardRetirementInvoice.setNroIdentificCliente(order.getBusinessPartner().getCustomerIdentification());
-		creditCardRetirementInvoice.setPaymentRule(MInvoice.PAYMENTRULE_CreditCard);
+		creditCardRetirementInvoice.setPaymentRule(invoice.getPaymentRule());
 		// Tipo de documento de retiro de efectivo de tarjeta de crédito de la
 		// config del tpv
 		creditCardRetirementInvoice.setC_DocTypeTarget_ID(getPoSCOnfig()
@@ -1995,8 +2001,7 @@ public class PoSOnline extends PoSConnectionState {
 		creditCardRetirementInvoice.setDocAction(MInvoice.DOCACTION_Complete);
 		creditCardRetirementInvoice.setDocStatus(MInvoice.DOCSTATUS_Drafted);
 		// Guardo la factura
-		throwIfFalse(creditCardRetirementInvoice.save(),
-				creditCardRetirementInvoice, InvoiceCreateException.class);
+		throwIfFalse(creditCardRetirementInvoice.save(), InvoiceCreateException.class);
 		// Crear la línea con un artículo en particular
 		MInvoiceLine creditCardRetirementInvoiceLine = new MInvoiceLine(creditCardRetirementInvoice);
 		
@@ -2028,7 +2033,7 @@ public class PoSOnline extends PoSConnectionState {
 				creditCardRetirementInvoice, InvoiceCreateException.class);
 		// Creo la línea del allocation
 		createOxpMAllocationLine(creditCardRetirementInvoice.getID(), p, pay,
-				null, null, p.getChangeAmt());
+				null, null, p.getChangeAmt(), true);
 		
 		// Crear la línea del efectivo para el retiro de la caja
 		CashPayment cashPayment = new CashPayment(p.getChangeAmt().negate());
@@ -2045,9 +2050,9 @@ public class PoSOnline extends PoSConnectionState {
 				false);
 		// Asocio la línea de caja con el pago de tarjeta para futuras consultas
 		cashLine.setC_Payment_ID(pay.getID());
-		throwIfFalse(cashLine.save(), cashLine);
+		throwIfFalse(cashLine.save());
 		// Agregar al allocation de manera unidireccional
-		createOxpMAllocationLine(0, cashPayment, null, cashLine, null);
+		createOxpMAllocationLine(0, cashPayment, null, cashLine, null, null, true);
 	}
 	
 	private void createOxpCreditPayment(CreditPayment p) throws PosException {
@@ -2055,6 +2060,22 @@ public class PoSOnline extends PoSConnectionState {
 	}
 
 	private void createOxpCreditNotePayment(CreditNotePayment p) throws PosException {
+		// Validar que la NC tenga las mismas formas de pago que la factura
+		String creditNotePaymentRule = getPaymentRule(p.getInvoiceID());
+		if(!invoice.getPaymentRule().equals(creditNotePaymentRule)){
+			throw new PosException(Msg.getMsg(getCtx(), "NotAllowedAllocateCreditDiffPaymentRule",
+					new Object[] {
+							MRefList.getListName(getCtx(), MInvoice.PAYMENTRULE_AD_Reference_ID,
+									creditNotePaymentRule),
+							MRefList.getListName(getCtx(), MInvoice.PAYMENTRULE_AD_Reference_ID,
+									invoice.getPaymentRule()) }));
+		}
+		// Si la factura finaliza con forma de pago A Crédito, entonces las NC
+		// deben ser de la misma EC
+		if(invoice.getC_BPartner_ID() != getBPartnerID(p.getInvoiceID())){
+			throw new PosException(Msg.getMsg(getCtx(), "BPCreditNoteMustBeSameInvoiceCC", new Object[] {
+					MRefList.getListName(getCtx(), MInvoice.PAYMENTRULE_AD_Reference_ID, invoice.getPaymentRule()) }));
+		}
 		// No se debe crear ningún documento de pago ya que la nota de crédito ya
 		// existe en el sistema. Solo se hace la imputación contra la factura del pedido
 		createOxpMAllocationLine(p, p.getInvoiceID());
@@ -2068,7 +2089,7 @@ public class PoSOnline extends PoSConnectionState {
 			cashPayment.setAmount(p.getChangeAmt().negate());
 			cashPayment.setDescription(Msg.translate(getCtx(), "CNCashReturning"));
 			MCashLine cashLine = createOxpCashPayment(p.getInvoiceID(), cashPayment, false, false);
-			createOxpMAllocationLine(p.getInvoiceID(), cashPayment, null, cashLine, null);
+			createOxpMAllocationLine(p.getInvoiceID(), cashPayment, null, cashLine, null, null, true);
 		}
 	}
 
@@ -2076,12 +2097,12 @@ public class PoSOnline extends PoSConnectionState {
 		MPayment pay = createOxpMPayment(MPayment.TENDERTYPE_DirectDeposit, p.getCurrencyId(), p.getAmount(), null);
 		
 		pay.setDateTrx(p.getTransferDate());
-		pay.setDateAcct(p.getTransferDate());
+		pay.setDateAcct(invoice.getDateAcct());
 		pay.setC_BankAccount_ID(p.getBankAccountID());
 		pay.setCheckNo(p.getTransferNumber());
 		pay.setDescription(p.getDescription());
 		pay.setC_POSPaymentMedium_ID(p.getPaymentMedium().getId());
-		throwIfFalse(pay.save(), pay);
+		throwIfFalse(pay.save());
 		mpayments.put(pay.getC_Payment_ID(), pay);
 		createOxpMAllocationLine(p, pay);
 	}
@@ -2091,6 +2112,10 @@ public class PoSOnline extends PoSConnectionState {
 		MAllocationHdr hdr = new MAllocationHdr(ctx, 0, getTrxName());
 		
 		hdr.setAllocationType(MAllocationHdr.ALLOCATIONTYPE_SalesTransaction);
+		
+		if(getAllocationDocType() != null){
+			hdr.setC_DocType_ID(getAllocationDocType().getID());
+		}
 
 		BigDecimal approvalAmt = sumaPagos;
 		
@@ -2107,7 +2132,7 @@ public class PoSOnline extends PoSConnectionState {
 		hdr.setDescription("TPV: ");
 		hdr.setIsManual(false);
 		
-		throwIfFalse(hdr.save(), hdr);
+		throwIfFalse(hdr.save());
 		
 		return hdr;
 	}
@@ -2128,7 +2153,7 @@ public class PoSOnline extends PoSConnectionState {
 		
 		if (allocLines.size() > 0) {
 			throwIfFalse(allocHdr.processIt(DocAction.ACTION_Complete), allocHdr);
-			throwIfFalse(allocHdr.save(), allocHdr);
+			throwIfFalse(allocHdr.save());
 		} else if (creditPayments.size() > 0) {
 			/*
 			 * Si el medio de pago es crédito no se crea ningún elemento de pago ya 
@@ -2138,7 +2163,7 @@ public class PoSOnline extends PoSConnectionState {
 			 * 
 			 */
 			throwIfFalse(allocHdr.processIt(DocAction.ACTION_Void), allocHdr);
-			throwIfFalse(allocHdr.save(), allocHdr);
+			throwIfFalse(allocHdr.save());
 		} else {
 			throw new PosException("doCompleteAllocation: allocLines.size() == 0 && creditPayments.size() == 0");
 		}
@@ -2186,26 +2211,25 @@ public class PoSOnline extends PoSConnectionState {
 			MCategoriaIva catIva = new MCategoriaIva(getCtx(), mBPartner.getC_Categoria_Iva_ID(), null);
 			codigoIVA = catIva.getCodigo();
 			isPercepcionLiable = catIva.isPercepcionLiable();
-			if(!Util.isEmpty(catIva.getC_Tax_ID(), true)){
-				MTax mTax = MTax.get(getCtx(), catIva.getC_Tax_ID(), null);
-				rBPartner.setTax(new Tax(mTax.getID(), mTax.getRate(), mTax
-						.isPercepcion()));
+			MTax mTax = CalloutInvoiceExt.getTax(getCtx(), true, mBPartner.getID(), getTrxName());
+			if(mTax != null){
+				rBPartner.setTax(new Tax(mTax.getID(), mTax.getRate(), mTax.isPercepcion()));
 			}
 		}
 		rBPartner.setIVACategory(codigoIVA);
 		rBPartner.setPercepcionLiable(isPercepcionLiable);
 		rBPartner.setAutomaticCreditNote(mBPartner.isAutomaticCreditNotes());
 		
+		// Los datos pueden modificarse si la EC es CF y es distinta a la que está en la config
 		rBPartner.setCustomerName(mBPartner.getName());
-		// Si no es la misma EC que la por defecto en la config, se cargan los datos
-		// de la EC como datos del comprador (DNI y Dirección).
-		if (bPartnerID != getPoSCOnfig().getBPartnerCashTrxID()) {
-			rBPartner.setCustomerAddress(getBPartnerLocations(bPartnerID).get(0).toString());
-			rBPartner.setCustomerIdentification(mBPartner.getTaxID());
-			// Indica que los datos del comprador se deben mantener sincronizados
-			// con los datos de la EC.
-			rBPartner.setCustomerSynchronized(true);
-		}
+		rBPartner.setCustomerIdentification(mBPartner.getTaxID());
+		rBPartner.setCustomerAddress(getBPartnerLocations(bPartnerID).get(0).toString());
+		
+		// Indica que los datos del comprador se deben mantener sincronizados
+		// con los datos de la EC.
+		rBPartner.setCustomerSynchronized(bPartnerID != getPoSCOnfig().getBPartnerCashTrxID()
+				&& (codigoIVA <= 0 || (codigoIVA > 0 && MCategoriaIva.CONSUMIDOR_FINAL != codigoIVA)));
+		
 		return rBPartner;
 	}
 
@@ -3228,12 +3252,15 @@ public class PoSOnline extends PoSConnectionState {
 			// la entidad financiera y se cargan los planes de tarjeta disponibles
 			// para la misma
 			if (paymentMedium.isCreditCard()) {
-				paymentMedium
-						.setEntidadFinanciera(getEntidadFinanciera(mposPaymentMedium
-								.getM_EntidadFinanciera_ID()));
-				paymentMedium
-						.setCreditCardPlans(getCreditCardPlans(paymentMedium
-								.getEntidadFinanciera().getId()));
+				EntidadFinanciera ef = getEntidadFinanciera(mposPaymentMedium.getM_EntidadFinanciera_ID());
+				if(ef != null){
+					paymentMedium.setEntidadFinanciera(ef);
+					List<EntidadFinancieraPlan> planes = getCreditCardPlans(paymentMedium
+							.getEntidadFinanciera().getId());
+					if(planes != null){
+						paymentMedium.setCreditCardPlans(planes);
+					}
+				}				
 			}
 			
 			// Si es un medio de pago de tipo Cheque se guarda el plazo de cobro
@@ -3617,30 +3644,10 @@ public class PoSOnline extends PoSConnectionState {
 	@Override
 	public String getNextInvoiceDocumentNo() {
 		String documentNo = null;
-		Integer docTypeID = 0;
-		if(getShouldCreateInvoice()){
-			// Si locale ar está activo, entonces hay que obtenerlo desde la
-			// conjunción de la categoría de IVA de la entidad comercial y de la
-			// Compañía 
-			if(LOCAL_AR_ACTIVE){
-				MDocType docType = null;
-				try{
-					docType = getLocaleArDocType();
-					docTypeID = docType.getID();
-				} catch(PosException pose){
-					log.severe(Msg.getMsg(getCtx(), pose.getMessage()));
-				}
-			}
-			// Si no es L_AR, obtenerlo desde el tipo de doc de factura
-			// configurado dentro de la config del TPV
-			else{
-				docTypeID = getPoSCOnfig().getInvoiceDocTypeID();
-			}
-			
-			// Se obtiene el próximo nro de doc, si es que tengo tipo de doc
-			if(!Util.isEmpty(docTypeID, true)){
-				documentNo = CalloutInvoiceExt.getNextDocumentNo(getCtx(), docTypeID, getTrxName());
-			}
+		Integer docTypeID = getActualDocTypeID();
+		// Se obtiene el próximo nro de doc, si es que tengo tipo de doc
+		if(!Util.isEmpty(docTypeID, true)){
+			documentNo = CalloutInvoiceExt.getNextDocumentNo(getCtx(), docTypeID, getTrxName());
 		}
 		return documentNo;
 	}
@@ -3670,7 +3677,7 @@ public class PoSOnline extends PoSConnectionState {
 				MDocType.DOCTYPE_CustomerInvoice, mLetraComprobante.getLetra(), posNumber,
 				getTrxName());
 	}
-
+	
 	/**
 	 * Obtener la letra del comprobante para esta transacción de la localización
 	 * argentina
@@ -3681,7 +3688,7 @@ public class PoSOnline extends PoSConnectionState {
 	 *             en caso de error en la obtención
 	 */
 	public MLetraComprobante getLocaleArLetraComprobante() throws PosException{
-		Integer categoriaIVAclient = CalloutInvoiceExt.darCategoriaIvaClient();
+		Integer categoriaIVAclient = CalloutInvoiceExt.darCategoriaIvaClient(Env.getAD_Org_ID(ctx));
 		Integer categoriaIVACustomer = partner == null ? 0 : partner
 				.getC_Categoria_Iva_ID();
 		
@@ -3911,5 +3918,57 @@ public class PoSOnline extends PoSConnectionState {
 			dolarCurrencyID = MCurrency.get(getCtx(), "USD").getID();
 		}
 		return dolarCurrencyID;
+	}
+
+	protected MDocType getAllocationDocType() {
+		return allocationDocType;
+	}
+
+	protected void setAllocationDocType(MDocType allocationDocType) {
+		this.allocationDocType = allocationDocType;
+	}
+	
+	protected String getPaymentRule(Integer invoiceID){
+		return DB.getSQLValueString(trxName, "SELECT paymentrule FROM c_invoice WHERE c_invoice_id = ?", invoiceID);
+	}
+	
+	protected int getBPartnerID(Integer invoiceID){
+		return DB.getSQLValue(trxName, "SELECT c_bpartner_id FROM c_invoice WHERE c_invoice_id = ?", invoiceID);
+	}
+
+	@Override
+	public boolean isSOTrx() {
+		return true;
+	}
+
+	@Override
+	public boolean isSkipCurrentAccount() {
+		MDocType dt = MDocType.get(getCtx(), getActualDocTypeID());
+		return dt != null && dt.isSkipCurrentAccounts();
+	}
+
+	@Override
+	public Integer getActualDocTypeID() {
+		Integer docTypeID = 0;
+		if(getShouldCreateInvoice()){
+			// Si locale ar está activo, entonces hay que obtenerlo desde la
+			// conjunción de la categoría de IVA de la entidad comercial y de la
+			// Compañía 
+			if(LOCAL_AR_ACTIVE){
+				MDocType docType = null;
+				try{
+					docType = getLocaleArDocType();
+					docTypeID = docType.getID();
+				} catch(PosException pose){
+					log.severe(Msg.getMsg(getCtx(), pose.getMessage()));
+				}
+			}
+			// Si no es L_AR, obtenerlo desde el tipo de doc de factura
+			// configurado dentro de la config del TPV
+			else{
+				docTypeID = getPoSCOnfig().getInvoiceDocTypeID();
+			}	
+		}
+		return docTypeID;
 	}
 }

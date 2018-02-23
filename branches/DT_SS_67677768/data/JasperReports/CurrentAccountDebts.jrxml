@@ -32,6 +32,8 @@
 	<parameter name="BP_GROUP_NAME" isForPrompting="false" class="java.lang.String"/>
 	<parameter name="CutDate" isForPrompting="false" class="java.sql.Timestamp"/>
 	<parameter name="OnlyDebts" isForPrompting="false" class="java.lang.String"/>
+	<parameter name="Condition" isForPrompting="false" class="java.lang.String"/>
+	<parameter name="ConditionName" isForPrompting="false" class="java.lang.String"/>
 	<queryString><![CDATA[select c_bpartner_id,
 	bpartner_value,
 	bpartner_name,
@@ -52,9 +54,10 @@ from (select i.ad_org_id,
 		and bp.socreditstatus <> 'X'
 		and ($P{C_BP_Group_ID} is null or bp.c_bp_group_id = $P{C_BP_Group_ID})
 		and ($P{AD_Org_ID} is null or $P{AD_Org_ID} = 0 or i.ad_org_id = $P{AD_Org_ID})
-		and i.docstatus IN ('CO','CL')
+		and i.docstatus IN ('CO','CL','WC')
 		and i.issotrx = 'Y' 
 		and docbasetype = 'ARI' 
+		and ($P{Condition} = 'A' or i.paymentrule = $P{Condition})
 		and invoiceopen(i.c_invoice_id, 0) > 0) as i
 where (CASE WHEN $P{OnlyDebts} = 'Y' THEN dueamt + todueamt <> 0 ELSE 1=1 END)
 group by c_bpartner_id,
@@ -85,7 +88,7 @@ order by bpartner_name]]></queryString>
 			</band>
 		</background>
 		<title>
-			<band height="95"  isSplitAllowed="true" >
+			<band height="111"  isSplitAllowed="true" >
 				<staticText>
 					<reportElement
 						x="430"
@@ -246,7 +249,7 @@ order by bpartner_name]]></queryString>
 				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
 					<reportElement
 						x="0"
-						y="78"
+						y="94"
 						width="530"
 						height="16"
 						key="textField"
@@ -258,6 +261,34 @@ order by bpartner_name]]></queryString>
 						<font size="9"/>
 					</textElement>
 				<textFieldExpression   class="java.lang.String"><![CDATA["Mostrar solo con deuda"]]></textFieldExpression>
+				</textField>
+				<staticText>
+					<reportElement
+						x="0"
+						y="78"
+						width="90"
+						height="16"
+						key="staticText-13"
+						isRemoveLineWhenBlank="true"/>
+					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
+					<textElement>
+						<font size="9"/>
+					</textElement>
+				<text><![CDATA[Condición:]]></text>
+				</staticText>
+				<textField isStretchWithOverflow="false" isBlankWhenNull="false" evaluationTime="Now" hyperlinkType="None"  hyperlinkTarget="Self" >
+					<reportElement
+						x="90"
+						y="78"
+						width="440"
+						height="16"
+						key="textField-6"
+						isRemoveLineWhenBlank="true"/>
+					<box topBorder="None" topBorderColor="#000000" leftBorder="None" leftBorderColor="#000000" rightBorder="None" rightBorderColor="#000000" bottomBorder="None" bottomBorderColor="#000000"/>
+					<textElement>
+						<font size="9"/>
+					</textElement>
+				<textFieldExpression   class="java.lang.String"><![CDATA[$P{ConditionName}]]></textFieldExpression>
 				</textField>
 			</band>
 		</title>

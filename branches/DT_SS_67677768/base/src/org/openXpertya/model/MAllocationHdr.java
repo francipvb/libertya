@@ -34,6 +34,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.logging.Level;
 
+import org.openXpertya.cc.CurrentAccountDocument;
 import org.openXpertya.cc.CurrentAccountManager;
 import org.openXpertya.cc.CurrentAccountManagerFactory;
 import org.openXpertya.process.DocAction;
@@ -53,7 +54,7 @@ import org.openXpertya.util.Util;
  * @author     Equipo de Desarrollo de openXpertya    
  */
 
-public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
+public class MAllocationHdr extends X_C_AllocationHdr implements DocAction, CurrentAccountDocument {
 
 	// -------------------------------------------------------------------------------
 	// Matías Cap - Disytel - 2010/02 
@@ -124,6 +125,14 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
 	
 	/** Config de caja diaria de anulación desde el proceso de anulación */
 	private String voidPOSJournalConfig = null;
+	
+	/** ContraAllocation */
+	public static String REVERSE_INDICATOR = "^";
+	 
+	/** ContraAllocation: Esta HashMap almacena para cada ID de Payment, el ID del Payment anulado */
+	private	Map<Integer, Integer> paysVoid = new HashMap<Integer, Integer>();
+
+	
 	
 	/** Cuenta cuántos allocation hay creados con este pago
 	 * 
@@ -262,6 +271,48 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
         return retValue;
     }    // getOfInvoice
 
+    /**
+	 * Obtiene el neto del allocation parámetro
+	 * 
+	 * @param ctx
+	 *            contexto
+	 * @param allocationHdr
+	 *            allocation
+	 * @param trxName
+	 *            nombre de trx
+	 * @return neto del allocation, total si es OPA o RCA
+	 * @throws SQLException
+	 */
+    public static BigDecimal getPayNetAmt(Properties ctx, MAllocationHdr allocationHdr, String trxName) throws SQLException {
+		BigDecimal netTotal = allocationHdr.getGrandTotal();
+		// Si es adelantado, entonces es el monto total del allocation
+		if (!(MAllocationHdr.ALLOCATIONTYPE_AdvancedCustomerReceipt.equals(allocationHdr.getAllocationType())
+				|| MAllocationHdr.ALLOCATIONTYPE_AdvancedPaymentOrder.equals(allocationHdr.getAllocationType()))) {
+			String sqlAllocationLine = " SELECT c_allocationline_id, al.c_invoice_id "
+					+ " FROM c_allocationline al "
+					+ " INNER JOIN c_invoice i ON (i.c_invoice_id = al.c_invoice_id) "
+					+ " WHERE al.c_allocationhdr_id= " + allocationHdr.getID();
+			netTotal = BigDecimal.ZERO;
+			PreparedStatement pstmtAllocationLine = DB
+					.prepareStatement(sqlAllocationLine);
+			ResultSet rsAllocationLine = pstmtAllocationLine.executeQuery();
+			BigDecimal totalLines, grandTotal;
+			while (rsAllocationLine.next()) {
+				MAllocationLine allocationline = new MAllocationLine(ctx,
+						rsAllocationLine.getInt("c_allocationline_id"),
+						trxName);
+				MInvoice invoiceOrig = new MInvoice(ctx,
+						rsAllocationLine.getInt("c_invoice_id"), trxName);
+				totalLines = invoiceOrig.getTotalLinesNet();
+				grandTotal = invoiceOrig.getGrandTotal();
+				netTotal = netTotal.add(totalLines.multiply(
+						allocationline.getAmount()).divide(grandTotal, 2,
+						BigDecimal.ROUND_HALF_EVEN));
+			}
+		}
+		return netTotal;
+	}
+    
     /** Descripción de Campos */
 
     private static CLogger s_log = CLogger.getCLogger( MAllocationHdr.class );
@@ -356,6 +407,10 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
      */
 
     public MAllocationLine[] getLines( boolean requery ) {
+        return getLines(requery, null);
+    }    // getLines
+
+    public MAllocationLine[] getLines( boolean requery, String orderBy ) {
         if( (m_lines != null) &&!requery ) {
             return m_lines;
         }
@@ -363,6 +418,9 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
         //
 
         String sql = "SELECT * FROM C_AllocationLine WHERE C_AllocationHdr_ID=?";
+        if(!Util.isEmpty(orderBy, true)){
+        	sql += " ORDER BY "+orderBy;
+        }
         ArrayList         list  = new ArrayList();
         PreparedStatement pstmt = null;
 
@@ -403,7 +461,7 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
 
         return m_lines;
     }    // getLines
-
+    
     /**
      * Descripción de Método
      *
@@ -630,7 +688,7 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
         	}
         }
         
-        getLines( false );
+        getLines( true );
 
         if( m_lines.length == 0 ) {
             m_processMsg = "@NoLines@";
@@ -782,7 +840,7 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
 		}
         
 		// Caja Diaria. Intenta registrar el documento
-		if (getC_POSJournal_ID() == 0 && !MPOSJournal.registerDocument(this)) {
+		if (getC_POSJournal_ID() == 0 && !MPOSJournal.registerDocument(this, validatePOSJournal(), isSOTrx())) {
 			m_processMsg = MPOSJournal.DOCUMENT_COMPLETE_ERROR_MSG;
 			return STATUS_Invalid;
 		}
@@ -803,7 +861,7 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
 
         return false;
     }    // postIt
-
+    
     /**
      * Descripción de Método
      *
@@ -819,16 +877,26 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
         // (el ProcessMsg lo setea el método en caso de error).
         if (!validateOwnerCashLine()) {
 			return false;
-        }        
+        }
+        
+        // No se puede anular una asignación si es parte de una lista de banco
+        if(!Util.isEmpty(getC_BankList_ID(), true)){
+        	MBankList bl = new MBankList(getCtx(), getC_BankList_ID(), get_TrxName());
+        	setProcessMsg(Msg.getMsg(getCtx(), "OPInBankList", new Object[]{bl.getDocumentNo()}));
+        	return false;
+        }
+        
         setAditionalWorks(new HashMap<PO, Object>());
         
         try {
 	        // Acción específica de Allocations: Anular Pagos o Anular Pagos y Retenciones
 	        // Se deben anular los pagos involucrados en las líneas.
 	        if (ALLOCATIONACTION_VoidPayments.equals(getAllocationAction())
-	        		|| ALLOCATIONACTION_VoidPaymentsRetentions.equals(getAllocationAction())) 
+	        		|| ALLOCATIONACTION_VoidPaymentsRetentions.equals(getAllocationAction())) {
 	        	// Anulación de pagos
 	        	voidPayments();
+	        	voidDiffCambio();
+	        }
 	        
 		    // Acción específica de Allocations: Anular Pagos y Retenciones
 	        // Se deben anular las retenciones asociadas a esta asignación.
@@ -847,9 +915,73 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
 
         setDocAction( DOCACTION_None );
 
+        /** Logica para ContraAllocations */
+        if (CounterAllocationManager.isCounterAllocationActive(getCtx())) {
+        	retValue = retValue && createReverseAllocation();
+        }
+        
         return retValue;
     }    // voidIt
 
+    public boolean createReverseAllocation() {
+        log.info( toString());
+        MAllocationHdr reversal = new MAllocationHdr( getCtx(),0,get_TrxName());
+
+        copyValues( this,reversal );
+        reversal.setClientOrg( this );
+        reversal.setDocumentNo( getDocumentNo() + REVERSE_INDICATOR );    // indicate reversals
+        reversal.setDocStatus( DOCSTATUS_Drafted );
+        reversal.setDocAction( DOCACTION_Complete );
+        reversal.setGrandTotal(getGrandTotal().negate());
+        reversal.setRetencion_Amt(getRetencion_Amt().negate());
+        reversal.setIsApproved( true );
+        reversal.setProcessing( false );
+        reversal.setProcessed( true );
+        reversal.setPosted( false );
+        reversal.setDescription( getDescription());
+        reversal.addDescription( "{->" + getDocumentNo() + ")" );        
+        // El contradocumento tiene que contener la fecha actual y NO la del documento original
+        reversal.setDateAcct(Env.getDate());
+        reversal.setDateTrx(Env.getDate());       
+        reversal.save( get_TrxName());
+        // Se asigna la misma caja diaria del documento a anular
+        reversal.setVoidPOSJournalID(getVoidPOSJournalID());
+		reversal.setVoidPOSJournalMustBeOpen(isVoidPOSJournalMustBeOpen());
+		reversal.setC_POSJournal_ID(getC_POSJournal_ID());
+        reversal.closeIt();
+        reversal.setDocStatus( DOCSTATUS_Voided );
+        reversal.setDocAction( DOCACTION_None );
+        reversal.save( get_TrxName());
+
+        getLines( true );
+        for( int i = 0;i < m_lines.length;i++ ) {
+            MAllocationLine line = m_lines[ i ];
+            // Create Reversal
+            MAllocationLine reversalLine = new MAllocationLine( getCtx(),0,get_TrxName());
+            copyValues( line,reversalLine );
+            reversalLine.setC_AllocationHdr_ID(reversal.getC_AllocationHdr_ID());
+            reversalLine.setAmount(line.getAmount().negate());
+            if (reversalLine.getC_Payment_ID() != 0){
+            	reversalLine.setC_Payment_ID(this.getPaysVoid().get(reversalLine.getC_Payment_ID()));	
+            }
+            if (!reversalLine.save( get_TrxName())) {
+				m_processMsg = "@AllocationLineSaveError@: " + CLogger.retrieveErrorAsString();
+				return false;
+			}
+        }
+        return true;
+    }    // reverseCorrectionIt
+    
+    public void addDescription( String description ) {
+        String desc = getDescription();
+
+        if( desc == null ) {
+            setDescription( description );
+        } else {
+            setDescription( desc + " | " + description );
+        }
+    }    // addDescription
+    
     /**
      * Descripción de Método
      *
@@ -1008,21 +1140,36 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
         // Can we delete posting
 
         if( !MPeriod.isOpen( getCtx(),getDateTrx(),MPeriodControl.DOCBASETYPE_PaymentAllocation )) {
-            throw new IllegalStateException( "@PeriodClosed@" );
+            setProcessMsg("@PeriodClosed@");
+            return false;
         }
 
+        // No se puede anular una asignación si es parte de una lista de banco
+        if(!Util.isEmpty(getC_BankList_ID(), true)){
+        	MBankList bl = new MBankList(getCtx(), getC_BankList_ID(), get_TrxName());
+        	setProcessMsg(Msg.getMsg(getCtx(), "OPInBankList", new Object[]{bl.getDocumentNo()}));
+        	return false;
+        }
+        
         // Set Inactive
 
-        setIsActive( false );
-        setDocumentNo( getDocumentNo() + "^" );
+        // ContraAllocations
+        if (!CounterAllocationManager.isCounterAllocationActive(getCtx())) {
+        	setIsActive( false );
+        	setDocumentNo( getDocumentNo() + "^" );
+        }
         setDocStatus( DOCSTATUS_Reversed );    // for direct calls
 
-        if( !save() || isActive()) {
+        // ContraAllocations
+        if( !save() || (isActive() && !CounterAllocationManager.isCounterAllocationActive(getCtx())) ) {
             throw new IllegalStateException( "Cannot de-activate allocation" );
         }
 
         // Delete Posting
-        deletePosting();
+        // ContraAllocations
+        if (!CounterAllocationManager.isCounterAllocationActive(getCtx())) {
+        	deletePosting();
+        }
 
         // Unlink
 
@@ -1031,7 +1178,10 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
         for( int i = 0;i < m_lines.length;i++ ) {
             MAllocationLine line = m_lines[ i ];
 
-            line.setIsActive( false );
+            // ContraAllocations
+            if (!CounterAllocationManager.isCounterAllocationActive(getCtx())) {
+            	line.setIsActive( false );
+            }
             line.save( get_TrxName());
 
             if( !line.processIt( true )) {
@@ -1109,6 +1259,9 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
 							.equals(X_AD_ClientInfo.VOIDINGINVOICEPAYMENTSPOSJOURNALCONFIG_OriginalPayment) ? getC_POSJournal_ID()
 					: getVoidPOSJournalID());
     		paym.setVoidPOSJournalMustBeOpen(isVoidPOSJournalMustBeOpen());
+    		if (CounterAllocationManager.isCounterAllocationActive(getCtx())) {
+    			paym.setMAllocationHdrVoid(true);    			
+    		}
     		if (!paym.processIt( DocAction.ACTION_Void ))
     			errorMsg = paym.getProcessMsg();
     		if (!paym.save())
@@ -1118,6 +1271,11 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
     		// Registro de los trabajos adicionales al anular el payment
     		if(isUpdateBPBalance()){
     			getAditionalWorks().putAll(paym.getAditionalWorkResult());
+    		}
+    		
+    		// ContraAllocations
+    		if (CounterAllocationManager.isCounterAllocationActive(getCtx())) {
+    			this.getPaysVoid().put(paym.getC_Payment_ID(), paym.getPayVoidID());
     		}
 		}
         
@@ -1133,7 +1291,8 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
         MAllocationLine[] lines = getLines(false);
         Set<Integer> cashLineIDs = new HashSet<Integer>();
         List<MCashLine> cashLines = new ArrayList<MCashLine>();
-
+        Map<Integer, MCash> reverseCashes = new HashMap<Integer, MCash>();
+        
         // Si el libro de caja al que pertenece la línea está procesado
         // no es posible anular.
         for (int i = 0; i < lines.length; i++ ) {
@@ -1151,12 +1310,40 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
         		cashLine = new MCashLine(getCtx(), C_CashLine_ID, get_TrxName());
         		cashLines.add(cashLine);
         		String cashStatus = cashLine.getCash().getDocStatus();
-        		// No es posible anular líneas de caja cuyo libro se encuentre
-        		// procesado.
+        		
+				// Si el libro de caja esta procesado, entonces determino si hay
+				// un libro de caja con las mismas condiciones para la fecha
+				// actual. Las condiciones son:
+        		// Organización y Config de Libro de Caja 
         		if (STATUS_Completed.equals(cashStatus)
         				|| STATUS_Closed.equals(cashStatus)
-        				|| cashLine.getCash().isProcessed()) 
-        			throw new Exception("@CashProcessedError@");
+        				|| cashLine.getCash().isProcessed()){
+					// Primero verifico si ya encontré un libro de caja
+					// correspondiente a la caja de la línea actual
+					MCash reverseCash = reverseCashes.get(cashLine.getCash().getID());
+					// Si no, busco una para las condiciones necesarias
+					if(reverseCash == null){
+						reverseCash = MCash.get(getCtx(), cashLine.getCash().getAD_Org_ID(),
+							cashLine.getCash().getC_CashBook_ID(), Env.getDate(), get_TrxName());
+					}
+					// Si encontramos una, la asociamos como libro de caja para la anulación 
+					if(reverseCash != null){
+						cashLine.setReverseCashID(reverseCash.getID());
+						reverseCashes.put(cashLine.getCash().getID(), reverseCash);
+					}
+					// Si no encontramos ninguna, entonces error
+					else{
+						String msg = "@NoReverseCashForCashLine@: @Line@ # "+cashLine.getLine()+" ($ "
+						+ cashLine.getAmount() + "). @C_Cash_ID@ "+cashLine.getCash().getName()+"\n";
+						msg += "@ConditionsNeeded@ \n";
+						MOrg org = MOrg.get(getCtx(), cashLine.getAD_Org_ID());
+						msg += "- @AD_Org_ID@: "+org.getName()+"\n";
+						MCashBook cb = MCashBook.get(getCtx(), cashLine.getCash().getC_CashBook_ID());
+						msg += "- @C_CashBook_ID@: "+cb.getName()+"\n";
+						
+						throw new Exception(msg);
+					}
+        		}
         	}
         }
         
@@ -1238,10 +1425,49 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
 			errorMsg = CLogger.retrieveErrorAsString();
 		if (errorMsg != null) 
 			throw new Exception("@VoidRetentionError@ (" + invoice.getDocumentNo() + "): " + errorMsg);
-		// Registro de los trabajos adicionales al anular el payment
-		if(isUpdateBPBalance()){
-			getAditionalWorks().putAll(invoice.getAditionalWorkResult());
-		}
+    }
+    
+    private void voidDiffCambio() throws Exception {
+    	// Se obtienen las ND o NC por diferencia de cambio
+    	String sql = 
+    			"SELECT distinct i.c_invoice_id  " +
+    			"FROM  " +
+    			"	c_allocationline al  " +
+    			"	INNER JOIN c_invoice i ON (al.c_invoice_id = i.c_invoice_id OR al.c_invoice_credit_id = i.c_invoice_id)  " +
+    			"	INNER JOIN c_invoiceline il ON il.c_invoice_id = i.c_invoice_id  " +
+    			"   INNER JOIN m_product p ON il.m_product_id = p.m_product_id " +
+    			"WHERE  " + 
+    			"	al.c_allocationhdr_id = ?  " +
+    			"	AND p.value IN (?, ?, ?)  ";
+
+        PreparedStatement pstmt = null; 
+        ResultSet rs = null;
+        String valueProductDiffCambio = MPreference.GetCustomPreferenceValue("DIF_CAMBIO_ARTICULO");
+        String valueProductDiffCambioDeb = MPreference.GetCustomPreferenceValue("DIF_CAMBIO_ARTICULO_DEB");
+        String valueProductDiffCambioCred = MPreference.GetCustomPreferenceValue("DIF_CAMBIO_ARTICULO_CRED");
+        
+        try {
+        	pstmt = DB.prepareStatement(sql, get_TrxName());
+        	pstmt.setInt(1, getC_AllocationHdr_ID());
+        	pstmt.setString(2, valueProductDiffCambio);
+        	pstmt.setString(3, valueProductDiffCambioDeb);
+        	pstmt.setString(4, valueProductDiffCambioCred);
+        	rs = pstmt.executeQuery();
+        	// Por cada retención se anula tanto el crédito como el débito.
+        	while (rs.next()) {
+        		MInvoice invoice = new MInvoice(getCtx(), rs.getInt("C_Invoice_ID"), get_TrxName());
+        		// Se anula ND o NC emitida por diferencia de cambio
+        		voidRetentionInvoice(invoice); //La función que anula las facturas de retención es válida para anular diff de cambio
+        	}
+        } catch (SQLException e) {
+        	log.log(Level.SEVERE, "voidIt->voidDiffCambio", e);
+        	throw new Exception();
+        } finally {
+        	try {
+        		if (rs != null) rs.close();
+        		if (pstmt != null) pstmt.close();
+        	} catch (Exception e) {}
+        }
     }
     
     
@@ -1272,7 +1498,7 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
 			if (!Util.isEmpty(getC_BPartner_ID(), true) && isUpdateBPBalance()) {
 				MBPartner bp = new MBPartner(getCtx(), getC_BPartner_ID(), get_TrxName());
 				// Obtengo el manager actual
-				CurrentAccountManager manager = CurrentAccountManagerFactory.getManager();
+				CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(this);
 				// Si es completar actualizar el saldo
 				if(getDocStatus().equals(MInvoice.DOCSTATUS_Completed)){
 					// Actualizo el balance
@@ -1544,7 +1770,80 @@ public class MAllocationHdr extends X_C_AllocationHdr implements DocAction {
 	public void setVoidPOSJournalConfig(String voidPOSJournalConfig) {
 		this.voidPOSJournalConfig = voidPOSJournalConfig;
 	}
+
+	public Map<Integer, Integer> getPaysVoid() {
+		return paysVoid;
+	}
+
+	public void setPaysVoid(Map<Integer, Integer> paysVoid) {
+		this.paysVoid = paysVoid;
+	}
 	
+	public boolean validatePOSJournal(){
+		MAllocationLine[] allocLines = getLines(true,
+				"c_invoice_id desc, c_invoice_credit_id desc, c_payment_id desc, c_cashline_id desc");
+		boolean onlyCash = allocLines.length > 0
+					&& Util.isEmpty(allocLines[0].getC_Invoice_ID(), true)
+					&& Util.isEmpty(allocLines[0].getC_Invoice_Credit_ID(), true)
+					&& Util.isEmpty(allocLines[0].getC_Payment_ID(), true)
+					&& !Util.isEmpty(allocLines[0].getC_CashLine_ID(), true);
+		return !onlyCash;
+	}
+	
+	/**
+	 * @return true si el allocation es de tipo ventas, false caso contrario. 
+	 * <ul>Un allocation es de tipo ventas cuando:
+	 * <li>El tipo de documento asociado está configurado como transacción de ventas.</li>
+	 * <li>El tipo es STX (Sales Transaction), RC (Recibo de Cliente) o RCA (Recibo de Cliente Adelantado).</li>
+	 * <li>Si no es de ningún tipo de los descritos, entonces se busca las facturas asociadas.</li>
+	 * <li>Si no posee facturas, cualquier cobro relacionado.</li>
+	 * </ul>
+	 */
+	public boolean isSOTrx(){
+		// 1) Tipo de documento
+		if(!Util.isEmpty(getC_DocType_ID(), true)){
+			MDocType allocDocType = MDocType.get(getCtx(), getC_DocType_ID());
+			return allocDocType.isSOTrx();
+		}
+		// 2) Tipo de transacción
+		if (getAllocationType().equals(ALLOCATIONTYPE_SalesTransaction)
+				|| getAllocationType().equals(ALLOCATIONTYPE_CustomerReceipt)
+				|| getAllocationType().equals(ALLOCATIONTYPE_AdvancedCustomerReceipt)) {
+			return true;
+		}
+		if (getAllocationType().equals(ALLOCATIONTYPE_PaymentOrder)
+				|| getAllocationType().equals(ALLOCATIONTYPE_AdvancedPaymentOrder)
+				|| getAllocationType().equals(ALLOCATIONTYPE_PaymentFromInvoice)) {
+			return false;
+		}
+		// Por aca llega cuando no tiene tipo de documento y el tipo de transacción es null o cualquier otro
+		// Verificar las operaciones de las líneas
+		MAllocationLine[] allocLines = getLines(true,
+				"c_invoice_id desc, c_invoice_credit_id desc, c_payment_id desc, c_cashline_id desc");
+		if(allocLines.length > 0){
+			return allocLines[0].isSOTrx();
+		}
+		
+		// No sabes que es o no tiene líneas
+		return false;
+	}
+
+	@Override
+	public boolean isSkipCurrentAccount() {
+		boolean skip = false;
+		// Tipo de Documento
+		if(!Util.isEmpty(getC_DocType_ID(), true)){
+			MDocType allocDocType = MDocType.get(getCtx(), getC_DocType_ID());
+			skip = skip || allocDocType.isSkipCurrentAccounts();
+		}
+		// Sigo buscando skippear hasta que sea true
+		MAllocationLine[] allocLines = getLines(true,
+				"c_invoice_id desc, c_invoice_credit_id desc, c_payment_id desc, c_cashline_id desc");
+		for(int l = 0; l < allocLines.length && !skip; l++){
+			skip = skip || allocLines[l].isSkipCurrentAccount();
+		}
+		return skip;
+	}
 }    // MAllocation
 
 

@@ -38,6 +38,18 @@ Este Fichero sirve para compilar el subproyecto base independiente del proyecto 
     <pathelement path="../lib/sybase.jar"/>
     <pathelement path="../tools/lib/jpedal.jar"/>
     <pathelement path="../lib/itext_1.5.4.jar"/>    
+
+    <pathelement path="../lib/jna-platform-4.1.0.jar"/>
+    <pathelement path="../lib/jna-4.1.0.jar"/>
+    <pathelement path="../lib/httpmime-4.5.2.jar"/>
+    <pathelement path="../lib/httpcore-4.4.4.jar"/>
+    <pathelement path="../lib/httpclient-win-4.5.2.jar"/>
+    <pathelement path="../lib/httpclient-cache-4.5.2.jar"/>
+    <pathelement path="../lib/httpclient-4.5.2.jar"/>
+    <pathelement path="../lib/gson-2.8.0.jar"/>
+    <pathelement path="../lib/fluent-hc-4.5.2.jar"/>
+    <pathelement path="../lib/commons-logging-1.2.jar"/>
+    <pathelement path="../lib/commons-codec-1.9.jar"/>
   </path>
 
 
@@ -63,6 +75,8 @@ Este Fichero sirve para compilar el subproyecto base independiente del proyecto 
     <!-- Compilar el codigo java de ${src} a ${build.dir} -->
     <javac srcdir="${src}" destdir="${build.dir}" deprecation="off" source="1.6" target="1.6" debug="on" encoding="UTF-8">
       <classpath refid="project.class.path"/>
+      <!-- Compilar referenciando a rt.jar: http://stackoverflow.com/questions/4065401/using-internal-sun-classes-with-javac/4070685#4070685 -->
+      <compilerarg line="-XDignore.symbol.file" />    	
     </javac>
     <!-- Copiar Todas las imagenes y archivos al directorio de compilacion -->
     <copy todir="${build.dir}">

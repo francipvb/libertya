@@ -123,7 +123,6 @@ public class WOrdenCobro extends WOrdenPago {
 	public WOrdenCobro() {
 		super();
 		setModel(new VOrdenCobroModel());
-		setActualizarNrosChequera(false);
 		setPaymentMediumItemListener(new PaymentMediumItemListener());
 	}
 
@@ -283,7 +282,6 @@ public class WOrdenCobro extends WOrdenPago {
 		cboCashReceiptMedium = createPaymentMediumCombo(MPOSPaymentMedium.TENDERTYPE_Cash);
 		if (cboCashReceiptMedium.getItemCount() > 0)
 			cboCashReceiptMedium.setSelectedIndex(0);
-		cboCashReceiptMedium.setSelectedIndex(0);
 		cboCashReceiptMedium.addEventListener("onChange", getPaymentMediumItemListener());
 		tenderTypeIndexsCombos.put(TAB_INDEX_EFECTIVO, cboCashReceiptMedium);  
     	txtEfectivoImporte.setValue("0");
@@ -1495,7 +1493,8 @@ public class WOrdenCobro extends WOrdenPago {
 		// Actualizo el cargo de la organización para facturas vencidas
 		updateOverdueInvoicesCharge();
 		BigDecimal total = getModel().getSumaTotalPagarFacturas();
-		txtTotalPagar1.setValue(numberFormat(total));
+		txtTotalPagar1.setValue(total);
+		txtTotalPagar1.getComponent().setText(numberFormat(total));
 	}
 
     protected void updateCustomPaymentsTabsState(){
@@ -1907,6 +1906,13 @@ public class WOrdenCobro extends WOrdenPago {
     	row.appendChild(cboDocumentType.getComponent());
     	row.appendChild(new Space());
 
+    	row = rows.newRow();
+    	row.appendChild(dateTrx.getLabel().rightAlign());
+    	row.appendChild(dateTrx.getComponent());
+    	row.appendChild(new Space());
+    	row.appendChild(cboPaymentRule.getLabel().rightAlign());
+    	row.appendChild(cboPaymentRule.getComponent());
+    	row.appendChild(new Space());
     }
     
     
@@ -1989,4 +1995,9 @@ public class WOrdenCobro extends WOrdenPago {
     protected String getReportName() {
     	return "Recibo de Cliente";
     }
+    
+    @Override
+	protected boolean isPrintRetentions(){
+		return false;
+	}
 }

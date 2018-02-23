@@ -21,11 +21,13 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
 
 import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
+import org.openXpertya.util.Msg;
 import org.openXpertya.util.Util;
 
 /**
@@ -93,6 +95,61 @@ public class MProductPO extends X_M_Product_PO {
         return retValue;
     }    // getOfProduct
 
+    
+    public static List<MProductPO> getOfBPartner(Properties ctx, Integer bPartnerID, String trxName) throws Exception{
+    	return getOfBPartner(ctx, bPartnerID, true, trxName);
+    }
+    
+    public static List<MProductPO> getOfBPartner(Properties ctx, Integer bPartnerID, boolean onlyActives, String trxName) throws Exception{
+    	List<MProductPO> pos = new ArrayList<MProductPO>();
+		String sql = "SELECT * FROM M_Product_PO " + "WHERE C_BPartner_ID=? " + (onlyActives ? " AND IsActive='Y' " : "");
+    	PreparedStatement ps = null;
+    	ResultSet rs = null;
+    	try {
+			ps = DB.prepareStatement(sql, trxName);
+			ps.setInt(1, bPartnerID);
+			rs = ps.executeQuery();
+			while (rs.next()) {
+				pos.add(new MProductPO(ctx, rs, trxName));
+			}
+		} catch (Exception e) {
+			throw e;
+		} finally{
+			try {
+				if(ps != null)ps.close();
+				if(rs != null)rs.close();
+			} catch (Exception e2) {
+				throw e2;
+			}
+		}
+    	return pos;
+    }
+    
+    public static List<Integer> getProductIDsOfBPartner(Properties ctx, Integer bPartnerID, String trxName) {
+    	List<Integer> pos = new ArrayList<Integer>();
+    	String sql = "SELECT m_product_id FROM M_Product_PO " + "WHERE C_BPartner_ID=? AND IsActive='Y' ";
+    	PreparedStatement ps = null;
+    	ResultSet rs = null;
+    	try {
+			ps = DB.prepareStatement(sql, trxName);
+			ps.setInt(1, bPartnerID);
+			rs = ps.executeQuery();
+			while (rs.next()) {
+				pos.add(rs.getInt("m_product_id"));
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally{
+			try {
+				if(ps != null)ps.close();
+				if(rs != null)rs.close();
+			} catch (Exception e2) {
+				e2.printStackTrace();
+			}
+		}
+    	return pos;
+    }
+    
     /**
 	 * @param productID
 	 *            id del artículo
@@ -276,6 +333,45 @@ public class MProductPO extends X_M_Product_PO {
     			return false;
         	}
     	}
+        
+        // Mismo nro de artículo de proveedor para distinto artículo
+        if(newRecord || (is_ValueChanged("VendorProductNo") && !Util.isEmpty(getVendorProductNo(), true))){
+        	String newRecordWhereClause = newRecord?"":" AND m_product_id <> "+getM_Product_ID();
+			int productID = DB.getSQLValue(get_TrxName(),
+					"SELECT m_product_id FROM " + get_TableName()
+							+ " WHERE c_bpartner_id = ? and isactive = 'Y' and trim(vendorproductno) = trim('" + getVendorProductNo()
+							+ "') " + newRecordWhereClause,
+					getC_BPartner_ID());
+			if(productID > 0){
+				MProduct prod = MProduct.get(getCtx(), productID);
+				log.saveError("SaveError",
+						Msg.getMsg(getCtx(), "NotUniqueVendorProductNo", new Object[] { getVendorProductNo(), prod.getValue()+" - "+prod.getName()}));
+				return false;
+			}
+        }
+        
+        // Setear el UPC/EAN por el que posee el artículo
+        if(Util.isEmpty(getUPC(), true)){
+        	MProduct product = MProduct.get(getCtx(), getM_Product_ID());
+        	setUPC(product.getUPC());
+        }
+        
+        // Mismo UPC para distinto artículo
+        if(newRecord || (is_ValueChanged("UPC") && !Util.isEmpty(getUPC(), true))){
+        	String newRecordWhereClause = newRecord?"":" AND m_product_id <> "+getM_Product_ID();
+			int productID = DB.getSQLValue(get_TrxName(),
+					"SELECT m_product_id FROM " + get_TableName()
+							+ " WHERE ad_client_id = ? and isactive = 'Y' and trim(upc) = trim('" + getUPC()
+							+ "') " + newRecordWhereClause, 
+							getAD_Client_ID());
+			if(productID > 0){
+	        	MProduct product = MProduct.get(getCtx(), productID);
+				String productStr = "'" + product.getValue() + " " + product.getName() + "'";
+				log.saveError("SaveError", 
+						Msg.translate(getCtx(), "DuplicateUPCError") + " " + productStr);
+				return false;
+			}
+        }
   
         return true;
     }    // beforeSave

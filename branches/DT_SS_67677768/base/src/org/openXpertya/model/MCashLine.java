@@ -28,6 +28,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.logging.Level;
 
+import org.openXpertya.cc.CurrentAccountDocument;
 import org.openXpertya.cc.CurrentAccountManager;
 import org.openXpertya.cc.CurrentAccountManagerFactory;
 import org.openXpertya.process.DocAction;
@@ -48,7 +49,7 @@ import org.openXpertya.util.Util;
  * @author     Equipo de Desarrollo de openXpertya    
  */
 
-public class MCashLine extends X_C_CashLine implements DocAction {
+public class MCashLine extends X_C_CashLine implements DocAction, CurrentAccountDocument {
 
 	/** Bypass para que el completeIt no cree el allocation ya que el cliente se encargará
 	 *  de crearlo. Si se usa esta opción quien cree y complete la línea será el responsable
@@ -103,6 +104,9 @@ public class MCashLine extends X_C_CashLine implements DocAction {
 	 * entonces esa caja diaria debe estar abierta, sino error
 	 */
 	private boolean voidPOSJournalMustBeOpen = false; 
+	
+	/** Libro de caja a asignar a líneas de caja reversas */
+	private int reverseCashID = 0;
     
     /**
      * Constructor de la clase ...
@@ -313,6 +317,8 @@ public class MCashLine extends X_C_CashLine implements DocAction {
         } else {
             reversal.setWriteOffAmt( getWriteOffAmt().negate());
         }
+        
+        reversal.setACCOUNTING_C_Charge_ID(getACCOUNTING_C_Charge_ID());
 
         return reversal;
     }    // reverse
@@ -620,7 +626,7 @@ public class MCashLine extends X_C_CashLine implements DocAction {
         
 		try {
 			// Caja Diaria y validaciones relacionadas
-			if(!isIgnorePOSJournal()){
+			if(!isIgnorePOSJournal() && getCash().isValidatePOSJournal()){
 				posJournalRelated();
 			}
 			
@@ -785,9 +791,9 @@ public class MCashLine extends X_C_CashLine implements DocAction {
         // por lo que no se puede ver en ninguna ventana este payment.
         // Ver en qué ventana o creando una nueva mostrar este payment
         pay.set_Value( "TrxType","X" );    // Transfer
-        pay.set_Value( "TenderType","X" );
 
         //
+        pay.setTenderType(MPayment.TENDERTYPE_DirectDeposit);
         pay.setC_BPartner_ID(getC_BPartner_ID());
         pay.setC_BankAccount_ID(getC_BankAccount_ID());
         pay.setC_DocType_ID(true);                                  // Receipt
@@ -809,6 +815,13 @@ public class MCashLine extends X_C_CashLine implements DocAction {
         pay.setUpdateBPBalance(false);
         pay.setC_Project_ID(getC_Project_ID());
 
+        /*
+		 * Se carga la cuenta contable que debe utilizarse en la contabilidad 
+		 */
+		if(getACCOUNTING_C_Charge_ID() > 0) {
+			pay.setACCOUNTING_C_Charge_ID(getACCOUNTING_C_Charge_ID());
+		}
+        
         if (!pay.save( get_TrxName())) {
         	throw new Exception("@PaymentError@: " + CLogger.retrieveErrorAsString());
         }
@@ -880,7 +893,7 @@ public class MCashLine extends X_C_CashLine implements DocAction {
 		}
 		
 		// No se pueden anular líneas de una caja completada
-		if (getCash().isProcessed()) {
+		if (Util.isEmpty(getReverseCashID()) && getCash().isProcessed()) {
 			m_processMsg = "@CannotVoidLineOfProcessedCash@";
 			return false;
 		}
@@ -910,9 +923,9 @@ public class MCashLine extends X_C_CashLine implements DocAction {
 			// contabilidad del libro de caja al cual pertenece esta línea.
 			// Si la anulación contiene la caja diaria a la cual asociarse,
 			// entonces el libro de caja de esta línea es la de la caja diaria
-			reversalCashLine = createReversal(getVoidPOSJournalID() == 0 ? getC_Cash_ID()
-					: MPOSJournal.getCashID(getCtx(), getVoidPOSJournalID(),
-							get_TrxName()));
+			reversalCashLine = createReversal(getReverseCashID() > 0 ? getReverseCashID()
+					: (getVoidPOSJournalID() == 0 ? getC_Cash_ID()
+							: MPOSJournal.getCashID(getCtx(), getVoidPOSJournalID(), get_TrxName())));
 			
 			// Setea una descripción a la línea inversa generada.
 			reversalCashLine.setDescription(Msg.parseTranslation(getCtx(),
@@ -1316,7 +1329,7 @@ public class MCashLine extends X_C_CashLine implements DocAction {
 		// actualizar su saldo, realizo las tareas correspondientes
 		if (!Util.isEmpty(getC_BPartner_ID(), true) && isUpdateBPBalance()) {
 			MBPartner bp = new MBPartner(getCtx(), getC_BPartner_ID(),get_TrxName());
-			CurrentAccountManager manager = CurrentAccountManagerFactory.getManager();
+			CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(this);
 			// Actualizo el balance
 			CallResult result = manager.performAditionalWork(getCtx(), new MOrg(
 					getCtx(), Env.getAD_Org_ID(getCtx()), get_TrxName()), bp, this,
@@ -1355,7 +1368,7 @@ public class MCashLine extends X_C_CashLine implements DocAction {
 					&& isConfirmAditionalWorks()) {
 				MBPartner bp = new MBPartner(getCtx(), getC_BPartner_ID(), get_TrxName());
 				// Obtengo el manager actual
-				CurrentAccountManager manager = CurrentAccountManagerFactory.getManager();
+				CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(this);
 				// Actualizo el saldo
 				CallResult result = new CallResult();
 				try{
@@ -1476,6 +1489,30 @@ public class MCashLine extends X_C_CashLine implements DocAction {
 	}	//	getCash
 	/** Parent					*/
 	private MCash			m_parent = null;
+
+	@Override
+	public boolean isSOTrx() {
+		boolean issotrx = false;
+		if(!Util.isEmpty(getC_BPartner_ID(), true)){
+			MBPartner bp = new MBPartner(getCtx(), getC_BPartner_ID(),get_TrxName());
+			issotrx = bp.isCustomer() && !bp.isVendor();
+		}
+		return issotrx;
+	}
+
+	@Override
+	public boolean isSkipCurrentAccount() {
+		MDocType cashDT = MDocType.getDocType(getCtx(), MDocType.DOCTYPE_CashJournal, get_TrxName());
+		return cashDT != null && cashDT.isSkipCurrentAccounts();
+	}
+
+	public int getReverseCashID() {
+		return reverseCashID;
+	}
+
+	public void setReverseCashID(int reverseCashID) {
+		this.reverseCashID = reverseCashID;
+	}
 
 	
 }    // MCashLine

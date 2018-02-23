@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.logging.Level;
 
+import org.openXpertya.cc.CurrentAccountDocument;
 import org.openXpertya.cc.CurrentAccountManager;
 import org.openXpertya.cc.CurrentAccountManagerFactory;
 import org.openXpertya.db.CConnection;
@@ -57,7 +58,7 @@ import org.openXpertya.util.ValueNamePair;
  * @author     Equipo de Desarrollo de openXpertya    
  */
 
-public final class MPayment extends X_C_Payment implements DocAction,ProcessCall {
+public final class MPayment extends X_C_Payment implements DocAction,ProcessCall, CurrentAccountDocument {
 
 	
 	// Variables de instancia
@@ -94,6 +95,16 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 	 * entonces esa caja diaria debe estar abierta, sino error
 	 */
 	private boolean voidPOSJournalMustBeOpen = false;
+	
+	/**
+	 * ContraAllocations: Control que se agrega para saber si el Payment esta siendo anulado desde un MAllocationHdr
+	 */
+	private boolean isMAllocationHdrVoid = false;
+	
+	/**
+	 * ContraAllocations: Almacena el ID del payment creado al anular el pago.
+	 */
+	private Integer payVoidID = 0;
 	
     /**
      * Descripción de Método
@@ -2119,19 +2130,29 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 			}
 		}
 		// Caja Diaria. Intenta registrar la factura
-		if (getC_POSJournal_ID() == 0 && !MPOSJournal.registerDocument(this)) {
+		if (getC_POSJournal_ID() == 0 && !MPOSJournal.registerDocument(this, true, isReceipt())) {
 			m_processMsg = MPOSJournal.DOCUMENT_COMPLETE_ERROR_MSG;
 			return STATUS_Invalid;
 		}
         
-        //
+        // Si es manual, se genera el allocation unilateral
+		if(isManual()){
+			try{
+				createOneWayAllocation();
+			} catch(Exception e){
+				setProcessMsg(e.getMessage());
+				return STATUS_Invalid;
+			}
+		}
+		
+		
         MBPartner bp = new MBPartner(getCtx(), getC_BPartner_ID(),
 				get_TrxName());
         if(isUpdateBPBalance()){
     		// Verifico si el gestor de cuentas corrientes debe realizar operaciones
     		// antes de completar y eventualmente disparar la impresión fiscal
     		// Obtengo el manager actual
-    		CurrentAccountManager manager = CurrentAccountManagerFactory.getManager();
+    		CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(this);
     		// Actualizo el balance
     		CallResult result = new CallResult();
 			try{
@@ -2156,6 +2177,29 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
         return DocAction.STATUS_Completed;
     }    // completeIt
 
+    
+    /**
+     * Crear el allocation unilateral para este payment
+     */
+    private void createOneWayAllocation() throws Exception{
+    	// Creación del generador de allocations
+    	AllocationGenerator ag = new AllocationGenerator(getCtx(), get_TrxName());
+    	// Creación del allocation y setear datos
+		MAllocationHdr owa = ag.createAllocationHdr(MAllocationHdr.ALLOCATIONTYPE_Manual, getAD_Org_ID(),
+				getC_BPartner_ID());
+		owa.setDescription(Msg.getMsg(getCtx(), "OneWayAllocationDescription") + " " + getDocumentNo());
+		if(!owa.save()){
+			throw new Exception(CLogger.retrieveErrorAsString());
+		}
+		// Agregar el payment manual
+		ag.addCreditPayment(getID(), getPayAmt());
+		// Generar líneas del allocation, en este caso va a ser una ya que es un
+		// allocation unilateral
+    	ag.generateLines();
+    	// Completar el allocation
+    	ag.completeAllocation();
+    } 
+    
     /**
      * Descripción de Método
      *
@@ -2500,7 +2544,7 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
             no = DB.executeUpdate( sql,get_TrxName());
             
             // Recalculo el crédito 
-            
+            bp.setCASOTrx(isReceipt());
             bp.setTotalOpenBalance();
             bp.save( get_TrxName());
             
@@ -2696,6 +2740,10 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
         }
 
         reversal.closeIt();
+        if (CounterAllocationManager.isCounterAllocationActive(getCtx())) {
+        	// Almaceno en la variable de instancia el ID del pago anulado
+        	this.setPayVoidID(reversal.getC_Payment_ID());
+        }
         // Me traigo el trabajo adicional de cuentas corrientes y lo confirmo
 		// después 
 		getAditionalWorkResult().put(reversal,
@@ -2705,7 +2753,7 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 					get_TrxName());
     		// Verifico si el gestor de cuentas corrientes debe realizar operaciones
     		// antes de completar 
-    		CurrentAccountManager manager = CurrentAccountManagerFactory.getManager();
+    		CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(this);
     		// Actualizo el balance
     		CallResult result = new CallResult();
 			try{
@@ -2763,46 +2811,51 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
         setDocAction( DOCACTION_None );
         setProcessed( true );
 
-        // Create automatic Allocation
-        // 		El contradocumento tiene que contener la fecha actual y NO la del documento original 
-        MAllocationHdr alloc = new MAllocationHdr( getCtx(),false, Env.getDate(), getC_Currency_ID(),Msg.translate( getCtx(),"C_Payment_ID" ) + ": " + reversal.getDocumentNo(),get_TrxName());
-
-        if( !alloc.save( get_TrxName())) {
-            log.warning( "Automatic allocation - hdr not saved" );
-        } else {
-        	
-            // Original Allocation
-
-            MAllocationLine aLine = new MAllocationLine( alloc,getPayAmt(),Env.ZERO,Env.ZERO,Env.ZERO );
-
-            aLine.setDocInfo( getC_BPartner_ID(),0,0 );
-            aLine.setPaymentInfo( getC_Payment_ID(),0 );
-
-            if( !aLine.save( get_TrxName())) {
-                log.warning( "Automatic allocation - line not saved" );
-            }
-
-            // Reversal Allocation
-
-            aLine = new MAllocationLine( alloc,reversal.getPayAmt(),Env.ZERO,Env.ZERO,Env.ZERO );
-            aLine.setDocInfo( reversal.getC_BPartner_ID(),0,0 );
-            aLine.setPaymentInfo( reversal.getC_Payment_ID(),0 );
-
-            if( !aLine.save( get_TrxName())) {
-                log.warning( "Automatic allocation - reversal line not saved" );
-            }
-        }
-        alloc.setUpdateBPBalance(false);
-        alloc.processIt( DocAction.ACTION_Complete );
-        alloc.save( get_TrxName());
-
-        //
-
         StringBuffer info = new StringBuffer( reversal.getDocumentNo());
+        
+		// ContraAllocation:
+        // 	No se debe generar el ContraAllocation MAN del MPayment si la
+		// 	operación de anulado se originó por la anulación de un Recibo de
+		// 	Cliente u Orden de Pago.
+        // Si la logica de ContraAllocation no esta activa, debe ejecutarse normalmente
+		if (!CounterAllocationManager.isCounterAllocationActive(getCtx()) || !isMAllocationHdrVoid()) {
+        
+	        // Create automatic Allocation
+	        // 		El contradocumento tiene que contener la fecha actual y NO la del documento original 
+	        MAllocationHdr alloc = new MAllocationHdr( getCtx(),false, Env.getDate(), getC_Currency_ID(),Msg.translate( getCtx(),"C_Payment_ID" ) + ": " + reversal.getDocumentNo(),get_TrxName());
+	
+	        if( !alloc.save( get_TrxName())) {
+	            log.warning( "Automatic allocation - hdr not saved" );
+	        } else {
+	        	
+	            // Original Allocation
+	
+	            MAllocationLine aLine = new MAllocationLine( alloc,getPayAmt(),Env.ZERO,Env.ZERO,Env.ZERO );
+	
+	            aLine.setDocInfo( getC_BPartner_ID(),0,0 );
+	            aLine.setPaymentInfo( getC_Payment_ID(),0 );
+	
+	            if( !aLine.save( get_TrxName())) {
+	                log.warning( "Automatic allocation - line not saved" );
+	            }
+	
+	            // Reversal Allocation
+	
+	            aLine = new MAllocationLine( alloc,reversal.getPayAmt(),Env.ZERO,Env.ZERO,Env.ZERO );
+	            aLine.setDocInfo( reversal.getC_BPartner_ID(),0,0 );
+	            aLine.setPaymentInfo( reversal.getC_Payment_ID(),0 );
+	
+	            if( !aLine.save( get_TrxName())) {
+	                log.warning( "Automatic allocation - reversal line not saved" );
+	            }
+	        }
+	        alloc.setUpdateBPBalance(false);
+	        alloc.processIt( DocAction.ACTION_Complete );
+	        alloc.save( get_TrxName());
+	
+	        info.append( " - @C_AllocationHdr_ID@: " ).append( alloc.getDocumentNo());
 
-        info.append( " - @C_AllocationHdr_ID@: " ).append( alloc.getDocumentNo());
-
-        //
+		}
 
         m_processMsg = info.toString();
 
@@ -3045,7 +3098,7 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 			if(isUpdateBPBalance() && isConfirmAditionalWorks()){
 				MBPartner bp = new MBPartner(getCtx(), getC_BPartner_ID(), get_TrxName());
 				// Obtengo el manager actual
-				CurrentAccountManager manager = CurrentAccountManagerFactory.getManager();
+				CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(this);
 				// Actualizo el balance
 				CallResult result = new CallResult();
 				try{
@@ -3135,6 +3188,22 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 		return voidPOSJournalMustBeOpen;
 	}
 	
+	public boolean isMAllocationHdrVoid() {
+		return isMAllocationHdrVoid;
+	}
+
+	public void setMAllocationHdrVoid(boolean isMAllocationHdrVoid) {
+		this.isMAllocationHdrVoid = isMAllocationHdrVoid;
+	}
+	
+	public Integer getPayVoidID() {
+		return payVoidID;
+	}
+
+	public void setPayVoidID(Integer payVoidID) {
+		this.payVoidID = payVoidID;
+	}
+	
 	/**
 	 *  CreditCard Exp  MMYY
 	 *  @param delimiter / - or null
@@ -3184,6 +3253,21 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 		return true;
 	}   //  setBankCash
 
+	@Override
+	public boolean isSkipCurrentAccount() {
+		return MDocType.get(getCtx(), getC_DocType_ID()).isSkipCurrentAccounts();
+	}
+
+	@Override
+	public boolean isCancelable() {
+		return false;
+	}
+	
+	@Override
+	public void cancelProcess() {
+		
+	}
+	
 }   // MPayment
 
 

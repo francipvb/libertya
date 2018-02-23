@@ -2787,6 +2787,22 @@ public class PoSMainForm extends CPanel implements FormPanel, ASyncProcess, Disp
 				}
 				
 			});
+			
+			cCreditNoteSearch.addActionListener(new ActionListener() {
+				
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					// Si no está permitido buscar las NC y si no ingresa nada,
+					// entonces seteo a null todo 
+					if (Util.isEmpty(cCreditNoteSearch.getM_text().getText(), true)
+							&& !cCreditNoteSearch.isShowInfo()) {
+						cCreditNoteSearch.setValue(null);
+						getCCreditNoteAvailableText().setValue(null);
+						updateCreditNoteBalance();
+					}
+				}
+				
+			});
 			cCreditNoteSearch.setMandatory(true);
 			FocusUtils.addFocusHighlight(cCreditNoteSearch);
 		}
@@ -2926,6 +2942,7 @@ public class PoSMainForm extends CPanel implements FormPanel, ASyncProcess, Disp
 		gridBagConstraints20.anchor = java.awt.GridBagConstraints.EAST;
 		gridBagConstraints20.gridx = 1;
 		cTransferParamsPanel.add(getCBankAccountCombo(), gridBagConstraints20);
+		getCBankAccountCombo().setReadWrite(true);
 		return cTransferParamsPanel;
 	}
 
@@ -3227,6 +3244,8 @@ public class PoSMainForm extends CPanel implements FormPanel, ASyncProcess, Disp
 		gridBagConstraints28.insets = new java.awt.Insets(0,10,0,0);
 		gridBagConstraints28.gridx = 1;
 		cCheckParamsPanel.add(getCBankAccountCombo(), gridBagConstraints28);
+		// Se deja como sólo lectura cuando es cheque
+		getCBankAccountCombo().setReadWrite(false);
 		// Idem Combo de Bancos (compartido con tarjetas)
 		GridBagConstraints gridBagConstraints36 = new GridBagConstraints();
 		gridBagConstraints36.gridx = 1;
@@ -4516,10 +4535,13 @@ public class PoSMainForm extends CPanel implements FormPanel, ASyncProcess, Disp
 		} else {
 			TimeStatsLogger.beginTask(MeasurableTask.POS_GOTO_PAYMENTS);
 			
+			/* Se comenta por las nuevas modificaciones a Cuenta Corriente, notificación obsoleta
+
 			// Si la entidad comercial está marcado con Notas de crédito
 			// automáticas, verificar si tiene saldos en notas de crédito para
 			// imputar
 			alertAutomaticCreditNote();
+			*/
 			
 			getCPosTab().setEnabledAt(1,true);
 			getCPosTab().setSelectedIndex(1);
@@ -4638,7 +4660,9 @@ public class PoSMainForm extends CPanel implements FormPanel, ASyncProcess, Disp
 		}
 		setCustomerDataDescriptionText();
 		updateStatusDB();
+		/* Se comenta por las nuevas modificaciones a Cuenta Corriente, notificación obsoleta
 		alertAutomaticCreditNote();
+		*/
 		return load;
 	}
 	
@@ -4746,15 +4770,18 @@ public class PoSMainForm extends CPanel implements FormPanel, ASyncProcess, Disp
 		} else if (getOrder().getBalance().compareTo(BigDecimal.ZERO) >= 0) {
 			errorMsg(MSG_NOT_NEED_PAYMENTS_ERROR);
 			return;
+		} 
+			/* Se comenta por las nuevas modificaciones a Cuenta Corriente, validación obsoleta
+			
 			// No se puede agregar otro medio de cobro que no sea nota de
 			// crédito en el caso que el cliente tenga notas de crédito
 			// automáticas y existan todavía para imputar
-		} else if (!MPOSPaymentMedium.TENDERTYPE_CreditNote.equals(tenderType)
+			else if (!MPOSPaymentMedium.TENDERTYPE_CreditNote.equals(tenderType)
 				&& getOrder().getBusinessPartner().isAutomaticCreditNote()
 				&& getModel().hasCreditNotesAvailables(true)) {
 			errorMsg(MSG_USE_CREDIT_MANDATORY);
 			return;
-		}
+		}*/
 		
 		Payment payment = null;
 
@@ -5140,6 +5167,8 @@ public class PoSMainForm extends CPanel implements FormPanel, ASyncProcess, Disp
 			return;
 		}
 		
+		/* Se comenta por las nuevas modificaciones a Cuenta Corriente, validación obsoleta
+		
 		// Validar que si la EC está marcada con notas de crédito automáticas y
 		// tenga notas de crédito disponibles para utilizar, no tenga medios de
 		// cobro de otro tipo
@@ -5151,7 +5180,7 @@ public class PoSMainForm extends CPanel implements FormPanel, ASyncProcess, Disp
 			errorMsg(MSG_USE_CREDIT_MANDATORY);
 			updateProcessing(false);
 			return;
-		}
+		}*/
 		
 		//final Waiting waitingDialog = new Waiting(getFrame(),waitMsg + "...",false,60);
 		

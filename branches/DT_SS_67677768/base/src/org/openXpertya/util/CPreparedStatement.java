@@ -46,6 +46,8 @@ import javax.swing.JOptionPane;
 import org.openXpertya.db.BaseDatosOXP;
 import org.openXpertya.db.CConnection;
 import org.openXpertya.interfaces.Server;
+import org.openXpertya.model.MSession;
+import org.postgresql.PGConnection;
 
 /**
  * Descripción de Clase
@@ -122,7 +124,7 @@ public class CPreparedStatement extends CStatement implements PreparedStatement 
                 }
 
                 p_stmt = conn.prepareStatement( p_vo.getSql(),resultSetType,resultSetConcurrency );
-                
+                p_stmt.setQueryTimeout(getQueryTimeOutPreference());
 
                 return;
             } catch( Exception e ) {
@@ -154,17 +156,14 @@ public class CPreparedStatement extends CStatement implements PreparedStatement 
     public ResultSet executeQuery() throws SQLException {
     	log.fine("estamos p_stmt= "+ p_stmt);
         if( p_stmt != null ) {    // local
-        	 //ResultSet rs;
-            try{ 
-              return(( PreparedStatement )p_stmt ).executeQuery(); //Original
-            }
-            catch(Exception e)
-            {
-            	log.fine("falla al ejecutar la consulta = "+ e);
-            }
-            //return executeQuery(p_vo.getSql());
- 
-            
+        	try {
+        		if (useKeepAlive)
+        			PGStatementUtils.getInstance().addStatement(MSession.get(Env.getCtx(), false).getAD_Session_ID(), p_stmt);
+        		return(( PreparedStatement )p_stmt ).executeQuery(); //Original
+        	} finally {
+        		if (useKeepAlive)
+        			PGStatementUtils.getInstance().removeStatement(MSession.get(Env.getCtx(), false).getAD_Session_ID(), p_stmt);
+        	}
         }
 
         //
@@ -197,12 +196,19 @@ public class CPreparedStatement extends CStatement implements PreparedStatement 
         // Try locally
 
         // log.warning( "executeQuery - execute locally" );
-
-        PreparedStatement pstmt = local_getPreparedStatement( false,null );    // shared connection
-
-        p_vo.clearParameters();    // re-use of result set
-
-        return pstmt.executeQuery();
+        
+	        PreparedStatement pstmt = local_getPreparedStatement( false,null );    // shared connection
+    		
+	        p_vo.clearParameters();    // re-use of result set
+	    try {
+	    	if (useKeepAlive)
+    			PGStatementUtils.getInstance().addStatement(MSession.get(Env.getCtx(), false).getAD_Session_ID(), pstmt);
+	        return pstmt.executeQuery();
+        }
+        finally {
+        	if (useKeepAlive)
+    			PGStatementUtils.getInstance().removeStatement(MSession.get(Env.getCtx(), false).getAD_Session_ID(), pstmt);
+        }
     }    // executeQuery
 
     /**
@@ -223,7 +229,14 @@ public class CPreparedStatement extends CStatement implements PreparedStatement 
         p_vo.setSql( DB.getDatabase().convertStatement( sql0 ));
 
         if( p_stmt != null ) {    // local
-            return p_stmt.executeQuery( p_vo.getSql());
+        	try {
+        		if (useKeepAlive)
+        			PGStatementUtils.getInstance().addStatement(MSession.get(Env.getCtx(), false).getAD_Session_ID(), p_stmt);
+        		return p_stmt.executeQuery( p_vo.getSql());
+        	} finally {
+        		if (useKeepAlive)
+        			PGStatementUtils.getInstance().removeStatement(MSession.get(Env.getCtx(), false).getAD_Session_ID(), p_stmt);
+        	}
         }
 
         //
@@ -982,7 +995,7 @@ public class CPreparedStatement extends CStatement implements PreparedStatement 
 
         try {
             pstmt = conn.prepareStatement( p_vo.getSql(),p_vo.getResultSetType(),p_vo.getResultSetConcurrency());
-
+            pstmt.setQueryTimeout(getQueryTimeOutPreference());
             // Set Parameters
 
             ArrayList parameters = p_vo.getParameters();
@@ -1025,7 +1038,8 @@ public class CPreparedStatement extends CStatement implements PreparedStatement 
             } catch( SQLException ex1 ) {
             }
         }
-
+        
+        
         return pstmt;
     }    // local_getPreparedStatement
 

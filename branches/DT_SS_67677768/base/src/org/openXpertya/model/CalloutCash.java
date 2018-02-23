@@ -3,14 +3,13 @@ package org.openXpertya.model;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Properties;
 
 import org.openXpertya.util.DB;
 import org.openXpertya.util.DisplayType;
 import org.openXpertya.util.Env;
+import org.openXpertya.util.Util;
 
 public class CalloutCash extends CalloutEngine {
 
@@ -55,7 +54,7 @@ public class CalloutCash extends CalloutEngine {
 	protected String getSql(){
 		return new String("select dateacct,endingbalance "+
 				"from c_cash "+
-				"where (isactive = 'Y') and (c_cashbook_id = ?) and (ad_org_id = ?) "+
+				"where (isactive = 'Y') and (c_cashbook_id = ?) and (ad_org_id = ?) and docstatus IN ('CO','CL') "+
 				"order by dateacct desc");
 	}
 	
@@ -152,6 +151,13 @@ public class CalloutCash extends CalloutEngine {
 		}
 		
 		Integer valor = (Integer)value;
+		
+		// Si cambia la organización, setear la caja general que existe en las preferences
+		String preferenceValue = MPreference.GetCustomPreferenceValue("C_CashBook_ID", Env.getAD_Client_ID(ctx),
+				valor, null, true);
+		if(!Util.isEmpty(preferenceValue)){
+			mTab.setValue("C_CashBook_ID", Integer.parseInt(preferenceValue));
+		}
 		
 		String sql = this.getSql();
 		

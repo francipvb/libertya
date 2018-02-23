@@ -2,6 +2,7 @@ package org.openXpertya.model;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.util.List;
 
 /**
  * Descripción de Interface
@@ -69,6 +70,16 @@ public interface RetencionProcessor {
 	 * datos de la retención.
 	 */
 	public boolean save(MAllocationHdr alloc) throws Exception;
+	
+	/**
+	 * Genera la retención aplicada junto con todos sus datos
+	 * @param alloc <code>MAllocationHdr</code> con la imputación de pagos.
+	 * @param save Indica si se persiste o no
+	 * @return
+	 * @throws Exception cuando se produce algún error en el guardado de los 
+	 * datos de la retención.
+	 */
+	public List<X_M_Retencion_Invoice> save(MAllocationHdr alloc, boolean save) throws Exception;
 	
 	/**
 	 * Asigna la moneda en la que se guardan los montos de la retención.
@@ -153,4 +164,8 @@ public interface RetencionProcessor {
 	 * @return Setea la campaña
 	 */
 	public void setCampaignID(Integer campaignID);
+	
+	/** Payment Rule */
+	public String getPaymentRule();
+	public void setPaymentRule(String paymentRule);
 }

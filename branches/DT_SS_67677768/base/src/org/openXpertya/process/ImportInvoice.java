@@ -20,8 +20,10 @@ import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
+import java.util.HashMap;
 import java.util.logging.Level;
 
+import org.openXpertya.model.CalloutInvoiceExt;
 import org.openXpertya.model.MInvoice;
 import org.openXpertya.model.MInvoiceLine;
 import org.openXpertya.model.X_I_Invoice;
@@ -29,6 +31,7 @@ import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.Util;
 
 /**
  * Descripción de Clase
@@ -403,7 +406,28 @@ public class ImportInvoice extends SvrProcess {
 		if( no != 0 ) {
 			log.log(Level.SEVERE,"doIt - Invalid Tax=" + no);
 		}
+		
+		// ----------------------------------------------------------------------------------
+		// - Cadena de Autorización
+		// ----------------------------------------------------------------------------------
 
+		sql = new StringBuffer( 
+				"UPDATE I_Invoice o " + 
+				"SET M_AuthorizationChain_ID=" +
+					"(SELECT M_AuthorizationChain_ID FROM M_AuthorizationChain t" + 
+					" WHERE t.value = o.AuthorizationChainValue AND o.AD_Client_ID=t.AD_Client_ID AND ROWNUM=1) " + 
+				"WHERE M_AuthorizationChain_ID is null AND I_IsImported<>'Y'" ).append( clientCheck );
+		no = DB.executeUpdate( sql.toString());
+		log.log(Level.FINE,"doIt - Set Authorization Chain =" + no);
+		
+		sql = new StringBuffer( "UPDATE I_Invoice " + "SET I_IsImported='E', I_ErrorMsg=I_ErrorMsg|| '"+getMsg("ImportInvInvalidAuthorizationChain")+". ' " + "WHERE M_AuthorizationChain_ID IS NULL AND AuthorizationChainValue IS NOT NULL" + " AND I_IsImported<>'Y'" ).append( clientCheck );
+		no = DB.executeUpdate( sql.toString());
+
+		if( no != 0 ) {
+			log.log(Level.SEVERE,"doIt - Invalid Authorization link =" + no);
+		}
+
+		
 		/* No se tiene en cuenta el caso de creación de BPartner por el momento.
 		// -- New BPartner ---------------------------------------------------
 
@@ -713,6 +737,17 @@ public class ImportInvoice extends SvrProcess {
 					if( imp.getC_Project_ID() != 0 ) {
 						invoice.setC_Project_ID( imp.getC_Project_ID());
 					}
+					
+					if( imp.getM_AuthorizationChain_ID() != 0 ) {
+						invoice.setM_AuthorizationChain_ID(imp.getM_AuthorizationChain_ID());
+					}
+					
+					if(!Util.isEmpty(imp.getAuthorizationChainStatus(), true)){
+						invoice.setAuthorizationChainStatus(imp.getAuthorizationChainStatus());
+						if(MInvoice.AUTHORIZATIONCHAINSTATUS_Authorized.equals(imp.getAuthorizationChainStatus())){
+							invoice.setSkipAuthorizationChain(true);
+						}
+					}
 
 					//
 					Timestamp dateInvoiced = imp.getDateInvoiced() != null ? imp
@@ -733,7 +768,36 @@ public class ImportInvoice extends SvrProcess {
 					invoice.setProcessed(false);
 					invoice.setProcessing(false);
 
-					//
+					// Impreso fiscalmente
+					if(invoice.requireFiscalPrint()){
+						invoice.setFiscalAlreadyPrinted(imp.isPrinted());
+					}
+					else{
+						invoice.setIsPrinted(imp.isPrinted());
+					}		
+					
+					invoice.setCAI(imp.getCAI());
+					invoice.setDateCAI(imp.getDateCAI());
+					
+					invoice.setSkipLastFiscalDocumentNoValidation(true);
+					
+					// Divido el nro de documento en letra, pto de venta y
+					// nro de comprobante si es que es posible
+					if(CalloutInvoiceExt.ComprobantesFiscalesActivos()){
+						HashMap<String, Object> div = CalloutInvoiceExt.DividirDocumentNo(imp.getAD_Client_ID(), imp.getDocumentNo());
+						// Letra
+						if(!Util.isEmpty((Integer)div.get("C_Letra_Comprobante_ID"), true)){
+							invoice.setC_Letra_Comprobante_ID((Integer)div.get("C_Letra_Comprobante_ID"));
+						}
+						// Punto de venta
+						if(!Util.isEmpty((Integer)div.get("PuntoDeVenta"), true)){
+							invoice.setPuntoDeVenta((Integer)div.get("PuntoDeVenta"));
+						}
+						// Nro de comprobante
+						if(!Util.isEmpty((Integer)div.get("NumeroComprobante"), true)){
+							invoice.setNumeroComprobante((Integer)div.get("NumeroComprobante"));
+						}
+					}
 
 					if(invoice.save()){
 						noInsert++;

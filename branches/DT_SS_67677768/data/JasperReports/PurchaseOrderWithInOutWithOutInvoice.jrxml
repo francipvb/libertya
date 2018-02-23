@@ -79,6 +79,7 @@ WHERE (($P{AD_Org_ID} IS NULL) OR (0 = $P{AD_Org_ID}) OR (org.ad_org_id = $P{AD_
 	AND (($P{FechaHasta}::date IS NULL) OR (o.dateordered::date <= $P{FechaHasta}::date))
 	AND (($P{C_BPartner_ID} IS NULL) OR (bp.c_bpartner_id = $P{C_BPartner_ID}))
 	AND Facturado <> 'Y'
+	AND o.docstatus IN ('CO','CL')
 GROUP BY org.name,o.c_order_id,o.dateordered, o.documentno,io.movementdate, io.documentno,bp.name,facturado,io.created 
 ORDER BY io.created desc]]></queryString>
 

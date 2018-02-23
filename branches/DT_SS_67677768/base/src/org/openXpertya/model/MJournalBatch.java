@@ -321,7 +321,7 @@ public class MJournalBatch extends X_GL_JournalBatch implements DocAction {
 
             if( toJournal.save()) {
                 count++;
-                lineCount += toJournal.copyLinesFrom( fromJournals[ i ],getDateAcct(),'x' );
+                lineCount += toJournal.copyLinesFrom(fromJournals[ i ], getDateAcct(), "X");
             }
         }
 
@@ -647,49 +647,38 @@ public class MJournalBatch extends X_GL_JournalBatch implements DocAction {
      * @return
      */
 	public boolean voidIt() {
-		// Si el período es el actual, entonces eliminar las entradas fact del
-		// asiento manual actual
-		Timestamp actualDate = Env.getTimestamp();
-		int actualPeriodID = MPeriod.getC_Period_ID(getCtx(), actualDate);
-		DateFormat actualDateFormat = new SimpleDateFormat("dd-MM-yyyy");
-		String actualDateFormatted = actualDateFormat.format(new Date(actualDate.getTime()));
-		// No existe período para la fecha actual
-		if(Util.isEmpty(actualPeriodID, true)){
-			m_processMsg = Msg.getMsg(getCtx(), "PeriodNotFoundForDate", new Object[]{actualDateFormatted});
-    		return false;
+		// Processed
+		if (!(DOCSTATUS_Drafted.equals(getDocStatus())
+				|| DOCSTATUS_Invalid.equals(getDocStatus())
+				|| DOCSTATUS_InProgress.equals(getDocStatus())
+				|| DOCSTATUS_Approved.equals(getDocStatus())
+				|| DOCSTATUS_NotApproved.equals(getDocStatus()))){
+			// El período está abierto
+			MDocType dt = MDocType.get( getCtx(),getC_DocType_ID());
+	        if( !MPeriod.isOpen( getCtx(),getDateAcct(),dt.getDocBaseType())) {
+	            m_processMsg = "@PeriodClosed@";
+	            return false;
+	        }
 		}
-		// El período actual es el período del asiento actual? 
-		if(getC_Period_ID() == actualPeriodID){
-			MJournal[] journals = getJournals(true);
-			for (int i = 0; i < journals.length; i++)
-			{
-				MJournal journal = journals[i];
-				if (journal.voidIt()){
-					journal.setTotalCr(BigDecimal.ZERO);
-					journal.setTotalDr(BigDecimal.ZERO);
-					if(!journal.save()){
-						m_processMsg = CLogger.retrieveErrorAsString();
-		        		return false;
-					}
-				}
-				else
-				{
-					m_processMsg = journal.getProcessMsg();
+		
+		// Anular los journals
+		MJournal[] journals = getJournals(true);
+		for (int i = 0; i < journals.length; i++) {
+			MJournal journal = journals[i];
+			if (journal.voidIt()){
+				if(!journal.save()){
+					m_processMsg = CLogger.retrieveErrorAsString();
 	        		return false;
 				}
 			}
-			setProcessed(true);
-			setDocAction(DOCACTION_None);
-		}
-		// Se debe revertir a la fecha actual
-		else{
-	        try {
-				reverse(REVERSECORRECTIT_REVERSEACTION, actualPeriodID, actualDate, actualDate, DOCSTATUS_Voided, true);
-			} catch (Exception e) {
-				m_processMsg = e.getMessage();
-				return false;
+			else {
+				m_processMsg = journal.getProcessMsg();
+        		return false;
 			}
 		}
+		
+		setProcessed(true);
+		setDocAction(DOCACTION_None);
 		
 		return true;
     }    // voidIt
@@ -758,6 +747,7 @@ public class MJournalBatch extends X_GL_JournalBatch implements DocAction {
 			m_processMsg = e.getMessage();
 			result = false;
 		}
+        setDocAction(DOCACTION_None);
         return result;
     }    // reverseCorrectionIt
 
@@ -777,6 +767,7 @@ public class MJournalBatch extends X_GL_JournalBatch implements DocAction {
 			m_processMsg = e.getMessage();
 			result = false;
 		}
+        setDocAction(DOCACTION_None);
         return result;
     }    // reverseAccrualIt
 
@@ -830,6 +821,8 @@ public class MJournalBatch extends X_GL_JournalBatch implements DocAction {
         	throw new Exception(CLogger.retrieveErrorAsString());
         }
 
+        resultDocStatus = Util.isEmpty(resultDocStatus, true) ? DOCSTATUS_Reversed : resultDocStatus;
+        
         // Reverse Journals
 
         for( int i = 0;i < journals.length;i++ ) {
@@ -840,16 +833,20 @@ public class MJournalBatch extends X_GL_JournalBatch implements DocAction {
             }
 
             if(REVERSEACCRUALIT_REVERSEACTION.equals(reverseAction)){
-            	if( journal.reverseAccrualIt( reverse.getGL_JournalBatch_ID()) == null ) {
+				if (journal.reverseAccrualIt(reverse.getGL_JournalBatch_ID(),
+						completeReverse ? resultDocStatus : null, false) == null) {
             		throw new Exception("Could not reverse " + journal);
                 }
             }
             else{
-                if( journal.reverseCorrectIt( reverse.getGL_JournalBatch_ID()) == null ) {
+				if (journal.reverseCorrectIt(reverse.getGL_JournalBatch_ID(),
+						completeReverse ? resultDocStatus : null, false) == null) {
                 	throw new Exception("Could not reverse " + journal);
                 }
             }
             
+			journal.setDocStatus(resultDocStatus);
+            journal.setDocAction(DOCACTION_None);
             if(!journal.save()){
             	throw new Exception(CLogger.retrieveErrorAsString());
             }
@@ -862,8 +859,9 @@ public class MJournalBatch extends X_GL_JournalBatch implements DocAction {
 	        if(!DocumentEngine.processAndSave(reverse, DOCACTION_Complete, false)){
 	        	throw new Exception(reverse.getProcessMsg());
 	        }
-	
-			reverse.setDocStatus(Util.isEmpty(resultDocStatus, true) ? DOCSTATUS_Reversed : resultDocStatus);
+	        
+			reverse.setDocStatus(resultDocStatus);
+			updateJournalsStatus(reverse.getID(), resultDocStatus);
 	        reverse.setDocAction(DOCACTION_None);
 	        if(!reverse.save()){
 	        	throw new Exception(CLogger.retrieveErrorAsString());
@@ -877,9 +875,48 @@ public class MJournalBatch extends X_GL_JournalBatch implements DocAction {
 			return false;
 		}
 		
+		// Si no tenemos el período configurado entonces a partir de la fecha
+		// contable
+		if(Util.isEmpty(getC_Period_ID(), true) && getDateAcct() != null){
+			if(!setPeriodFrom(getDateAcct())){
+				log.saveError("SaveError", Msg.getMsg(getCtx(), "PeriodNotFoundForDate",
+						new Object[] { Env.getDateFormatted(getDateAcct()) }));
+				return false;
+			}
+		}
+		
+		// Verificar si la fecha contable está incluída en el período del
+		// registro, sino asociar el período de la fecha contable
+		MPeriod p = MPeriod.get(getCtx(), getC_Period_ID(), get_TrxName());
+		if(!p.isIncludedInPeriod(getDateAcct())){
+			if(!setPeriodFrom(getDateAcct())){
+				log.saveError("SaveError", Msg.getMsg(getCtx(), "PeriodNotFoundForDate",
+						new Object[] { Env.getDateFormatted(getDateAcct()) }));
+				return false;
+			}
+		}
+		
 		return true;
 	}
     
+	/**
+	 * Setea el período (C_Period_ID) en base a la fecha parámetro
+	 * 
+	 * @param date
+	 *            fecha base del período a asignar
+	 * @return true si pudo actualizar, false caso contrario
+	 */
+    public boolean setPeriodFrom(Timestamp date){
+    	boolean result = false;
+    	
+    	int periodID = MPeriod.getC_Period_ID(getCtx(), date);
+		if(!Util.isEmpty(periodID, true)){
+			setC_Period_ID(periodID);
+			result = true;
+		}
+		
+    	return result;
+    }
     
     /**
      * Descripción de Método
@@ -962,6 +999,15 @@ public class MJournalBatch extends X_GL_JournalBatch implements DocAction {
     public BigDecimal getApprovalAmt() {
         return getTotalDr();
     }    // getApprovalAmt
+    
+    /**
+     * Actualización del estado de los diarios
+     * @param docStatus
+     */
+    protected void updateJournalsStatus(Integer journalBatchID, String docStatus){
+		DB.executeUpdate(" UPDATE " + X_GL_Journal.Table_Name + " SET docstatus = '" + docStatus
+				+ "' WHERE GL_JournalBatch_ID = "+journalBatchID, get_TrxName());
+    }
 }    // MJournalBatch
 
 

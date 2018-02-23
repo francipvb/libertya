@@ -67,6 +67,7 @@ public class ChangeInvoiceDataProcess extends AbstractSvrProcess {
 		Boolean setFiscalPrinted = ((String) getParametersValues().get(
 				"FISCALALREADYPRINTED")).equals("Y");
 		invoice.setFiscalAlreadyPrinted(setFiscalPrinted);
+		invoice.setSkipExtraValidations(true);
 		if(!invoice.save()){
 			throw new Exception(CLogger.retrieveErrorAsString());
 		}
@@ -160,7 +161,7 @@ public class ChangeInvoiceDataProcess extends AbstractSvrProcess {
 				// 3) Que esté marcado como anulable
 				// Si no cumple alguna de esas condiciones, entonces error
 				// A su vez, si es anulable, se debe modificar también ese comprobante
-				if(!Util.isEmpty(allocationLine.getC_Invoice_ID()) 
+				if(!Util.isEmpty(allocationLine.getC_Invoice_ID(), true) 
 						&& allocationLine.getC_Invoice_ID() != invoiceID.intValue()){
 					MInvoice invoice = new MInvoice(getCtx(),
 							allocationLine.getC_Invoice_ID(), get_TrxName());

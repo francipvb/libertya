@@ -6,6 +6,7 @@ import java.sql.ResultSetMetaData;
 import java.util.HashSet;
 import java.util.Vector;
 
+import org.apache.commons.codec.binary.Base64;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 
@@ -14,13 +15,24 @@ public class ReplicationTableManager {
 	/** Modificador de nulls */
 	protected static final String NULL_Y = "null=\"Y\"";
 	
+	/** Columna binaria */
+	protected static final String BINARY_Y = "binary=\"Y\"";
+	
+	
+	/** Modificador especial en sentencia avanzada de filtrado de tablas para incluir tablas de eliminaciones */
+	public static final String DELETIONS_SQL_MODIFIER = "WITH DELETIONS";
+	
 	/** Tablas que contienen la columna reparray */
 	protected static Vector<String> tablesForReplication = null;
 	protected static String recordsForReplicationQuery = null;
 	/** filtrar replicacion de una tabla especifica */
 	public static String filterTable = null;
+	/** filtro avanzado de tablas de replicación */
+	public static String advancedFilterTable = null;
 	/** filtrar replicacion de un registro especifico */
 	public static String filterRecord = null;
+	/** filtro avanzado de registros a replicar */
+	public static String advancedFilterRecord = null;
 	/** filtrar replicacion solo hacia un host */
 	public static HashSet<Integer> filterHost = null;
 	/** omitir registros con antiguedad menor al tiempo especificado (segundos) */
@@ -94,8 +106,10 @@ public class ReplicationTableManager {
 			Integer columnId;
 			String columnValue;
 			String nullValue = "";
+			String binary = "";
 			for (int i = 1; i <= colCount; i++ )
 			{
+				binary = "";
 				// se omiten columnas especiales
 				columnName = recordMetaData.getColumnName(i).toLowerCase();
 				if (ReplicationConstants.COLUMN_RETRIEVEUID.equalsIgnoreCase(columnName) ||
@@ -109,12 +123,20 @@ public class ReplicationTableManager {
 				}
 				else
 				{
-					columnValue = recordRS.getObject(i).toString()
-															.replaceAll("&",  "&#x26;amp;")								
-															.replaceAll("<",  "&#x26;#x3C;")
-															.replaceAll(">",  "&#x26;#x3E;")
-															.replaceAll("\"", "&#x26;#x22;")
-															.replaceAll("'",  "&#x26;#x27;");
+					// Si la columna es de tipo binaria, a la información a replicar se le aplica un encoding Base64
+					// a fin de que los datos sean incluidos en el XML correctamente.  Luego se hace un decode en el destino
+					// Notar que estos datos viajaran en el newValue del ChangeLogElement, no en el BinaryValue
+					if (recordMetaData.getColumnType(i) == java.sql.Types.BINARY) {
+						columnValue = Base64.encodeBase64String((byte[])recordRS.getObject(i));
+						binary = BINARY_Y;
+					} else {
+						columnValue = recordRS.getObject(i).toString()
+																.replaceAll("&",  "&#x26;amp;")								
+																.replaceAll("<",  "&#x26;#x3C;")
+																.replaceAll(">",  "&#x26;#x3E;")
+																.replaceAll("\"", "&#x26;#x22;")
+																.replaceAll("'",  "&#x26;#x27;");
+					}
 					nullValue = "";
 				}
 
@@ -126,7 +148,7 @@ public class ReplicationTableManager {
 
 				// Armar la parte del XML
 				recordToReplicate.append("<column id=\"").append(columnId).append("\" value=\"")
-									.append(columnValue).append("\" ").append(nullValue).append("/>");
+									.append(columnValue).append("\" ").append(nullValue).append(" ").append(binary).append("/>");
 			}
 			// Si la tabla es de eliminacion, tomar la referencia a la tabla del registro a eliminar, dentro del contenido de recordRS
 			tableName = (ReplicationConstants.DELETIONS_TABLE.equalsIgnoreCase(rs.getString("tablename"))) ?
@@ -163,7 +185,16 @@ public class ReplicationTableManager {
 		if (tablesForReplication == null)
 		{
 			tablesForReplication = new Vector<String>();
-
+			boolean includeDeletions = false;
+			
+			// Debe incluirse la tabla de eliminaciones?
+			if (advancedFilterTable==null && (filterTable==null || ReplicationConstants.DELETIONS_TABLE.equalsIgnoreCase(filterTable))) {
+				includeDeletions = true;
+			} else if (advancedFilterTable!=null && advancedFilterTable.toLowerCase().contains(DELETIONS_SQL_MODIFIER.toLowerCase())) {
+				includeDeletions = true;
+				advancedFilterTable = advancedFilterTable.toLowerCase().replace(DELETIONS_SQL_MODIFIER.toLowerCase(), "");
+			}
+			
 			// Recuperar las tablas que: 1) Tienen incorporado el reparray como una columna  Y  2) Son tablas configuradas para replicacion
 			//							 incluyendo ademas la tabla de eliminaciones
 			String query =  " SELECT table_name " + 
@@ -177,8 +208,10 @@ public class ReplicationTableManager {
 							" 	AND tr.AD_Client_ID = " + Env.getContext(Env.getCtx(), "#AD_Client_ID") +
 							// Incluir eventual filtro por nombre de tabla
 							(filterTable!=null&&filterTable.length()>0?"  AND LOWER(t.tablename) = '"+filterTable.toLowerCase()+"'" : "") +
+							// Incluir eventual filtro de tabla avanzado
+							(advancedFilterTable!=null&&advancedFilterTable.length()>0?("  AND ("+advancedFilterTable.toLowerCase()+")"): "") +
 							" ) ";
-			if (filterTable==null || ReplicationConstants.DELETIONS_TABLE.equalsIgnoreCase(filterTable))
+			if (includeDeletions)
 				query += " UNION SELECT '" + ReplicationConstants.DELETIONS_TABLE + "' AS table_name ";
 			
 			PreparedStatement pstmt = DB.prepareStatement(query, trxName, true);
@@ -221,6 +254,8 @@ public class ReplicationTableManager {
 				// Incluir eventual filtro por nombre de registro
 				if (filterRecord!=null && filterRecord.length()>0)
 					query.append(" AND retrieveUID = '" + filterRecord + "'");
+				if (advancedFilterRecord!=null && advancedFilterRecord.length()>0) 
+					query.append(" AND (").append(advancedFilterRecord).append(")");
 				// Contemplar los registros con cierta antiguedad segun el argumento recibido (segundos). LAS TABLAS INVOLUCRADAS DEBEN CONTENER ESTE CAMPO!
 				if (delayRecords != null) {
 					query.append(" AND age(NOW(), created) > '" + delayRecords + " seconds' ");

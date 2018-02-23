@@ -609,10 +609,13 @@ public class MInvoiceLine extends X_C_InvoiceLine {
         int C_Tax_ID  = 0;
         // Si los Comprobantes fiscales están activos se busca la tasa de impuesto a partir de la categoría de IVA debe estar condicionado 
         if (CalloutInvoiceExt.ComprobantesFiscalesActivos()) {
-        	C_Tax_ID = DB.getSQLValue( null,"SELECT C_Tax_ID FROM C_Categoria_Iva ci INNER JOIN C_BPartner bp ON (ci.C_Categoria_Iva_ID = bp.C_Categoria_Iva_ID) WHERE bp.C_BPartner_ID = ?",m_C_BPartner_ID );
+        	MTax tax = CalloutInvoiceExt.getTax(getCtx(), m_IsSOTrx, m_C_BPartner_ID, get_TrxName());
+    		if(tax != null){
+    			C_Tax_ID = tax.getID();
+    		}
         }
         
-        if( C_Tax_ID == 0 ) {
+        if( C_Tax_ID <= 0 ) {
         	C_Tax_ID = Tax.get( getCtx(),getM_Product_ID(),getC_Charge_ID(),m_DateInvoiced,m_DateInvoiced,getAD_Org_ID(),M_Warehouse_ID,m_C_BPartner_Location_ID,    // should be bill to
                     m_C_BPartner_Location_ID,m_IsSOTrx );
         }
@@ -624,8 +627,6 @@ public class MInvoiceLine extends X_C_InvoiceLine {
         }
 
         setC_Tax_ID( C_Tax_ID );
-
-        if( m_IsSOTrx ) {}
 
         return true;
     }    // setTax
@@ -986,7 +987,7 @@ public class MInvoiceLine extends X_C_InvoiceLine {
         // Calculo TaxAmt y LineTotalAmt
         // Recupero el impuesto aplicado a la línea
         setTaxAmt();
-        setLineTotalAmt(getLineNetAmt().add(getTaxAmt()));
+        setLineTotalAmt(getLineNetAmount().add(getTaxAmt()));
         
     	// Controlar cantidades por unidad de medida
         if(!MUOM.isAllowedQty(getCtx(), getC_UOM_ID(), getQtyEntered(), get_TrxName())){
@@ -1142,10 +1143,12 @@ public class MInvoiceLine extends X_C_InvoiceLine {
         }
         
         if(shouldUpdateHeader){
+	        MInvoice invoice = getInvoice();
+	        invoice.setSkipExtraValidations(true);
+	        invoice.setSkipModelValidations(true);
         	if(!updateHeaderTax()){
         		return false;
         	}
-	        MInvoice invoice = getInvoice();
         	
 			// Si debe manejar los descuentos arrastrados de la factura,
 			// entonces actualizo el descuento de documento de la cabecera
@@ -1311,6 +1314,18 @@ public class MInvoiceLine extends X_C_InvoiceLine {
 			rate = tax !=  null ? tax.getRate() : rate;
 		}
 		return rate;
+	}
+    
+    /**
+     * @return nombre del impuesto asociado a la línea
+     */
+    public String getTaxName() {
+		String taxName = null;
+		if (getC_Tax_ID() > 0) {
+			MTax tax = MTax.get(getCtx(), getC_Tax_ID(), get_TrxName());
+			taxName = tax !=  null ? tax.getName() : taxName;
+		}
+		return taxName;
 	}
 
 	/**

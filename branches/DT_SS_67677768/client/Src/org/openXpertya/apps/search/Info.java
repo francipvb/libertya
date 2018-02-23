@@ -60,6 +60,7 @@ import org.openXpertya.minigrid.MiniTable;
 import org.openXpertya.model.MPreference;
 import org.openXpertya.model.MQuery;
 import org.openXpertya.model.MRole;
+import org.openXpertya.model.X_C_AllocationHdr;
 import org.openXpertya.model.X_C_AllocationLine;
 import org.openXpertya.model.X_C_POSJournal;
 import org.openXpertya.model.X_M_EntidadFinancieraPlan;
@@ -75,6 +76,7 @@ import org.openXpertya.util.KeyNamePair;
 import org.openXpertya.util.MeasurableTask;
 import org.openXpertya.util.Msg;
 import org.openXpertya.util.TimeStatsLogger;
+
 /**
  * Descripción de Clase
  *
@@ -144,6 +146,8 @@ public abstract class Info extends CDialog implements ListSelectionListener {
         	info = new InfoAllocationLine(frame, modal, WindowNo, tableName, keyColumn, multiSelection, whereClause);
         } else if( tableName.equals( X_M_EntidadFinancieraPlan.Table_Name )) {
             info = new InfoEntidadFinancieraPlan( frame,modal,WindowNo,tableName,keyColumn,multiSelection,whereClause );
+        } else if( tableName.equals( X_C_AllocationHdr.Table_Name )) {
+            info = new InfoAllocationHdr( frame,modal,WindowNo,tableName,keyColumn,multiSelection,whereClause );
         } else {
         	// System.out.println("creando info otros..");
             info = new InfoGeneral( frame,modal,WindowNo,value,tableName,keyColumn,multiSelection,whereClause );
@@ -1588,13 +1592,13 @@ public abstract class Info extends CDialog implements ListSelectionListener {
         		 * a fin de identificar la ubicación del FROM en el query CON params.
         		 */
         		// Posicion donde inicia el FROM principal en la consulta SIN parametros seteados
-        		int fromPos = mainSelectSentence.length() + 1;
+        		int fromPos = mainSelectSentence.toString().replaceAll("  ", " ").length() + 1;
         		// Primer question mark a partir del FROM principal en la consulta SIN parametros seteados
-        		int firstQM = queryWihtoutParams.substring(mainSelectSentence.length()).indexOf('?') + fromPos;
+        		int firstQM = queryWihtoutParams.substring(mainSelectSentence.toString().replaceAll("  ", " ").length()).indexOf('?') + fromPos;
         		// si no hay un ?, tomar hasta el order by, y sino hasta el final
         		if (firstQM == fromPos-1)
         		{
-        			firstQM = queryWihtoutParams.substring(mainSelectSentence.length()).lastIndexOf("ORDER BY") + fromPos;
+        			firstQM = queryWihtoutParams.substring(mainSelectSentence.toString().replaceAll("  ", " ").length()).lastIndexOf("ORDER BY") + fromPos;
         			if (firstQM == fromPos-1)
         				firstQM = queryWihtoutParams.length()-1;
         		}

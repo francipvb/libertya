@@ -252,6 +252,7 @@ public class InvoiceGlobalVoiding extends SvrProcess {
 		// Se asigna la caja diaria a setear al comprobante de anulación en el
 		// caso que éste deba setearse  
 		invoice.setVoidPOSJournalID(getPosJournalCreditID());
+		invoice.setSkipExtraValidations(true);
 		// Anulo la factura
 		if (!DocumentEngine.processAndSave(invoice, MInvoice.DOCACTION_Void, false)) {
 			throw new Exception("@InvoiceVoidError@ # "
@@ -362,7 +363,7 @@ public class InvoiceGlobalVoiding extends SvrProcess {
 	 */
 	protected void confirmCurrentAccountAditionaWorks() throws Exception{
 		// Obtengo el manager actual
-		CurrentAccountManager manager = CurrentAccountManagerFactory.getManager();
+		CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(getInvoice());
 		// Confirmo las transacciones creadas
 		CallResult result = manager.afterProcessDocument(getCtx(), new MOrg(
 				getCtx(), Env.getAD_Org_ID(getCtx()), get_TrxName()),

@@ -20,6 +20,7 @@
 
 package org.openXpertya.model;
 
+import org.openXpertya.OpenXpertya;
 import org.openXpertya.plugin.common.PluginConstants;
 import org.openXpertya.plugin.common.PluginUtils;
 import org.openXpertya.util.CCache;
@@ -263,6 +264,9 @@ public class M_Table extends X_AD_Table {
         } else if (className.startsWith("W_")) {
             className	= className.substring(2);
         }
+        else if (className.startsWith("I_")) {
+            className = className.substring(2);
+        }
 
         return Util.replace(className, "_", "");
     }
@@ -295,7 +299,7 @@ public class M_Table extends X_AD_Table {
           }
     		  
         // Import Tables (Name conflict)
-        if (tableName.startsWith("I_")) {
+  /*      if (tableName.startsWith("I_")) {
 
             Class	clazz	= getPOclass("org.openXpertya.model.X_" + tableName);
 
@@ -307,7 +311,7 @@ public class M_Table extends X_AD_Table {
 
             return null;
         }
-
+*/
         // Special Naming
         for (int i = 0; i < s_special.length; i++) {
 
@@ -357,7 +361,8 @@ public class M_Table extends X_AD_Table {
 
             StringBuffer	name;
 
-            name	= new StringBuffer(packages[i]).append(".M").append(className);
+			name = new StringBuffer(packages[i]).append(".M").append((tableName.startsWith("I_") ? "I" : ""))
+					.append(className);
 
             /* Forzar o no la validacion de PO stricta segun sea un plugin o no (recibido packageName o no) */
             Class<?>	clazz	= getPOclass(name.toString(), packageName == null);
@@ -856,6 +861,23 @@ public class M_Table extends X_AD_Table {
     
     public static int getTableID(String tablename, String trxName)
     {
+    	/* Workaround contabilidad de Facturas
+    	 * """""""""""""""""""""""""""""""""""
+    	 * 
+    	 * Problema: 	Al iniciar el servidor Libertya, en particular el EjbModule openXpertya/Status, por algún motivo (todavía no determinado)
+    	 * 				no se obtiene una conexión a BBDD para cuando el classloader carga la clase X_C_Invoice y por consiguiente la resolución 
+    	 * 				del TableID para la tabla C_Invoice queda en -1.  Esto luego impide la aplicación contable de factuaras dado que 
+    	 * 				X_C_Invoice.Table_ID queda en -1 y por lo tanto en la clase Doc, línea 247, la condición (AD_Table_ID == MInvoice.Table_ID)  
+    	 * 				siempre es falsa, impidiendo contabilizar facturas.
+    	 * 
+    	 *  Workaround:	Esta solución temporal implica validar si efectivamente existe una conexión establecida a la BBDD y en caso de no ser así
+    	 *  			se realiza la misma.  Considerando que este problema únicamente se encuentra ligado con el inicio del servidor Libertya,
+    	 *  			el startupEnvironment se realiza con el argumento isClient en false. Para el cliente swing esta lógica es transparente,
+    	 *  			dado que en esos casos no existen problemas en la gestión de la conexión de la BBDD.	 
+    	 */
+    	if (!org.openXpertya.util.DB.isConnected()) {
+    		OpenXpertya.startupEnvironment(false);
+    	}
     	return DB.getSQLValue(trxName, " SELECT AD_Table_ID FROM AD_Table WHERE upper(trim(tablename)) = upper(trim(?)) ", tablename);
     }
     

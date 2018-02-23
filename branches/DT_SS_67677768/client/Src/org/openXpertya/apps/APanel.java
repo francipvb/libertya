@@ -1069,7 +1069,7 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
         //
 
         aNew.setEnabled( !changed && insertRecord );
-        aCopy.setEnabled( !changed && insertRecord );
+        aCopy.setEnabled( !changed && insertRecord && m_curTab.isAllowCopyRecord());
         aDelete.setEnabled( !changed &&!readOnly );
         aRefresh.setEnabled( !changed );
 
@@ -1650,6 +1650,12 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
 
             return;
         }
+        
+        if(copy && !m_curTab.isAllowCopyRecord()){
+            log.warning( "Copy Record disabled for Tab" );
+
+            return;
+        }
 
         cmd_save( false );
         m_curTab.dataNew( copy );
@@ -2029,7 +2035,7 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
         MQuery query = null;
         int records=0;
     	do{
-    		MField[] findFields = MField.createFields( m_ctx,m_curWindowNo,0,m_curTab.getAD_Tab_ID());
+    		MField[] findFields = MField.createFields( m_ctx,m_curWindowNo,0,m_curTab.getAD_Tab_ID(),true);
     		find = new Find( Env.getFrame( this ),m_curWindowNo,m_curTab.getName(),m_curTab.getAD_Table_ID(),m_curTab.getTableName(),m_curTab.getWhereExtended(),findFields,1 );
     		query = find.getQuery();	
 			if (find.getQuery()!=null)
@@ -2074,7 +2080,18 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
             return;
         }
 
-        Attachment va = new Attachment( Env.getFrame( this ),m_curWindowNo,m_curTab.getAD_AttachmentID(),m_curTab.getAD_Table_ID(),record_ID,null );
+        /* Intentar utilizar Client y Org según el registro relacionado */
+        Integer recordClientID = null;
+        Integer recordOrgID = null;
+        try {
+        	recordClientID = (Integer)m_curTab.getField("AD_Client_ID").getValue();
+        	recordOrgID = (Integer)m_curTab.getField("AD_Org_ID").getValue();
+        } catch (Exception e) {
+        	recordClientID = null;
+        	recordOrgID = null;
+        }
+        
+        Attachment va = new Attachment( Env.getFrame( this ),m_curWindowNo,m_curTab.getAD_AttachmentID(),m_curTab.getAD_Table_ID(),record_ID,null, recordClientID, recordOrgID );
 
         //
 

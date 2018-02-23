@@ -117,6 +117,7 @@ public class GeneratorPercepciones {
 			data.setCategoriaIVA(getCategoriaIVA());
 			data.setAlicuota(orgPercepcion.getAlicuota());
 			data.setConvenioMultilateral(orgPercepcion.isConvenioMultilateral());
+			data.setUseCABAJurisdiction(orgPercepcion.isUseCABAJurisdiction());
 			tax = new MTax(getCtx(), orgPercepcion.getC_Tax_ID(), getTrxName());
 			data.setTax(tax);
 			try{
@@ -167,6 +168,7 @@ public class GeneratorPercepciones {
 				&& getDocument().isApplyPercepcion()
 				&& CalloutInvoiceExt.ComprobantesFiscalesActivos()
 				&& (getCategoriaIVA() != null && getCategoriaIVA().isPercepcionLiable())
+				&& getDocType().isApplyPerception()
 				&& (isTPVInstance() || (getDocType() != null && (!MDocType.DOCTYPE_Retencion_InvoiceCustomer
 						.equals(getDocType().getDocTypeKey()) && !MDocType.DOCTYPE_Retencion_ReceiptCustomer
 						.equals(getDocType().getDocTypeKey()))));

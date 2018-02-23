@@ -22,11 +22,13 @@ import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.logging.Level;
 
+import org.openXpertya.cc.CurrentAccountDocument;
 import org.openXpertya.cc.CurrentAccountManager;
 import org.openXpertya.cc.CurrentAccountManagerFactory;
 import org.openXpertya.process.DocAction;
@@ -62,6 +64,14 @@ public class MCash extends X_C_Cash implements DocAction {
 	/** Booleano que determina que estamos ante una caja de una caja diaria */
 	private boolean isPOSJournalCash = false;
 	
+	/** ID del libro de caja reverso */
+	private int reverseCashID = 0;
+	
+    /** Descripción de Campos */
+
+    private static CLogger s_log = CLogger.getCLogger( MCash.class );
+    
+    
     /**
      * Descripción de Método
      *
@@ -212,10 +222,51 @@ public class MCash extends X_C_Cash implements DocAction {
         return retValue;
     }    // get
 
-    /** Descripción de Campos */
-
-    private static CLogger s_log = CLogger.getCLogger( MCash.class );
+    /**
+	 * Obtiene un libro de caja sin procesar para la organización, configuración de libro de
+	 * caja y fecha parametro
+	 * 
+	 * @param ctx
+	 *            contexto actual
+	 * @param AD_Org_ID
+	 *            organización, recibir el valor 0 indica buscar para
+	 *            organización *. En el caso que no se desee filtrar por
+	 *            organización, el parámetro debe ser null.
+	 * @param C_CashBook_ID
+	 *            configuración del libro de caja
+	 * @param dateAcct
+	 *            fecha
+	 * @param trxName
+	 *            transacción actual
+	 * @return libro de caja con las condiciones dadas, si se encuentran más de
+	 *         uno, entonces se ordena por fecha de creación descendentemente y
+	 *         se queda con el primero.
+	 */
+    public static MCash get( Properties ctx, Integer AD_Org_ID, Integer C_CashBook_ID, Timestamp dateAcct,String trxName ) {
+    	String whereClause = "ad_client_id = ? and processed = 'N' ";
+    	List<Object> params = new ArrayList<Object>();
+    	params.add(Env.getAD_Client_ID(ctx));
+    	// Organización
+    	if(AD_Org_ID != null){
+    		whereClause += " AND AD_Org_ID = ? ";
+    		params.add(AD_Org_ID);
+    	}
+    	// Config de libro de caja
+    	if(!Util.isEmpty(C_CashBook_ID, true)){
+    		whereClause += " AND C_CashBook_ID = ? ";
+    		params.add(C_CashBook_ID);
+    	}
+    	// Fecha
+    	if(dateAcct != null){
+        	whereClause += " AND dateacct::date = ?::date ";
+        	params.add(dateAcct);
+    	}
+		return (MCash) PO.findFirst(ctx, Table_Name, whereClause, params.toArray(),
+				new String[] { "dateacct desc, created desc" }, trxName, true);
+    }
     
+    
+
 	/**
 	 * @param fromCashID
 	 * @param toCashID
@@ -460,11 +511,18 @@ public class MCash extends X_C_Cash implements DocAction {
 
     protected boolean beforeSave( boolean newRecord ) {
 
+    	// Actualización del campo de validación de cajas diarias
+    	MClientInfo ci = MClient.get(getCtx()).getInfo();
+		setValidatePOSJournal(ci.isPOSJournalActive() &&
+				MCashBook.CASHBOOKTYPE_JournalCashBook.equals(getCashBookType()) && 
+				(!Util.isEmpty(getC_POSJournal_ID(), true))
+					|| (MClientInfo.POSJOURNALAPPLICATION_Both.equals(ci.getPOSJournalApplication())));
+    	
     	//Verifico que no haya un libro de caja abierto actualmente
     	
     	//Si es nuevo registro, realizo verificación
     	
-    	if(newRecord){
+    	if(newRecord && Util.isEmpty(getReverseCashID(), true)){
 			// La verificación solo se hace para los Libros que son Cajas
 			// Generales.
 			// Para los libros de Cajas Diarias es posible crear varios libros
@@ -506,23 +564,26 @@ public class MCash extends X_C_Cash implements DocAction {
             
             if(getC_POSJournal_ID() == 0 && MCashBook.CASHBOOKTYPE_JournalCashBook.equals(getCashBookType())){
         		// Caja Diaria. Intenta registrar el libro de caja
-                if (!MPOSJournal.registerDocument(this)) {
+                if (isValidatePOSJournal() && !MPOSJournal.registerDocument(this)) {
         			log.saveError("SaveError", Msg.getMsg(getCtx(), "CashPOSJournalRequiredError"));
         			return false;
                 }	
             }
     	}
 
-    	// Si la moneda del documento es diferente a la de la compañia:
+    	// Modificación por Matias Cap
+		// Se elimina la condición de la moneda ya que siempre hay que realizar la
+		// validación de la modificación de fechas
  		// No es posible modificar las fechas estado de cuenta y/o aplicación si existen líneas de caja que ya fueron procesadas
-		if (getC_Currency_ID() != Env.getContextAsInt( Env.getCtx(), "$C_Currency_ID" )) {
-    		if (is_ValueChanged( "StatementDate" ) || is_ValueChanged( "DateAcct" )) {      
-                if(containsProcessedLines()) {
-                    log.saveError( "Error",Msg.translate(getCtx(), "CannotChangeDateStatementAcct"));
-                    return false;
-                }
+		if (!newRecord && (is_ValueChanged("StatementDate") || is_ValueChanged("DateAcct"))) {      
+            if(containsProcessedLines()) {
+                log.saveError( "Error",Msg.translate(getCtx(), "CannotChangeDateStatementAcct"));
+                return false;
             }
-    	}
+        }
+		
+		// Si existe al menos una línea completa, no se puede modificar ninguna fecha de la caja
+		
     	    	
     	// Calculate End Balance
     	
@@ -817,10 +878,51 @@ public class MCash extends X_C_Cash implements DocAction {
      */
 
     public boolean voidIt() {
-        log.info( "voidIt - " + toString());
+        // Si el libro de caja pertenece a una caja diaria, no es posible anular
+		if (PO.findFirst(getCtx(), X_C_POSJournal.Table_Name, "c_cash_id = ?", new Object[] { getID() }, null,
+				get_TrxName()) != null) {
+    		setProcessMsg(Msg.getMsg(getCtx(), "CanNotVoidPOSJournalCash"));
+    		return false;
+    	}
+    	
+		// Crear el libro de caja reverso
+		MCash reverseCash = new MCash(getCtx(), 0, get_TrxName());
+		PO.copyValues(this, reverseCash);
+		reverseCash.setStatementDate(Env.getDate());
+		reverseCash.setDateAcct(reverseCash.getStatementDate());
+		reverseCash.setDescription(getName()+"^");
+		reverseCash.setBeginningBalance(getBeginningBalance().negate());
+		reverseCash.setStatementDifference(BigDecimal.ZERO);
+		reverseCash.setReverseCashID(getID());
+		if(!reverseCash.save()){
+			setProcessMsg(CLogger.retrieveErrorAsString());
+			return false;
+		}
+		
+		// Anular cada línea de caja
+		setReverseCashID(reverseCash.getID());
+		for (MCashLine mCashLine : getLines(true)) {
+			mCashLine.setReverseCashID(getReverseCashID());
+			if(!DocumentEngine.processAndSave(mCashLine, DOCACTION_Void, false)){
+				setProcessMsg("@CashLineProcessError@ #" + mCashLine.getLine() + ": " + mCashLine.getProcessMsg());
+				return false;
+			}
+		}
+		
+		// Recargar la caja reversa por actualización de importes de cada línea
+		reverseCash = new MCash(getCtx(), reverseCash.getID(), get_TrxName());
+		reverseCash.setDocStatus( DOCSTATUS_Voided );
+		reverseCash.setDocAction( DOCACTION_None );
+		if(!reverseCash.save()){
+			setProcessMsg(CLogger.retrieveErrorAsString());
+			return false;
+		}
+		
+		setDescription("^"+reverseCash.getName());		
+		setDocStatus( DOCSTATUS_Voided );
         setDocAction( DOCACTION_None );
 
-        return false;
+        return true;
     }    // voidIt
 
     /**
@@ -996,7 +1098,26 @@ public class MCash extends X_C_Cash implements DocAction {
     			aditionalResults = getCcBPUpdates().get(bpID);
 				MBPartner bp = new MBPartner(getCtx(), bpID, get_TrxName());
 				// Obtengo el manager actual
-				CurrentAccountManager manager = CurrentAccountManagerFactory.getManager();
+				CurrentAccountManager manager = CurrentAccountManagerFactory.getManager(new CurrentAccountDocument() {
+					
+					private MBPartner bpartner;
+					
+					public CurrentAccountDocument init(MBPartner bp){
+						bpartner = bp;
+						return this;
+					}
+					
+					@Override
+					public boolean isSkipCurrentAccount() {
+						MDocType cashDT = MDocType.getDocType(getCtx(), MDocType.DOCTYPE_CashJournal, get_TrxName());
+						return cashDT != null && cashDT.isSkipCurrentAccounts();
+					}
+					
+					@Override
+					public boolean isSOTrx() {
+						return bpartner.isCustomer();
+					}
+				}.init(bp));
 				// Actualizo el balance
 				CallResult result = new CallResult();
 				try{
@@ -1087,6 +1208,14 @@ public class MCash extends X_C_Cash implements DocAction {
 
         return no == 1;
     }    // updateHeader
+
+	public int getReverseCashID() {
+		return reverseCashID;
+	}
+
+	public void setReverseCashID(int reverseCashID) {
+		this.reverseCashID = reverseCashID;
+	}
 }    // MCash
 
 

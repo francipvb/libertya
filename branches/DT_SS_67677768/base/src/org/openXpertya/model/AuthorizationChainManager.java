@@ -8,7 +8,6 @@ import java.util.Properties;
 import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
-import org.openXpertya.util.Msg;
 
 public class AuthorizationChainManager {
 	
@@ -47,8 +46,8 @@ public class AuthorizationChainManager {
 		return this.trxName;
 	}
 	
-	public boolean loadAuthorizationChain(Boolean reactivateDocument) throws Exception {
-		boolean existAuthChain = false;
+	public String loadAuthorizationChain(Boolean reactivateDocument) throws Exception {
+		boolean authorizationPending = false;
 		authorizationChain = new MAuthorizationChain(
 				this.getCtx(), authorizationChainDoc.getAuthorizationID(),
 				this.getTrxName());
@@ -62,13 +61,7 @@ public class AuthorizationChainManager {
 			DB.executeUpdate(sqlDeleteAll.toString(), getTrxName());
 			authorizationChainDoc.setOldGrandTotal(authorizationChainDoc.getGrandTotal());
 		}
-
-		// Comparo que el tipo de documento de la cadena de autorización sea el mismo que el del documento
-		if (authorizationChain.getC_DocType_ID() != authorizationChainDoc
-				.getDocTypeID()) {
-			throw new Exception( Msg.getMsg(getCtx(), "DifferentTypesOfDocuments"));
-		}
-
+		
 		// Borro todos los eslabones que no pertenezcan a la cadena de autorizacion para el pedido/fc:
 		StringBuffer sql = new StringBuffer(
 				" DELETE FROM M_AuthorizationChainDocument "
@@ -76,7 +69,7 @@ public class AuthorizationChainManager {
 					+ " ( SELECT M_AuthorizationChainLink_ID "
 					+ " FROM M_AuthorizationChainLink acl "
 					+ " WHERE acl.M_AuthorizationChain_ID = " + authorizationChain.getM_AuthorizationChain_ID()
-					+ "	AND acl.MinimumAmount > " + getAmount()
+					+ " AND (case when acl.ValidateDocumentAmount = 'Y' then (acl.MinimumAmount > " + getAmount() + ") else true end) "
 					+ " AND acl.AD_Org_ID = " + authorizationChain.getAD_Org_ID()
 					+ " AND acl.AD_Client_ID = " + authorizationChain.getAD_Client_ID() 
 					+ ")"
@@ -116,18 +109,25 @@ public class AuthorizationChainManager {
 			if (!authDocument.save()) {
 				throw new Exception(CLogger.retrieveErrorAsString());
 			}
-			existAuthChain = true;
+			authorizationPending = true;
+		}
+
+		// Seteo a Pendiente si hay autorizaciones pendientes nuevas
+		authorizationChainDoc.setAuthorizationChainStatus(authorizationPending
+				? X_M_AuthorizationChainDocument.STATUS_Pending : authorizationChainDoc.getAuthorizationChainStatus());
+		
+		// Obtengo el estado de no autorización a setear y lo devuelvo
+		String docStatus = null;
+		// Obtener el estado de no autorización del tipo de documento y cadena
+		MAuthorizationChainDocumentType acdt = MAuthorizationChainDocumentType.get(getCtx(),
+				authorizationChain.getAD_Org_ID(), authorizationChainDoc.getDocTypeID(), authorizationChain.getID(),
+				getTrxName());
+		if (X_M_AuthorizationChainDocument.STATUS_Pending.equals(authorizationChainDoc.getAuthorizationChainStatus())
+				&& acdt != null) {
+			docStatus = acdt.getNotAuthorizationStatus();
 		}
 		
-		// Controlar si están todos autorizados, para dejar completar o no
-		if ((!existAuthChain)
-				&& (DB.getSQLValue(this.getTrxName(),
-						"SELECT COUNT(*) FROM M_AuthorizationChainDocument WHERE " + authorizationChainDoc.get_TableName() + "_ID = " + authorizationChainDoc.getID()
-								+ " AND status = '"	+ X_M_AuthorizationChainDocument.STATUS_Pending	+ "'" + " AND AD_Org_ID = " + authorizationChain.getAD_Org_ID()
-								+ " AND AD_Client_ID = " + authorizationChain.getAD_Client_ID() ) != 0)) {
-			existAuthChain = true;
-		}
-		return existAuthChain;
+		return docStatus;
 	}
 	
 	private BigDecimal getAmount(){

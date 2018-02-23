@@ -10,7 +10,6 @@ import org.openXpertya.model.MComponent;
 import org.openXpertya.model.MComponentVersion;
 import org.openXpertya.model.M_Column;
 import org.openXpertya.model.PO;
-import org.openXpertya.plugin.install.PluginXMLUpdater.ChangeGroup;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Util;
@@ -45,10 +44,20 @@ public abstract class ChangeLogXMLBuilder extends PluginXMLBuilder {
 	/** Usuario registrado en registros del changelog */
 	
 	private Integer userID = null;
+
+	/** First Changelog (primer changelog) */
+	
+	protected int firstChangelogID = -1;
 	
 	/** Last Changelog (ultimo changelog) */
 	
 	protected int lastChangelogID = -1;
+	
+	/** Checkear si la los metadatos en el changelog coincide los metadatos */
+	protected boolean validateChangelogConsistency = false;
+	
+	/** Deshabilitar las entradas del changelog inconsistentes con los metadatos */
+	protected boolean disableInconsistentChangelog = false;
 	
 
 	
@@ -68,11 +77,13 @@ public abstract class ChangeLogXMLBuilder extends PluginXMLBuilder {
 	}
 
 	
-	public ChangeLogXMLBuilder(String path, String fileName, Integer componentVersionID, Integer changeLogIDFrom, Integer changeLogIDTo, Integer userID, String trxName) {
+	public ChangeLogXMLBuilder(String path, String fileName, Integer componentVersionID, Integer changeLogIDFrom, Integer changeLogIDTo, Integer userID, String trxName, boolean validateChangelogConsistency, boolean disableInconsistentChangelog) {
 		this(path, fileName, componentVersionID, trxName);
 		setChangeLogIDFrom(changeLogIDFrom);
 		setChangeLogIDTo(changeLogIDTo);
 		setUserID(userID);
+		setValidateChangelogConsistency(validateChangelogConsistency);
+		setDisableInconsistentChangelog(disableInconsistentChangelog);
 	}
 	
 	
@@ -115,9 +126,21 @@ public abstract class ChangeLogXMLBuilder extends PluginXMLBuilder {
 			setAttribute("tableName", group.getTableName(), groupNode);
 			setAttribute("uid", group.getAd_componentObjectUID(), groupNode);
 			setAttribute("operation", group.getOperation(), groupNode);
+			setAttribute("changelogGroupID", ""+group.getChangelogGroupID(), groupNode);			
 			// Si es eliminación va un tag vacío, 
 			// sino se deben crear tags para cada columna  
 			if(!group.getOperation().equals(MChangeLog.OPERATIONTYPE_Deletion)){
+				// Validar si efectivamente existe el registro.  Pueden darse casos en donde el changelog queda desfazado con respecto
+				// a la actividad en metadatos.  Por ejemplo si se eliminó un AD_Tab, por definición de tabla, se realiza el CASCADE
+				// de los AD_Fields relacionados al tab. Sin embargo, al changelog nunca es incorporada dicha información.  En caso
+				// de que estemos en una inserción/modificación y el registro ya no existe, no tiene sentido alguno exportar esta información
+				if (validateChangelogConsistency && 1 != DB.getSQLValue(null, "SELECT count(1) FROM " + group.getTableName() + " WHERE AD_ComponentObjectUID = '" + group.getAd_componentObjectUID() + "'")) {
+					System.err.println("WARNING: Registro " + group.getAd_componentObjectUID() + " de tabla " + group.getTableName() + " no existe.  Se omite changelogGroupID " + group.getChangelogGroupID() + " en la exportacion.");
+					if (disableInconsistentChangelog && 0 < DB.executeUpdate("UPDATE AD_Changelog SET isActive = 'N' WHERE changelogGroup_ID = " + group.getChangelogGroupID(), trxName)) {
+						System.err.println("         El changelogGroupID " + group.getChangelogGroupID() + " ha sido deshabilitado de la bitacora debido a inconsistencias con los metadatos.");
+					}
+					continue;
+				}
 				// Itero por los elementos del grupo
 				for (ChangeLogElement element : group.getElements()) {
 					// Creo el nodo elemento para la columna
@@ -250,8 +273,17 @@ public abstract class ChangeLogXMLBuilder extends PluginXMLBuilder {
 			// Agrego el nodo de grupo dentro del nodo root
 			addNode(groupNode, getRootNode());
 		}
-		// Guardar ultimo changelog exportado
 		int groupListSize = groupList.getGroups().size();
+		// Guardar primer changelog exportado
+		if(groupListSize > 0){
+			ChangeLogGroup firstGroup = groupList.getGroups().get(0);
+			int elementSize = firstGroup.getElements().size();
+			if(elementSize > 0) {
+				ChangeLogElement firstElement = firstGroup.getElements().get(0); 
+				firstChangelogID = firstElement.getAD_Changelog_ID();
+			}
+		}
+		// Guardar ultimo changelog exportado
 		if(groupListSize > 0){
 			ChangeLogGroup lastGroup = groupList.getGroups().get(groupListSize - 1);
 			int elementSize = lastGroup.getElements().size();
@@ -379,5 +411,35 @@ public abstract class ChangeLogXMLBuilder extends PluginXMLBuilder {
 
 	public void setLastChangelogID(int lastChangelogID) {
 		this.lastChangelogID = lastChangelogID;
+	}
+
+
+	public boolean isValidateChangelogConsistency() {
+		return validateChangelogConsistency;
+	}
+
+
+	public void setValidateChangelogConsistency(boolean validateChangelogConsistency) {
+		this.validateChangelogConsistency = validateChangelogConsistency;
+	}
+
+
+	public boolean isDisableInconsistentChangelog() {
+		return disableInconsistentChangelog;
+	}
+
+
+	public void setDisableInconsistentChangelog(boolean disableInconsistentChangelog) {
+		this.disableInconsistentChangelog = disableInconsistentChangelog;
+	}
+
+
+	public int getFirstChangelogID() {
+		return firstChangelogID;
+	}
+
+
+	public void setFirstChangelogID(int firstChangelogID) {
+		this.firstChangelogID = firstChangelogID;
 	}
 }

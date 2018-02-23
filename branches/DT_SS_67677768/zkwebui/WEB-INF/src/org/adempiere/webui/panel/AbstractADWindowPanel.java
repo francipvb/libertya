@@ -857,9 +857,21 @@ public abstract class AbstractADWindowPanel extends AbstractUIPart implements To
 			return;
 		}
 
+        /* Intentar utilizar Client y Org según el registro relacionado */
+        Integer recordClientID = null;
+        Integer recordOrgID = null;
+        try {
+        	recordClientID = (Integer)curTab.getField("AD_Client_ID").getValue();
+        	recordOrgID = (Integer)curTab.getField("AD_Org_ID").getValue();
+        } catch (Exception e) {
+        	recordClientID = null;
+        	recordOrgID = null;
+        }
+		
 		//	Attachment va =
 		new WAttachment (	curWindowNo, curTab.getAD_AttachmentID(),
-							curTab.getAD_Table_ID(), record_ID, null);
+							curTab.getAD_Table_ID(), record_ID, null,
+							recordClientID, recordOrgID);
 
 		curTab.loadAttachments();				//	reload
 		toolbar.getButton("Attachment").setPressed(curTab.hasAttachment());
@@ -1086,7 +1098,7 @@ public abstract class AbstractADWindowPanel extends AbstractUIPart implements To
 	{
 		toolbar.enableChanges(curTab.isReadOnly());
 		toolbar.enabledNew(curTab.isInsertRecord());
-		toolbar.enableCopy(curTab.isInsertRecord());
+		toolbar.enableCopy(curTab.isAllowCopyRecord());
 
 		toolbar.enableTabNavigation(curTabIndex > 0,
 		        curTabIndex < (adTab.getTabCount() - 1));
@@ -1203,7 +1215,7 @@ public abstract class AbstractADWindowPanel extends AbstractUIPart implements To
         }
 //        toolbar.enabledNew(!changed && insertRecord && !curTab.isSortTab());
         toolbar.enabledNew(insertRecord && !curTab.isSortTab());
-        toolbar.enableCopy(!changed && insertRecord && !curTab.isSortTab());
+        toolbar.enableCopy(!changed && insertRecord && !curTab.isSortTab() && curTab.isAllowCopyRecord());
         toolbar.enableRefresh(!changed);
         toolbar.enableDelete(!changed && !readOnly && !curTab.isSortTab());
         toolbar.enableDeleteSelection(!changed && !readOnly && !curTab.isSortTab());
@@ -1381,9 +1393,9 @@ public abstract class AbstractADWindowPanel extends AbstractUIPart implements To
      */
     public void onCopy()
     {
-        if (!curTab.isInsertRecord())
+        if (!curTab.isAllowCopyRecord())
         {
-            logger.warning("Insert Record disabled for Tab");
+            logger.warning("Copy Record disabled for Tab");
             return;
         }
 
@@ -1420,7 +1432,7 @@ public abstract class AbstractADWindowPanel extends AbstractUIPart implements To
         	return;
 
         //  Gets Fields from AD_Field_v
-        MField[] findFields = MField.createFields(ctx, curTab.getWindowNo(), 0,curTab.getAD_Tab_ID());
+        MField[] findFields = MField.createFields(ctx, curTab.getWindowNo(), 0,curTab.getAD_Tab_ID(),true);
         FindWindow find = new FindWindow (curTab.getWindowNo(), curTab.getName(),
             curTab.getAD_Table_ID(), curTab.getTableName(),
             curTab.getWhereExtended(), findFields, 1, curTab.getAD_Tab_ID());
@@ -2060,10 +2072,8 @@ public abstract class AbstractADWindowPanel extends AbstractUIPart implements To
 			{
 				if (FDialog.ask(curWindowNo, null, "PostImmediate?"))
 				{
-					boolean force = ps != null && !ps.equals ("N");		//	force when problems
-
 					String error = AEnv.postImmediate (curWindowNo, Env.getAD_Client_ID(ctx),
-						tableId, recordId, force);
+						tableId, recordId, true);
 
 					if (error != null)
 						FDialog.error(curWindowNo, null, "PostingError-N", error);

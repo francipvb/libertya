@@ -29,11 +29,13 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.Vector;
 import java.util.logging.Level;
 
@@ -49,6 +51,7 @@ import org.openXpertya.process.DocAction;
 import org.openXpertya.process.DocActionStatusEvent;
 import org.openXpertya.process.DocActionStatusListener;
 import org.openXpertya.util.AuxiliarDTO;
+import org.openXpertya.util.CCache;
 import org.openXpertya.util.CLogMgt;
 import org.openXpertya.util.CLogger;
 import org.openXpertya.util.CPreparedStatement;
@@ -58,6 +61,7 @@ import org.openXpertya.util.DBException;
 import org.openXpertya.util.DisplayType;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Evaluatee;
+import org.openXpertya.util.KeyNamePair;
 import org.openXpertya.util.Msg;
 import org.openXpertya.util.Trace;
 import org.openXpertya.util.Util;
@@ -290,7 +294,7 @@ public abstract class PO implements Serializable, Comparator, Evaluatee {
 	protected String m_processMsg = "";
 	
 	private boolean isFromTab = false;
-
+	
 	/**
 	 * Initialize and return PO_Info
 	 * 
@@ -1206,6 +1210,7 @@ public abstract class PO implements Serializable, Comparator, Evaluatee {
 			to.m_newValues[toIdx] = from.m_newValues[i];
 			to.m_oldValues[toIdx] = from.m_oldValues[i];
 		}
+		from.copyInstanceValues(to);
 	} // copy
 
 	protected static boolean ignoreColumnOnCopyValues(String colName, PO p,
@@ -1748,6 +1753,9 @@ public abstract class PO implements Serializable, Comparator, Evaluatee {
 	// Use PO method for persistence, or direct INSERT INTO clause from X_ 
 	protected boolean directInsert = false;
 	
+	// Bajo direct insert, omitir incluso cualquier gestion de PO (como preliminares antes de la inserción o bien saveFinish)
+	protected boolean skipHandlers = false;
+	
 	
 	/**
 	 * 	Is new record
@@ -1774,6 +1782,10 @@ public abstract class PO implements Serializable, Comparator, Evaluatee {
 	 * @return true if saved
 	 */
 	public boolean save() {
+		// Insercion directa omitiendo cualquier tipo de logica?
+		if (directInsert && skipHandlers) 
+			return insertDirect();
+		
 		// New
 		if (!m_createNew && m_IDs[0].equals(I_ZERO)) // first key value = 0
 		{
@@ -3173,7 +3185,7 @@ public abstract class PO implements Serializable, Comparator, Evaluatee {
 			log.fine("#" + no);
 		else
 			log.warning("#" + no + " - Table=" + acctTable + " from "
-					+ acctBaseTable);
+					+ acctBaseTable + ". Sentence: "+sb.toString());
 		return no > 0;
 	} // insert_Accounting
 
@@ -3917,6 +3929,49 @@ public abstract class PO implements Serializable, Comparator, Evaluatee {
 		return po;
 	}
 
+	/**
+	 * Obtiene el primer registro de la tabla con nombre tableName que cumplen
+	 * con las condiciones dadas en la cláusula where parámetro. Esta cláusula
+	 * puede tener parámetros (notación ?) que luego serán cargados al Prepared
+	 * Statement. Estos parámetros (whereParams) que llevará el where deben
+	 * pasarse en el orden de aparición en la cláusula. Por ejemplo, el primer
+	 * parámetro dentro de la cláusula, debe ser el primer elemento dentro del
+	 * array de objetos whereParams, y así sucesivamente. <strong>NOTA:</strong>
+	 * No agregar WHERE a la cláusula parámetro, se agrega automáticamente.
+	 * 
+	 * @param ctx
+	 *            contexto utilizado para la creación del PO.
+	 * @param tableName
+	 *            nombre de la tabla utilizada.
+	 * @param whereClause
+	 *            cláusula where, en el caso de haber condiciones.
+	 * @param whereParams
+	 *            parámetros de la cláusula where, en el caso que hubiere.
+	 * @param orderByColumns
+	 *            nombre de las columnas por las cuales ordenar la búsqueda
+	 *            resultante.
+	 * @param noConvert
+	 *            no convierte el sql
+	 * @param trxName
+	 *            nombre de la transacción actual.
+	 * @return la primer tupla encontrada de la tabla y las condiciones
+	 *         indicadas como parámetro, null en caso de no existir resultados.
+	 *         versión 1.0
+	 */
+	public static PO findFirst(Properties ctx, String tableName,
+			String whereClause, Object[] whereParams, String[] orderByColumns,
+			String trxName, boolean noConvert) {
+		PO po = null;
+		// Busco los registros a partir de los datos parámetro
+		List<PO> findList = PO.find(ctx, tableName, whereClause, whereParams,
+				orderByColumns, trxName, noConvert);
+		// Si se encontraron registros, agarro el primero de ellos
+		if (findList.size() > 0) {
+			po = findList.get(0);
+		}
+		return po;
+	}
+	
 	/**
 	 * @return Returns the docActionStatusListeners.
 	 */
@@ -4675,6 +4730,15 @@ public abstract class PO implements Serializable, Comparator, Evaluatee {
 	public void setDirectInsert(boolean directInsert) {
 		this.directInsert = directInsert;
 	}
+	
+	public boolean isSkipHandlers() {
+		return skipHandlers;
+	}
+
+	public void setSkipHandlers(boolean skipHandlers) {
+		this.skipHandlers = skipHandlers;
+	}
+
 
 	public void setLog(CLogger log){
 		this.log = log;
@@ -4871,5 +4935,44 @@ public abstract class PO implements Serializable, Comparator, Evaluatee {
 		return res;
 	}
 
+	/**
+	 * Método que permite copiar valores de instancia de un PO sobre otro.
+	 * Utilizado al copiar PO a Helpers de Componentes
+	 * 
+	 * @param copy el PO a copiar valores
+	 */
+	public void copyInstanceValues(PO to){
+		// Por ahora no se hace nada aca ya que no existen valores de instancia a copiar
+	}
+	
+	/** Cache de referencias */
+	protected static CCache<String, Set<String>> ref_cache = new CCache<String, Set<String>>("ref_cache", 50, 10);
+	
+	/** Dada una refID, obtener la lista de opciones */
+	protected static Set<String> getRefCache(String refUID) {
+		// Si no existe en la cache, incorporarla
+		if (ref_cache.get(refUID) == null) {
+			KeyNamePair[] options = DB.getKeyNamePairs("SELECT ad_ref_list_id, value FROM ad_ref_list WHERE ad_reference_id = (SELECT AD_Reference_ID FROM AD_Reference WHERE AD_ComponentObjectUID = '" + refUID + "')", false);
+			HashSet<String> aSet = new HashSet<String>();
+			for (KeyNamePair option : options) {
+				aSet.add(option.getName());
+			}
+			ref_cache.put(refUID, aSet);
+		}
+		return ref_cache.get(refUID);
+	}
+	
+	/** Dada una referencia, verificar si la opcion dada es valida */
+	public static boolean refContainsValue(String refUID, String value) {
+		return getRefCache(refUID).contains(value);
+	}
+	
+	/** Dada una referencia, retornar las opciones validas */
+	public static String refValidOptions(String refUID) {
+		StringBuffer retValue = new StringBuffer();
+		for (String ref : getRefCache(refUID))
+			retValue.append(" - ").append(ref).append(" ");
+		return retValue.toString();
+	}
 	
 } // PO

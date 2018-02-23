@@ -5,6 +5,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 
 import org.openXpertya.model.AbstractRetencionProcessor;
@@ -19,6 +21,7 @@ import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.Util;
 
 public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor {
 
@@ -45,6 +48,7 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 	private BigDecimal importeFijo = Env.ZERO;
 
 	private X_M_Retencion_Invoice retencion = null;
+	private List<X_M_Retencion_Invoice> retenciones = null;
 	
 	@Override
 	public void loadConfig(MRetencionSchema retSchema) {
@@ -79,18 +83,8 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 		calculatePagosMensualAcumulados();
 		calculateRetencionesMensualAcumuladas();
 		
-		// Si los pagos anteriores acumulados son mayores al importe no
-		// imponible, entonces no lo tomo a este último
-		// TODO esta porción de código fue proporcionada por el algoritmo de
-		// Horacio, verificar si hay que dejarla o no
-		// --------------------------------------------------------------
-//		if(getPagosAnteriores().compareTo(getImporteNoImponible()) > 0){
-//			setImporteNoImponible(Env.ZERO);
-//		}
-		// --------------------------------------------------------------
-		
 		// Se calcula la base imponible. (el monto sujeto a la aplicación de la retención).
-		// BI = PAA + EP - INI 
+		// BI = PAA + EP - INI
 		baseImponible = getPagosAnteriores().add(getPayNetAmt()).subtract(getImporteNoImponible());
 		
 		// Si la base imponible es menor que cero, entonces no hay retención que aplicar y
@@ -113,7 +107,7 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 		
 		// Se determina el importe a retener decrementando las retenciones anteriores
 		// IR = ID - RAA
-		importeRetenido = importeDeterminado.subtract(getRetencionesAnteriores());
+		importeRetenido = importeDeterminado.subtract(getRetencionesAnteriores()).setScale(2, BigDecimal.ROUND_HALF_EVEN);
 		
 		// Una vez calculado el importe a retener, se compara con el importe mínimo de
 		// retención. Si el IR es menor que el mínimo de retención, entonces no se 
@@ -128,13 +122,12 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 		
 		return importeRetenido;
 	}
-
-	@Override
-	public boolean save(MAllocationHdr alloc) throws Exception {
+	
+	public List<X_M_Retencion_Invoice> save(MAllocationHdr alloc, boolean save) throws Exception {
 		// Si el monto de retención es menor o igual que cero, no se debe guardar
 		// la retención ya que no se retuvo nada.
 		if (getAmount().compareTo(Env.ZERO) <= 0)
-			return false;
+			return null;
 		
 		// Se asigna el allocation header como el actual.
 		setAllocationHrd(alloc);
@@ -160,9 +153,28 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 		retencion.setimporte_determinado_amt(getImporteDeterminado());
 		retencion.setbaseimponible_amt(getBaseImponible());
 		retencion.setIsSOTrx(isSOTrx());
+		if (save)
+			if(!retencion.save())
+				throw new Exception(CLogger.retrieveErrorAsString());
+	
+		retenciones = new ArrayList<X_M_Retencion_Invoice>();
+		retenciones.add(retencion);
 		
-		return retencion.save();
+		return retenciones;
+	}
 
+	@Override
+	public boolean save(MAllocationHdr alloc) throws Exception {
+		List<X_M_Retencion_Invoice> retList = save(alloc, false);
+		if(Util.isEmpty(retList)){
+			return false;
+		}
+		for (X_M_Retencion_Invoice retInvoice : retList) {
+			if(!retInvoice.save()){
+				throw new Exception(CLogger.retrieveErrorAsString());
+			}
+		}
+		return true;
 	} // save 
 
 	private MInvoice crearFacturaRecaudador() throws Exception {
@@ -192,7 +204,8 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 		recaudador_fac.setDocAction(MInvoice.DOCACTION_Complete);
 		recaudador_fac.setC_BPartner_Location_ID(locationID);
 		recaudador_fac.setCUIT(null);
-		recaudador_fac.setPaymentRule(MInvoice.PAYMENTRULE_Check);
+		recaudador_fac.setPaymentRule(getPaymentRule());
+		recaudador_fac.setCurrentAccountVerified(true);
 		recaudador_fac.setC_Project_ID(getProjectID());
 		recaudador_fac.setC_Campaign_ID(getCampaignID());
 		
@@ -212,7 +225,7 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 		recaudador_fac.setM_PriceList_ID(priceListID);
 		
 		if (!recaudador_fac.save())  
-			 throw new Exception( "@CollectorInvoiceSaveError@");
+			 throw new Exception( "@CollectorInvoiceSaveError@: "+CLogger.retrieveErrorAsString());
 		
 		/* Linea de la factura */
 		MInvoiceLine fac_linea = new MInvoiceLine(Env.getCtx(),0,getTrxName());
@@ -229,8 +242,9 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 			 throw new Exception( "@CollectorInvoiceLineSaveError@:" + CLogger.retrieveErrorAsString());
 		
 		/*Completo la factura*/
-		recaudador_fac.processIt( DocAction.ACTION_Complete );
-		recaudador_fac.save();
+		if(!DocumentEngine.processAndSave(recaudador_fac, MInvoice.DOCACTION_Complete, false)){
+			throw new Exception(recaudador_fac.getProcessMsg());
+		}
 		
 		return recaudador_fac;
 	}
@@ -263,7 +277,8 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 		credito_prov.setDocAction(MInvoice.DOCACTION_Complete);
 		credito_prov.setC_BPartner_Location_ID(locationID);
 		credito_prov.setCUIT(getBPartner().getTaxID());
-		credito_prov.setPaymentRule(MInvoice.PAYMENTRULE_Check);
+		credito_prov.setPaymentRule(getPaymentRule());
+		credito_prov.setCurrentAccountVerified(true);
 		credito_prov.setC_Project_ID(getProjectID());
 		credito_prov.setC_Campaign_ID(getCampaignID());
 		
@@ -286,7 +301,7 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 		credito_prov.setM_PriceList_ID(priceListID);
 		
 		if(!credito_prov.save())		   
-			throw new Exception("@VendorRetencionDocSaveError@");
+			throw new Exception("@VendorRetencionDocSaveError@: "+CLogger.retrieveErrorAsString());
 
 		/* Linea de la nota de credito */
 		MInvoiceLine cred_linea = new MInvoiceLine(Env.getCtx(),0,getTrxName());
@@ -300,11 +315,12 @@ public class RetencionHonorariosProfesionales extends AbstractRetencionProcessor
 		cred_linea.setPriceActual(getAmount());
 		cred_linea.setC_Project_ID(credito_prov.getC_Project_ID());
 		if(!cred_linea.save())		   
-			 throw new Exception( "@VendorRetencionDocLineSaveError@");
+			 throw new Exception( "@VendorRetencionDocLineSaveError@: "+CLogger.retrieveErrorAsString());
 		
 		/*Completo la factura*/
-		credito_prov.processIt(DocAction.ACTION_Complete );
-		credito_prov.save();
+		if(!DocumentEngine.processAndSave(credito_prov, MInvoice.DOCACTION_Complete, false)){
+			throw new Exception(credito_prov.getProcessMsg());
+		}
 		retencion.setC_InvoiceLine_ID(cred_linea.getC_InvoiceLine_ID());
 		
 		return credito_prov;

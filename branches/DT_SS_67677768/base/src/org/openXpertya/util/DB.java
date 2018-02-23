@@ -752,15 +752,25 @@ public final class DB {
      */
 
     public static CPreparedStatement prepareStatement( String RO_SQL,String trxName ) {
-        return prepareStatement( RO_SQL,ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY,trxName,false );
+        return prepareStatement( RO_SQL,ResultSet.TYPE_FORWARD_ONLY, requiresRW(RO_SQL) ? ResultSet.CONCUR_UPDATABLE : ResultSet.CONCUR_READ_ONLY, trxName, false );
     }    // prepareStatement
     
     
     /** Sobrecarga con parametro noConvert para evitar intentos de conversion de sentencias */
     public static CPreparedStatement prepareStatement( String RO_SQL,String trxName, boolean noConvert) {
-    	return prepareStatement( RO_SQL,ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY,trxName, noConvert );
+    	return prepareStatement( RO_SQL,ResultSet.TYPE_FORWARD_ONLY, requiresRW(RO_SQL) ? ResultSet.CONCUR_UPDATABLE : ResultSet.CONCUR_READ_ONLY, trxName, noConvert );
     }
 
+    /** Verifica si el query contiene una invocacion a nextval, lo cual obliga a partir de postgres 9.x a utilizar una conexión RW
+     *  Impacto en performance por query a ejecutar despreciable: 100000 invocaciones considerando un SQL de más de 1000 caracteres requiere 2 segundos.  
+     * */
+    protected static boolean requiresRW(String SQL) {
+    	if (SQL == null || SQL.length() == 0)
+    		return false;
+    	return SQL.toLowerCase().replaceAll(" ", "").contains("nextval(");
+    }
+    
+    
     /**
      * Descripción de Método
      *
@@ -1167,14 +1177,15 @@ public final class DB {
     public static int getSQLValue( String trxName,String sql ) {
     	return getSQLValue( trxName, sql, false );
     }
-
+        
+    
     /** Sobrecarga con parametro noConvert para evitar intentos de conversion de sentencias */
-    public static int getSQLValue( String trxName,String sql, boolean noConvert ) {
+    public static int getSQLValue( String trxName,String sql, boolean noConvert) {
         int               retValue = -1;
         PreparedStatement pstmt    = null;
 
         try {
-            pstmt = prepareStatement( sql,trxName, noConvert );
+            pstmt = prepareStatement( sql,trxName, noConvert);
 
             ResultSet rs = pstmt.executeQuery();
 
@@ -2352,6 +2363,20 @@ public final class DB {
 	
 	public static Timestamp getDBTimestamp(String trxName){
 		return getSQLValueTimestamp(trxName, "SELECT now()");
+	}
+	
+	/** Cancela la ejecución de un Statement */
+	public static boolean cancelStatement(Statement stmt) {
+		try {
+			if (stmt!=null && !stmt.isClosed()) {
+				stmt.cancel();
+				stmt.close();
+			}
+			return true;
+		} catch (Exception e) {
+			log.log( Level.SEVERE, e.getMessage());
+			return false;
+		}
 	}
 }    // DB
 
