@@ -43,7 +43,6 @@ import org.openXpertya.util.CLogger;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.HTMLMsg;
-import org.openXpertya.util.HTMLMsg.HTMLList;
 import org.openXpertya.util.MProductCache;
 import org.openXpertya.util.Msg;
 import org.openXpertya.util.PurchasesUtil;
@@ -4709,6 +4708,15 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
 		return tpvGeneratedInvoiceID;
 	}
 	
+	public BigDecimal getPercepcionesRatesAmt(){
+		String sql = "select sum(taxamt/taxbaseamt) " +
+					 "from c_ordertax as ot " +
+					 "inner join c_tax as t on t.c_tax_id = ot.c_tax_id " +
+					 "where ot.c_order_id = ? AND t.ispercepcion = 'Y'";
+		BigDecimal percepcionRates = DB.getSQLValueBD(get_TrxName(), sql, getID());
+		return percepcionRates == null ? BigDecimal.ZERO : percepcionRates;
+	}
+	
 	public BigDecimal getPercepcionesTotalAmt(){
 		String sql = "select sum(taxamt) " +
 					 "from c_ordertax as ot " +
@@ -4770,6 +4778,18 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
 		public Date getDate() {
 			return getDateOrdered();
 		}
+		
+		/*@Override
+		public BigDecimal getLinesTotalAmt(boolean includeOtherTaxesAmt) {
+			BigDecimal totalAmt = BigDecimal.ZERO;
+			for (IDocumentLine line : getDocumentLines()) {
+				totalAmt = totalAmt.add(line.getTotalAmt());
+			}
+			if(includeOtherTaxesAmt){
+				totalAmt = totalAmt.add(MOrder.this.getPercepcionesTotalAmt());
+			}
+			return totalAmt;
+		}*/
 
 		@Override
 		public void setTotalDocumentDiscount(BigDecimal discountAmount) {
@@ -5063,6 +5083,15 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
 		return isSelfService();
 	}
 	
+	public BigDecimal getNetTaxBaseAmt(){
+		BigDecimal total = Env.ZERO;
+		for (MOrderLine orderLine : getLines()) {
+			// Total de líneas sin impuestos
+			total = total.add(orderLine.getNetTaxBaseAmt());
+		}
+		return total;
+	}
+    
 }    // MOrder
 
 

@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.logging.Level;
+
+import org.apache.ecs.xhtml.code;
 import org.openXpertya.model.DiscountCalculator.IDocumentLine.DiscountApplication;
 import org.openXpertya.model.ProductMatching.MatchingCompareType;
 import org.openXpertya.util.CLogger;
@@ -168,7 +170,7 @@ public class DiscountCalculator {
 	 * general agregado para realizar el cálculo de descuento.
 	 */
 	private boolean assumeGeneralDiscountAdded = false;
-	
+		
 	/**
 	 * Crea un nuevo calculador de descuentos vacío. Por defecto este calculador
 	 * no aplicará descuentos hasta que se cargue un descuento de Entidad
@@ -391,6 +393,10 @@ public class DiscountCalculator {
 	 *             si <code>document</code> es <code>null</code>.
 	 */
 	protected BigDecimal calculateDiscount(IDocument document, MDiscountSchema discountSchema, BigDecimal baseAmt) {
+		return calculateDiscount(document, discountSchema, baseAmt, false); 
+	}
+	
+	protected BigDecimal calculateDiscount(IDocument document, MDiscountSchema discountSchema, BigDecimal baseAmt, boolean updateTemporals) {
 		BigDecimal discountAmt = BigDecimal.ZERO; // Importe del descuento retornado
 		
 		// Se requiere un documento para poder realizar el cálculo
@@ -420,7 +426,11 @@ public class DiscountCalculator {
 
 		// Calcula el descuento de cada línea y lo suma al total
 		for (IDocumentLine documentLine : document.getDocumentLines()) {
-			lineDiscountAmt = calculateDiscount(documentLine, discountSchema, baseAmt, false);
+			lineDiscountAmt = calculateDiscount(documentLine, discountSchema, baseAmt);
+			lineDiscountAmt = documentLine.getTaxedAmount(lineDiscountAmt);
+			if(updateTemporals){
+				documentLine.setTemporalTotalDocumentDiscountAmt(scaleAmount(lineDiscountAmt));
+			}
 			discountAmt = discountAmt.add(lineDiscountAmt);
 		}
 				
@@ -456,45 +466,16 @@ public class DiscountCalculator {
 	 */
 
 	public BigDecimal calculateDiscount(MDiscountSchema discountSchema, BigDecimal baseAmt) {
-		validateAssociatedDocument();
-		return calculateDiscount(getDocument(), discountSchema, baseAmt);
+		return calculateDiscount(discountSchema, baseAmt, false);
 	}
-
-	/**
-	 * <p>
-	 * Calcula el importe total de descuento de una línea de dcoumento a partir
-	 * de un Esquema de Descuento determinado y un importe base de aplicación.
-	 * </p>
-	 * <p>
-	 * La línea de documento parámetro NO sufre modificaciones.
-	 * </p>
-	 * <p>
-	 * Este método solo calcula el importe del descuento y lo devuelve como
-	 * valor de retorno.
-	 * </p>
-	 * 
-	 * @param documentLine
-	 *            Línea de documento sobre la cual se calcula el descuento
-	 * @param discountSchema
-	 *            Esquema de Descuento a aplicar
-	 * @param baseAmt
-	 *            Importe base de aplicación para el cálculo de proporciones
-	 *            dentro del documento. Si es <code>null</code> se toma como
-	 *            importe base el importe total del documento al que pertenece
-	 *            la línea, sin contemplar descuentos a nivel de documento
-	 * @param netDiscount
-	 *            Indica si el descuento debe contemplar el importe de impuesto
-	 *            de la línea o solo el neto de línea. Si es <code>true</code>
-	 *            se calcula el descuento en base al importe determinado por
-	 *            {@link IDocumentLine#getPriceList()}, si es <code>false</code>
-	 *            en base a {@link IDocumentLine#getTaxedPriceList()}.
-	 * 
-	 * @return El valor del descuento o {@link BigDecimal#ZERO} si el esquema no
-	 *         existe o el resultado de la aplicación del esquema es justamente
-	 *         cero.
-	 */
+	
+	public BigDecimal calculateDiscount(MDiscountSchema discountSchema, BigDecimal baseAmt, boolean updateTemporals) {
+		validateAssociatedDocument();
+		return calculateDiscount(getDocument(), discountSchema, baseAmt,updateTemporals);
+	}
+	
 	protected BigDecimal calculateDiscount(IDocumentLine documentLine,
-			MDiscountSchema discountSchema, BigDecimal baseAmt, boolean netDiscount) {
+			MDiscountSchema discountSchema, BigDecimal baseAmt) {
 		
 		// Importe total del documento con impuestos. Utilizado para calcular la
 		// proporción del baseAmt que también tiene incluido el impuesto 
@@ -569,13 +550,7 @@ public class DiscountCalculator {
 		// precio descontado.
 		BigDecimal totalPriceAmt = price.multiply(qty);
 		BigDecimal totalDiscountedPriceAmt = discountedPrice.multiply(qty);
-		if (!netDiscount) {
-			totalPriceAmt = documentLine.getTaxedAmount(totalPriceAmt);
-			totalDiscountedPriceAmt = documentLine.getTaxedAmount(totalDiscountedPriceAmt);
-		}
 		
-		// Calcula el descuento/recargo de la línea
-//		lineDiscountAmt = price.subtract(discountedPrice).multiply(qty);
 		lineDiscountAmt = totalPriceAmt.subtract(totalDiscountedPriceAmt);
 		
 		return scaleAmount(lineDiscountAmt);
@@ -610,11 +585,9 @@ public class DiscountCalculator {
 		BigDecimal totalDocumentDiscount = BigDecimal.ZERO;
 		BigDecimal totalBPartnerDiscount = BigDecimal.ZERO;
 		BigDecimal totalManualDiscount = BigDecimal.ZERO;
-		BigDecimal netDiscountAmt  = null;
 		BigDecimal discountBaseAmt = null;
 		BigDecimal discountAmt     = null;
-		BigDecimal lineDiscountAmt = null;   // Importe de descuento neto
-		 									 // (sin impuestos) de una línea. 
+		BigDecimal lineDiscountAmt = null; 
 		
 		// Obtiene los descuentos a nivel de documento y resetea el importe
 		// calculado de cada uno.
@@ -629,18 +602,17 @@ public class DiscountCalculator {
 			for (Discount discount : documentLevelDiscounts) {
 				// Calcula el descuento NETO (sin impuestos) para sumarlo al
 				// descuento total neto de la línea
-				netDiscountAmt = calculateDiscount(
+				discountAmt = calculateDiscount(
 						documentLine, 
 						discount.getDiscountSchema(), 
-						discount.getBaseAmt(), 
-						true
-				);
+						discount.getBaseAmt()
+						);
 				
 				// Si el descuento es distinto de cero implica que el descuento
 				// se aplicó sobre la línea.
-				if (netDiscountAmt.compareTo(BigDecimal.ZERO) != 0) {
+				if (discountAmt.compareTo(BigDecimal.ZERO) != 0) {
 					// Acumula el descuento al descuento de la línea actual
-					lineDiscountAmt = lineDiscountAmt.add(netDiscountAmt);
+					lineDiscountAmt = lineDiscountAmt.add(discountAmt);
 					
 					// Calcula el importe base del descuento calculado. Ya que el descuento
 					// afecta al total de unidades de la línea, la base de cálculo
@@ -652,24 +624,16 @@ public class DiscountCalculator {
 					
 					// Suma el importe de descuento calculado al importe total
 					// acumulado del descuento.
-					discount.addAmount(
-							documentLine.getTaxedAmount(netDiscountAmt), 
+					discount.addAmount(documentLine,
+							discountAmt, 
 							documentLine.getTaxRate(),
-							documentLine.getTaxedAmount(discountBaseAmt));
+							discountBaseAmt);
 									
 					// Si el documento está configurado para que se le asigne el
 					// descuento total neto, entonces se suma el descuento neto
 					// calculado. Si no se acumula el descuento bruto (con impuestos)
-					
-					// Dto con impuestos
-					discountAmt = documentLine.getTaxedAmount(netDiscountAmt); 
-					if (getDocument().isCalculateNetDiscount()) {
-						totalDocumentDiscount = totalDocumentDiscount
-								.add(netDiscountAmt);
-					} else {
-						totalDocumentDiscount = totalDocumentDiscount
-								.add(discountAmt);
-					}
+					totalDocumentDiscount = totalDocumentDiscount
+							.add(discountAmt);
 					
 					// Asigna el importe de descuento de EC si es un descuento de EC
 					// (solo puede haber uno así que el descuento calculado aquí es
@@ -688,11 +652,10 @@ public class DiscountCalculator {
 						getDocument().setTotalManualGeneralDiscount(discountAmt);
 					}
 				}
-				
 			}
 			setApplyScale(true);
 			// Asigna el importe de descuento neto de la línea
-			documentLine.setDocumentDiscountAmt(scaleAmount(lineDiscountAmt));
+			documentLine.setDocumentDiscountAmt(lineDiscountAmt);
 		}
 		// Asigna el importe de descuento total al documento (neto o total según
 		// lo indicado por isCalculateNetDiscount())
@@ -707,6 +670,54 @@ public class DiscountCalculator {
 		if (totalDocumentDiscount.compareTo(BigDecimal.ZERO) != 0) {
 			getDocument().setDocumentDiscountChargeID(getDocumentDiscountChargeID());
 		}
+	}
+	
+	public BigDecimal getApplyDocumentLevelDiscounts(MDiscountSchema discountSchema, BigDecimal baseAmt) {		
+		BigDecimal totalDocumentDiscount = BigDecimal.ZERO;
+		BigDecimal discountBaseAmt = null;
+		BigDecimal discountAmt     = null;
+		BigDecimal lineDiscountAmt = null;   // Importe de descuento neto
+		 									 // (sin impuestos) de una línea. 
+		
+		// Obtiene los descuentos a nivel de documento y resetea el importe
+		// calculado de cada uno.
+		List<Discount> documentLevelDiscounts = getDocumentLevelDiscounts();
+		clearDiscountAmounts(documentLevelDiscounts);
+		
+		// Aplica cada uno de los descuentos a cada línea y va sumando
+		// los importes de descuentos.
+		for (IDocumentLine documentLine : getDocument().getDocumentLines()) {
+			lineDiscountAmt = BigDecimal.ZERO;
+			setApplyScale(false);
+			
+			// Calcula el descuento NETO (sin impuestos) para sumarlo al
+			// descuento total neto de la línea
+			discountAmt = calculateDiscount(
+					documentLine, 
+					discountSchema, 
+					baseAmt);
+				
+			// Si el descuento es distinto de cero implica que el descuento
+			// se aplicó sobre la línea.
+			if (discountAmt.compareTo(BigDecimal.ZERO) != 0) {
+				// Acumula el descuento al descuento de la línea actual
+				lineDiscountAmt = lineDiscountAmt.add(discountAmt);
+			
+				// Calcula el importe base del descuento calculado. Ya que el descuento
+				// afecta al total de unidades de la línea, la base de cálculo
+				// del descuento es entonces el precio actual multiplicado
+				// por la cantidad de la línea.
+				discountBaseAmt = documentLine.getPrice()
+						.multiply(documentLine.getQty())
+						.multiply(getApplicationRatio(getDocument(), baseAmt));
+				
+				totalDocumentDiscount = totalDocumentDiscount.add(lineDiscountAmt);
+			}
+			// Asigna el importe de descuento neto de la línea
+			documentLine.setTemporalTotalDocumentDiscountAmt(scaleAmount(lineDiscountAmt));
+		}
+		
+		return scaleAmount(totalDocumentDiscount);
 	}
 
 	/**
@@ -730,7 +741,7 @@ public class DiscountCalculator {
 	 * sufre algún descuento.
 	 */
 	private void applyLineDiscounts(List<Discount> discounts) {
-		BigDecimal netDiscountAmt   = null;  // Importe temporal de descuento NETO de una línea 
+		BigDecimal discountAmt   = null;  // Importe temporal de descuento de una línea 
 		BigDecimal lineDiscountAmt  = null;  // Importe de descuento neto
 											 // (sin impuestos) de una línea. 
 		BigDecimal discountBaseAmt  = null;  // Importe base del descuento calculado.
@@ -754,16 +765,14 @@ public class DiscountCalculator {
 				}
 
 				// Calcula el importe de descuento NETO para la línea según el descuento.
-				netDiscountAmt = calculateDiscount(
+				discountAmt = calculateDiscount(
 						documentLine, 
 						discount.getDiscountSchema(), 
-						discount.getBaseAmt(), 
-						true
-				);
+						discount.getBaseAmt());
 				
 				// Si el descuento es distinto de cero implica que el descuento
 				// se aplicó sobre la línea.
-				if (netDiscountAmt.compareTo(BigDecimal.ZERO) != 0) {
+				if (discountAmt.compareTo(BigDecimal.ZERO) != 0) {
 					// Calcula el importe base del descuento calculado. Ya que el descuento
 					// afecta al total de unidades libres de la línea, la base de cálculo
 					// del descuento es entonces el precio unitario de lista multiplicado
@@ -771,14 +780,14 @@ public class DiscountCalculator {
 					discountBaseAmt = documentLine.getPriceList().multiply(
 							documentLine.getAvailableQty());
 					// Suma el importe calculado al importe total de descuento de la línea.
-					lineDiscountAmt = lineDiscountAmt.add(netDiscountAmt);
+					lineDiscountAmt = lineDiscountAmt.add(discountAmt);
 
 					// Suma el importe de descuento calculado (con impuestos) al importe total
 					// acumulado del descuento.
-					discount.addAmount(
-							documentLine.getTaxedAmount(netDiscountAmt), 
+					discount.addAmount(documentLine,
+							discountAmt, 
 							documentLine.getTaxRate(),
-							documentLine.getTaxedAmount(discountBaseAmt));
+							discountBaseAmt);
 
 					// Los descuentos de este tipo se
 					// aplican sobre el total de unidades disponibles o no se
@@ -872,7 +881,7 @@ public class DiscountCalculator {
 		IDocumentLine documentLine    = null;
 		BigDecimal totalDiscountedQty = null;
 		BigDecimal discountedQty      = null;
-		BigDecimal netDiscountAmt     = null;
+		BigDecimal discountAmt     = null;
 		BigDecimal discountBaseAmt    = null;
 		BigDecimal lineDiscountAmt    = null;
 		Discount discount             = null;
@@ -908,12 +917,12 @@ public class DiscountCalculator {
 				// Calcula el importe de descuento si es que la línea del combo
 				// tiene un descuento asociado.
 				if (comboLine.getDiscount().compareTo(BigDecimal.ZERO) != 0) {
-					// Calcula el importe de descuento unitario NETO
-					netDiscountAmt = calculateDiscount(
+					// Calcula el importe de descuento unitario
+					discountAmt = calculateDiscount(
 							documentLine.getPriceList(),
 							comboLine.getDiscount());
 					// Obtiene el importe de descuento de la línea
-					lineDiscountAmt = netDiscountAmt.multiply(discountedQty);
+					lineDiscountAmt = discountAmt.multiply(discountedQty);
 					// Obtiene el importe base de cálculo del descuento
 					discountBaseAmt = documentLine.getPriceList().multiply(discountedQty);
 					
@@ -938,10 +947,10 @@ public class DiscountCalculator {
 					// por esta instancia del combo, a su vez discriminado por
 					// tasa de impuesto (ya que el combo puede involucrar
 					// artículos con diferentes tasas de impuestos)
-					discount.addAmount(
-							documentLine.getTaxedAmount(lineDiscountAmt),
+					discount.addAmount(documentLine,
+							lineDiscountAmt,
 							documentLine.getTaxRate(), 
-							documentLine.getTaxedAmount(discountBaseAmt));
+							discountBaseAmt);
 				}
 
 				// Seteo a 0 el descuento manual ya que este es automático
@@ -990,7 +999,7 @@ public class DiscountCalculator {
 	 * descuento manual cargado
 	 */
 	private void applyManualDiscounts(){
-		BigDecimal netDiscountAmt   = null;  // Importe temporal de descuento NETO de una línea 
+		BigDecimal discountAmt   = null;  // Importe temporal de descuento de una línea 
 		BigDecimal lineDiscountAmt  = null;  // Importe de descuento neto
 											 // (sin impuestos) de una línea. 
 		BigDecimal discountBaseAmt  = null;  // Importe base del descuento calculado.
@@ -1024,12 +1033,13 @@ public class DiscountCalculator {
 				// La cantidad a descontar es el total de la cantidad de la línea
 				discountedQty = documentLine.getQty();
 				
-				// Calcula el importe de descuento unitario NETO
-				netDiscountAmt = calculateDiscount(
+				// Calcula el importe de descuento unitario 
+				discountAmt = calculateDiscount(
 						documentLine.getPriceList(),
 						manualDiscount.getDiscountSchema().getFlatDiscount());
+				
 				// Obtiene el importe de descuento de la línea
-				lineDiscountAmt = netDiscountAmt.multiply(discountedQty);
+				lineDiscountAmt = discountAmt.multiply(discountedQty);
 				// Obtiene el importe base de cálculo del descuento
 				discountBaseAmt = documentLine.getPriceList().multiply(discountedQty);
 
@@ -1044,10 +1054,10 @@ public class DiscountCalculator {
 				
 				// Suma el importe de descuento calculado (con impuestos) al importe total
 				// acumulado del descuento.
-				manualDiscount.addAmount(
-						documentLine.getTaxedAmount(lineDiscountAmt), 
+				manualDiscount.addAmount(documentLine,
+						lineDiscountAmt, 
 						documentLine.getTaxRate(),
-						documentLine.getTaxedAmount(discountBaseAmt));
+						discountBaseAmt);
 				
 				// Montos de descuentos
 				documentLine.setLineBonusAmt(documentLine.getLineBonusAmt()
@@ -1193,7 +1203,6 @@ public class DiscountCalculator {
 	 */
 	public void applyDiscounts() {
 		validateAssociatedDocument();
-
 		// Aplica los descuentos de línea de documento.
 		applyDocumentLineDiscounts();
 		// Aplica los descuentos del encabezado del documento.
@@ -1250,8 +1259,27 @@ public class DiscountCalculator {
 	public void setDocument(IDocument document) {
 		this.document = document;
 		this.documentDate = document != null ? document.getDate() : null;
+		updateDocument();
 	}
 
+	/**
+	 * Actualiza el documento en todos los descuentos internos
+	 */
+	public void updateDocument(){
+		for (Discount discount : getAppliedDiscounts()) {
+			discount.setDocumentDiscountable(getDocument());
+		}
+	}
+	
+	/**
+	 * Actualiza el documento en todos los descuentos internos
+	 */
+	public void updateGeneratedInvoiceLineIDs(Integer documentLineID, Integer generatedInvoiceLineID){
+		for (Discount discount : getAppliedDiscounts()) {
+			discount.updateGeneratedInvoiceLineIDs(documentLineID, generatedInvoiceLineID);
+		}
+	}
+	
 	/**
 	 * @return El ID de la moneda en la que trabaja este calcular de descuento
 	 */
@@ -1594,7 +1622,8 @@ public class DiscountCalculator {
 		// total del documento a la hora de aplicar el descuento.
 		if (bPartnerDiscountSchema != null) {
 			this.bPartnerDiscount = new Discount(BPARTNER_DISCOUNT_ID, null,
-					bPartnerDiscountSchema, baseAmt, DiscountKind.BPartnerDiscountSchema);
+					bPartnerDiscountSchema, baseAmt, DiscountKind.BPartnerDiscountSchema, 
+					getDocument());
 		} else {
 			this.bPartnerDiscount = null;
 		}
@@ -1779,7 +1808,7 @@ public class DiscountCalculator {
 		// Crea la estructura del nuevo descuento y lo agrega al conjunto de
 		// descuentos generales asociados.
 		Discount discount = new Discount(discountID, discountDescription,
-				generalDiscountSchema, baseAmt, generalDiscountKind.toDiscountKind());
+				generalDiscountSchema, baseAmt, generalDiscountKind.toDiscountKind(), getDocument());
 		
 		getGeneralDiscounts().put(discountID, discount);
 		return discountID;
@@ -1830,6 +1859,14 @@ public class DiscountCalculator {
 		return addDiscountBaseAmount(discountID, baseAmt != null ? baseAmt.negate() : null);
 	}
 
+	public BigDecimal getDiscountBaseAmt(Integer discountID){
+		BigDecimal baseAmt = BigDecimal.ZERO;
+		if(containsDiscount(discountID)){
+			baseAmt = getDiscount(discountID).getBaseAmt();
+		}
+		return baseAmt;
+	}
+	
 	/**
 	 * Elimina un Descuento General de la lista de descuentos generales
 	 * asociados a este calculador
@@ -1920,7 +1957,8 @@ public class DiscountCalculator {
 	 *            efecto, <code>false</code> caso contrario
 	 */
 	public void setApplyScale(boolean applyScale) {
-		this.applyScale = applyScale;
+		//this.applyScale = applyScale;
+		this.applyScale = true;
 	}
 
 	/**
@@ -2084,35 +2122,13 @@ public class DiscountCalculator {
 			}
 		}
 		
-		// Agrega los descuentos manuales de líneas, agrupados por tipo de
-		// aplicación y porcentaje
-		Map<String, Discount> manualLineDiscounts = new HashMap<String, Discount>();
-		String key;
-		Discount manualLineDiscount;
+		// Agrega los descuentos manuales de líneas
 		for (Discount lineManualDiscount : getLineManualDiscounts().values()) {
 			// Se agregar siempre y cuando tenga el monto distino de 0
 			if (lineManualDiscount.amount.compareTo(BigDecimal.ZERO) != 0) {
-				// Armo la key que es la concatenación de tipo de aplicación y porcentaje
-				key = lineManualDiscount.getApplication()+"_"+lineManualDiscount.getDiscountSchema().getFlatDiscount();
-				manualLineDiscount = manualLineDiscounts.get(key);
-				// Si no existe en la map, entonces es el actual
-				if(manualLineDiscount == null){
-					manualLineDiscount = lineManualDiscount;
-				}
-				// Si existe, se debe actualizar el ya existente sumando el monto
-				else{
-					manualLineDiscount
-							.addAmount(
-									lineManualDiscount.amount,
-									((BigDecimal) (lineManualDiscount.amountsByTax
-											.keySet().size() == 1 ? lineManualDiscount.amountsByTax
-											.keySet().toArray()[0] : null)),
-									lineManualDiscount.discountBaseAmt);
-				}
-				manualLineDiscounts.put(key, manualLineDiscount);
+				appliedDiscounts.add(lineManualDiscount);
 			}
 		}
-		appliedDiscounts.addAll(manualLineDiscounts.values());
 		
 		return appliedDiscounts;
 	}
@@ -2153,7 +2169,7 @@ public class DiscountCalculator {
 			nextDiscountID++;
 		}
 		return new Discount(discountID, description,
-				discountGeneral, null, discountKind);
+				discountGeneral, null, discountKind, getDocument());
 	}
 	
 	/**
@@ -2417,6 +2433,15 @@ public class DiscountCalculator {
 		return discountID;
 	}
 	
+	public BigDecimal getApplicationRatio(IDocument document, BigDecimal baseAmt) {
+		BigDecimal appBaseAmt = baseAmt;
+		BigDecimal documentTotalAmt = document.getLinesTotalAmt(); 
+		if (appBaseAmt == null) {
+			appBaseAmt = documentTotalAmt;
+		}
+		return appBaseAmt.divide(documentTotalAmt, 6, BigDecimal.ROUND_HALF_EVEN);
+	}
+
 	/**
 	 * Interfaz que debe implementar cualquier clase que requiera ser manipulada
 	 * por un calculador de descuentos. Esta interfaz representa el encabezado
@@ -2608,6 +2633,11 @@ public class DiscountCalculator {
 		}
 		
 		/**
+		 * @return Obtiene el ID de esta línea de documento
+		 */
+		public Integer getDocumentLineID();
+		
+		/**
 		 * @return El importe total de esta línea de documento <b>incluyendo
 		 *         impuestos y descuentos de línea</b>.
 		 */
@@ -2721,6 +2751,18 @@ public class DiscountCalculator {
 		 * @return El importe con el impuesto incluido.
 		 */
 		public BigDecimal getTaxedAmount(BigDecimal amount);
+		
+		/**
+		 * Calcula el impuesto de un importe y devuelve la suma de ambos. En
+		 * caso de que esta línea contenga el impuesto incluido en el precio,
+		 * entonces devuelve el mismo valor de <code>amount</code>. Además, se
+		 * pueden agregar los impuestos adicionales en caso que sea necesario.
+		 * 
+		 * @param amount
+		 * @param includeOtherTaxes
+		 * @return
+		 */
+		public BigDecimal getTaxedAmount(BigDecimal amount, boolean includeOtherTaxes);
 
 		/**
 		 * @return Indica si el precio de la línea contiene el impuesto incluído
@@ -2751,6 +2793,48 @@ public class DiscountCalculator {
 		 *            id del descuento aplicado
 		 */
 		public void setLineManualDiscountID(Integer lineManualDiscountID);
+		
+		/**
+		 * <p>
+		 * Asigna las referencias de este documento al objeto
+		 * <code>documentDiscount</code> que contiene un descuento de documento
+		 * aplicado que será guardado en la base de datos.
+		 * </p>
+		 * Si este documento representa:
+		 * <ul>
+		 * <li>Un Pedido: debe asignar su ID mediante
+		 * {@link MDocumentDiscount#setC_OrderLine_ID(int)}.</li>
+		 * <li>Una Factura: debe asignar su ID mediante
+		 * {@link MDocumentDiscount#setC_InvoiceLine_ID(int)}.</li>
+		 * <li>Ambos (Factura y Pedido): debe asignar ambos IDs mediante los
+		 * métodos descriptos anteriormente.</li>
+		 * </ul>
+		 * 
+		 * @param documentDiscount
+		 *            Descuento de documento creado por este calculador
+		 */
+		public void setDocumentReferences(MDocumentDiscount documentDiscount);
+
+		/**
+		 * @return el monto de descuento de documento en la línea
+		 */
+		public BigDecimal getDocumentDiscountAmt();
+		
+		/**
+		 * @return monto de descuento de documento temporal antes de asignar.
+		 *         Necesario para predecir otros montos a través de éste.
+		 */
+		public BigDecimal getTemporalTotalDocumentDiscountAmt();
+		
+		/**
+		 * Monto de descuento de documento temporal antes de asignar.
+		 *         Necesario para predecir otros montos a través de éste.
+		 * @param temporalTotalDocumentDiscount
+		 */
+		public void setTemporalTotalDocumentDiscountAmt(BigDecimal temporalTotalDocumentDiscount);
+		
+		/** Setea el ID de la factura en caso que se haya facturado el pedido */
+		public void setGeneratedInvoiceLineID(Integer generatedInvoiceLineID);
 	}
 
 	/**
@@ -2783,7 +2867,17 @@ public class DiscountCalculator {
 		/** Por cada tasa de impuesto contiene el importe base del descuento calculado
 		 * para la tasa. La clave es la tasa, el valor es el importe base */
 		private Map<BigDecimal, BigDecimal> discountBaseAmtByTax;
-	
+		/** Se registran los descuentos de las líneas */
+		private List<DiscountLine> documentLineDiscounts;
+		/** Referencia al documento */
+		private IDocument documentDiscountable;
+		/**
+		 * Esto permite desde el TPV setear la línea de factura generada para una
+		 * línea en particular. Sólo se llama desde el TVP, desde las M no es
+		 * necesario ya que es información persistida.
+		 */
+		private Map<Integer, IDocumentLine> generatedInvoiceLineIDs = null; 
+		
 		/**
 		 * Constructor básico de Descuentos
 		 * @param id
@@ -2792,7 +2886,8 @@ public class DiscountCalculator {
 		 * @param baseAmt
 		 */
 		public Discount(Integer id, String description,
-				MDiscountSchema discountSchema, BigDecimal baseAmt, DiscountKind kind) {
+				MDiscountSchema discountSchema, BigDecimal baseAmt, DiscountKind kind,
+				IDocument documentDiscountable) {
 			super();
 			this.id = id;
 			this.description = description;
@@ -2804,6 +2899,9 @@ public class DiscountCalculator {
 			}
 			this.amountsByTax = new HashMap<BigDecimal, BigDecimal>();
 			this.discountBaseAmtByTax = new HashMap<BigDecimal, BigDecimal>();
+			this.setDocumentLineDiscounts(new ArrayList<DiscountCalculator.DiscountLine>());
+			setDocumentDiscountable(documentDiscountable);
+			this.generatedInvoiceLineIDs = new HashMap<Integer, DiscountCalculator.IDocumentLine>();
 		}
 		
 		/**
@@ -2814,7 +2912,7 @@ public class DiscountCalculator {
 		 */
 		public Discount(MPromotion promotion) {
 			this(INTERNAL_DISCOUNT_ID, promotion.getName(),
-					promotion.getDiscountSchema(), null, DiscountKind.Promotion);
+					promotion.getDiscountSchema(), null, DiscountKind.Promotion, getDocument());
 			this.application = promotion.getDiscountApplication();
 		}
 
@@ -2826,7 +2924,7 @@ public class DiscountCalculator {
 		 */
 		public Discount(MCombo combo) {
 			this(INTERNAL_DISCOUNT_ID, combo.getName(), null, null,
-					DiscountKind.Combo);
+					DiscountKind.Combo, getDocument());
 			this.application = combo.getDiscountApplication();
 		}
 
@@ -2934,8 +3032,10 @@ public class DiscountCalculator {
 			discountBaseAmt = BigDecimal.ZERO;
 			amountsByTax.clear();
 			discountBaseAmtByTax.clear();
+			getDocumentLineDiscounts().clear();
+			getGeneratedInvoiceLineIDs().clear();
 		}
-
+		
 		/**
 		 * Suma un importe neto de descuento a este descuento. Se debe indicar
 		 * la tasa de impuesto para el importe de descuento.
@@ -2947,8 +3047,7 @@ public class DiscountCalculator {
 		 * @param discountBaseAmt
 		 *            Importe base del descuento calculado (con impuestos)
 		 */
-		public void addAmount(BigDecimal amt, BigDecimal taxRate,
-				BigDecimal discountBaseAmt) {
+		public void addAmount(IDocumentLine documentLine, BigDecimal amt, BigDecimal taxRate, BigDecimal discountBaseAmt) {
 			if (amount == null) {
 				amount = BigDecimal.ZERO;
 			}
@@ -2972,8 +3071,27 @@ public class DiscountCalculator {
 				discountBaseAmtByTax.put(taxRate,
 						currentDiscountBaseAmtByTax.add(discountBaseAmt));
 			}
+			// Descuento de Línea de Documento
+			createDiscountLine(documentLine, discountBaseAmt, amt);
 		}
 
+		/**
+		 * Crea el descuento para la línea 
+		 * @param documentLine línea del documento
+		 * @param discountBaseAmt importe base
+		 * @param amt importe de descuento
+		 * @return descuento para la línea
+		 */
+		private DiscountLine createDiscountLine(IDocumentLine documentLine, BigDecimal discountBaseAmt, BigDecimal amt){
+			DiscountLine dl = null;
+			if(documentLine != null && amt != null && amt.compareTo(BigDecimal.ZERO) != 0){
+				dl = new DiscountLine(documentLine, discountBaseAmt, amt);
+				getDocumentLineDiscounts().add(dl);
+				getGeneratedInvoiceLineIDs().put(documentLine.getDocumentLineID(), documentLine);
+			}
+			return dl;			
+		}
+		
 		/**
 		 * Calcula y devuelve la proporción de aplicación de este descuento,
 		 * basándose en el importe base de aplicación.
@@ -3040,7 +3158,31 @@ public class DiscountCalculator {
 				}
 			}
 			
+			// Guarda cada descuento de línea
+			for (DiscountLine discountLine : getDocumentLineDiscounts()) {
+				tDocumentDiscount = new MDocumentDiscount(documentDiscount, null);
+				tDocumentDiscount.setDiscountAmt(scaleAmount(discountLine.getAmount()));
+				tDocumentDiscount.setDiscountBaseAmt(scaleAmount(discountLine.getDiscountBaseAmt()));
+				discountLine.getDocumentLine().setDocumentReferences(tDocumentDiscount);
+				if (!tDocumentDiscount.save()) {
+					return false;
+				}
+			}
+			
 			return true;
+		}
+		
+		/**
+		 * Actualiza el id de factura generada para el id del pedido
+		 * 
+		 * @param documentLineID
+		 *            id de linea del documento (pedido)
+		 * @param generatedInvoiceLineID
+		 *            id de la línea de factura generada
+		 */
+		public void updateGeneratedInvoiceLineIDs(Integer documentLineID, Integer generatedInvoiceLineID){
+			if(getGeneratedInvoiceLineIDs().get(documentLineID) != null)
+				getGeneratedInvoiceLineIDs().get(documentLineID).setGeneratedInvoiceLineID(generatedInvoiceLineID);
 		}
 		
 		// Getters y Setters
@@ -3122,7 +3264,82 @@ public class DiscountCalculator {
 		public void setApplication(String application) {
 			this.application = application;
 		}
+
+		public List<DiscountLine> getDocumentLineDiscounts() {
+			return documentLineDiscounts;
+		}
+
+		public void setDocumentLineDiscounts(List<DiscountLine> documentLineDiscounts) {
+			this.documentLineDiscounts = documentLineDiscounts;
+		}
+
+		public IDocument getDocumentDiscountable() {
+			return documentDiscountable;
+		}
+
+		public void setDocumentDiscountable(IDocument documentDiscountable) {
+			this.documentDiscountable = documentDiscountable;
+		}
+		
+		public Map<Integer, IDocumentLine> getGeneratedInvoiceLineIDs() {
+			return generatedInvoiceLineIDs;
+		}
+
+		public void setGeneratedInvoiceLineIDs(Map<Integer, IDocumentLine> generatedInvoiceLineIDs) {
+			this.generatedInvoiceLineIDs = generatedInvoiceLineIDs;
+		}
 	}
+	
+	
+	/**
+	 * Estructura interna que mantiene la información de un descuento a una
+	 * línea de documento
+	 */
+	private class DiscountLine {
+		/** Importe base del descuento calculado. */
+		private BigDecimal discountBaseAmt = null;
+		/** Importe calculado del descuento */
+		private BigDecimal amount = BigDecimal.ZERO;
+		/** Línea de documento */
+		private IDocumentLine documentLine = null;
+		
+		/**
+		 * Constructor a utilizar
+		 * @param documentLine
+		 * @param discountBaseAmt
+		 * @param amount
+		 */
+		public DiscountLine(IDocumentLine documentLine, BigDecimal discountBaseAmt, BigDecimal amount){
+			setDocumentLine(documentLine);
+			setDiscountBaseAmt(discountBaseAmt);
+			setAmount(amount);
+		}
+
+		public BigDecimal getDiscountBaseAmt() {
+			return discountBaseAmt;
+		}
+
+		public void setDiscountBaseAmt(BigDecimal discountBaseAmt) {
+			this.discountBaseAmt = discountBaseAmt;
+		}
+
+		public BigDecimal getAmount() {
+			return amount;
+		}
+
+		public void setAmount(BigDecimal amount) {
+			this.amount = amount;
+		}
+
+		public IDocumentLine getDocumentLine() {
+			return documentLine;
+		}
+
+		public void setDocumentLine(IDocumentLine documentLine) {
+			this.documentLine = documentLine;
+		}
+	}
+	
 	
 	/**
 	 * Tipo de descuento interno.

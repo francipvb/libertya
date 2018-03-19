@@ -168,6 +168,7 @@ public class GeneratorPercepciones {
 				&& getDocument().isApplyPercepcion()
 				&& CalloutInvoiceExt.ComprobantesFiscalesActivos()
 				&& (getCategoriaIVA() != null && getCategoriaIVA().isPercepcionLiable())
+				&& getDocType() != null 
 				&& getDocType().isApplyPerception()
 				&& (isTPVInstance() || (getDocType() != null && (!MDocType.DOCTYPE_Retencion_InvoiceCustomer
 						.equals(getDocType().getDocTypeKey()) && !MDocType.DOCTYPE_Retencion_ReceiptCustomer
@@ -289,10 +290,7 @@ public class GeneratorPercepciones {
 		List<MTax> percepciones = getApplyPercepciones();
 		// Recorrer las percepciones y agregarlas a las facturas
 		BigDecimal percepcionAmt;
-		BigDecimal invoiceNetTotalAmt = invoice.getTotalLinesNetWithoutDocumentDiscount();
-		if (invoice.isPerceptionsIncluded()){
-			invoiceNetTotalAmt = invoice.getTotalLinesNetPerceptionIncludedWithoutDocumentDiscount();
-		}
+		BigDecimal invoiceNetTotalAmt = invoice.getNetTaxBaseAmt();
 		Integer scale = MCurrency.getStdPrecision(getCtx(),
 				invoice.getC_Currency_ID(), getTrxName());
 		MInvoiceTax invoiceTax;

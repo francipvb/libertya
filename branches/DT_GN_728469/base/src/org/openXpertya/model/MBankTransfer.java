@@ -6,6 +6,7 @@ import java.util.Properties;
 
 import org.openXpertya.process.DocAction;
 import org.openXpertya.process.DocumentEngine;
+import org.openXpertya.util.CLogger;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Msg;
 
@@ -132,7 +133,7 @@ public class MBankTransfer extends X_C_BankTransfer implements DocAction {
 			 */
 			pagoOrigen.setChargeAmt(!anular && getcharge_amt_from()!=null?getcharge_amt_from().intValue():0);			
 			pagoOrigen.setC_Charge_ID(!anular && getcharge_from_ID()!=0?getcharge_from_ID():0); //zeroChargeID
-			
+
 			/*
 			 * Se carga la cuenta contable que debe utilizarse en la contabilidad 
 			 */
@@ -140,8 +141,10 @@ public class MBankTransfer extends X_C_BankTransfer implements DocAction {
 				pagoOrigen.setACCOUNTING_C_Charge_ID(getACCOUNTING_C_Charge_ID());
 			}
 			
-			if (!pagoOrigen.save()) 
+			if (!pagoOrigen.save()) {
+				m_processMsg = CLogger.retrieveErrorAsString();
 				return false;
+			}
 			
 			// Se completa el pago.
 			boolean procOk = pagoOrigen.processIt(DOCACTION_Complete);
@@ -190,8 +193,10 @@ public class MBankTransfer extends X_C_BankTransfer implements DocAction {
 				pagoDestino.setACCOUNTING_C_Charge_ID(getACCOUNTING_C_Charge_ID());
 			}
 			
-			if (!pagoDestino.save())
+			if (!pagoDestino.save()){
+				m_processMsg = CLogger.retrieveErrorAsString();
 				return false;
+			}
 
 			// Se completa el pago.
 			procOk = pagoDestino.processIt(DOCACTION_Complete);

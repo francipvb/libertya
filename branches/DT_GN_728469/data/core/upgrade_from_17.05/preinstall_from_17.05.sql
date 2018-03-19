@@ -3348,5 +3348,288 @@ END
 $BODY$
   LANGUAGE 'plpgsql' VOLATILE;
   
+--20180119 Nuevo indice remito -> factura, el cual es necesario para agilizar los tiempos en la impresion de facturas
+update ad_system set dummy = (SELECT addindexifnotexists('m_inout_invoice','m_inout','c_invoice_id'));
 
-  
+--20180124-0900 Constraints para la tabla de configuración de corrección de cobranza
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_client FOREIGN KEY (ad_client_id)
+      REFERENCES ad_client (ad_client_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_org FOREIGN KEY (ad_org_id)
+      REFERENCES ad_org (ad_org_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_doctype_recovery FOREIGN KEY (c_doctype_recovery_id)
+      REFERENCES c_doctype (c_doctype_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_doctype_credit_recovery FOREIGN KEY (c_doctype_credit_recovery_id)
+      REFERENCES c_doctype (c_doctype_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_doctype_rejected FOREIGN KEY (c_doctype_rejected_id)
+      REFERENCES c_doctype (c_doctype_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_doctype_credit_rejected FOREIGN KEY (c_doctype_credit_rejected_id)
+      REFERENCES c_doctype (c_doctype_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_product_recovery FOREIGN KEY (m_product_recovery_id)
+      REFERENCES m_product (m_product_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+
+ALTER TABLE c_payment_recovery_config ADD CONSTRAINT payment_recovery_config_product_rejected FOREIGN KEY (m_product_rejected_id)
+      REFERENCES m_product (m_product_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION;
+      
+--20180124-1056 Las preferencias DIF_CAMBIO_ARTICULO y DIF_CAMBIO_PTO_VENTA estaban con compañía System en lugar de Libertya
+update ad_preference set ad_client_id = 1010016 where ad_componentobjectuid in ('CORE-AD_Preference-1011156', 'CORE-AD_Preference-1011157');
+
+--20180130-1542 Factura electronica. Codigos de paises faltantes.  Segun definicion AFIP.
+update c_country set countrycodefe = '301' where ad_componentobjectuid = 'CORE-C_Country-110';
+update c_country set countrycodefe = '401' where ad_componentobjectuid = 'CORE-C_Country-114';
+update c_country set countrycodefe = '149' where ad_componentobjectuid = 'CORE-C_Country-115';
+update c_country set countrycodefe = '265' where ad_componentobjectuid = 'CORE-C_Country-117';
+update c_country set countrycodefe = '237' where ad_componentobjectuid = 'CORE-C_Country-118';
+update c_country set countrycodefe = '349' where ad_componentobjectuid = 'CORE-C_Country-120';
+update c_country set countrycodefe = '501' where ad_componentobjectuid = 'CORE-C_Country-122';
+update c_country set countrycodefe = '405' where ad_componentobjectuid = 'CORE-C_Country-108';
+update c_country set countrycodefe = '350' where ad_componentobjectuid = 'CORE-C_Country-124';
+update c_country set countrycodefe = '239' where ad_componentobjectuid = 'CORE-C_Country-125';
+update c_country set countrycodefe = '303' where ad_componentobjectuid = 'CORE-C_Country-126';
+update c_country set countrycodefe = '345' where ad_componentobjectuid = 'CORE-C_Country-127';
+update c_country set countrycodefe = '201' where ad_componentobjectuid = 'CORE-C_Country-128';
+update c_country set countrycodefe = '439' where ad_componentobjectuid = 'CORE-C_Country-129';
+update c_country set countrycodefe = '236' where ad_componentobjectuid = 'CORE-C_Country-131';
+update c_country set countrycodefe = '112' where ad_componentobjectuid = 'CORE-C_Country-132';
+update c_country set countrycodefe = '305' where ad_componentobjectuid = 'CORE-C_Country-134';
+update c_country set countrycodefe = '446' where ad_componentobjectuid = 'CORE-C_Country-136';
+update c_country set countrycodefe = '103' where ad_componentobjectuid = 'CORE-C_Country-137';
+update c_country set countrycodefe = '346' where ad_componentobjectuid = 'CORE-C_Country-141';
+update c_country set countrycodefe = '101' where ad_componentobjectuid = 'CORE-C_Country-143';
+update c_country set countrycodefe = '104' where ad_componentobjectuid = 'CORE-C_Country-144';
+update c_country set countrycodefe = '306' where ad_componentobjectuid = 'CORE-C_Country-145';
+update c_country set countrycodefe = '105' where ad_componentobjectuid = 'CORE-C_Country-146';
+update c_country set countrycodefe = '150' where ad_componentobjectuid = 'CORE-C_Country-148';
+update c_country set countrycodefe = '107' where ad_componentobjectuid = 'CORE-C_Country-150';
+update c_country set countrycodefe = '111' where ad_componentobjectuid = 'CORE-C_Country-151';
+update c_country set countrycodefe = '155' where ad_componentobjectuid = 'CORE-C_Country-157';
+update c_country set countrycodefe = '108' where ad_componentobjectuid = 'CORE-C_Country-158';
+update c_country set countrycodefe = '109' where ad_componentobjectuid = 'CORE-C_Country-159';
+update c_country set countrycodefe = '110' where ad_componentobjectuid = 'CORE-C_Country-162';
+update c_country set countrycodefe = '447' where ad_componentobjectuid = 'CORE-C_Country-163';
+update c_country set countrycodefe = '435' where ad_componentobjectuid = 'CORE-C_Country-165';
+update c_country set countrycodefe = '451' where ad_componentobjectuid = 'CORE-C_Country-166';
+update c_country set countrycodefe = '409' where ad_componentobjectuid = 'CORE-C_Country-167';
+update c_country set countrycodefe = '153' where ad_componentobjectuid = 'CORE-C_Country-168';
+update c_country set countrycodefe = '233' where ad_componentobjectuid = 'CORE-C_Country-169';
+update c_country set countrycodefe = '209' where ad_componentobjectuid = 'CORE-C_Country-170';
+update c_country set countrycodefe = '113' where ad_componentobjectuid = 'CORE-C_Country-172';
+update c_country set countrycodefe = '119' where ad_componentobjectuid = 'CORE-C_Country-174';
+update c_country set countrycodefe = '160' where ad_componentobjectuid = 'CORE-C_Country-175';
+update c_country set countrycodefe = '440' where ad_componentobjectuid = 'CORE-C_Country-176';
+update c_country set countrycodefe = '161' where ad_componentobjectuid = 'CORE-C_Country-177';
+update c_country set countrycodefe = '254' where ad_componentobjectuid = 'CORE-C_Country-178';
+update c_country set countrycodefe = '512' where ad_componentobjectuid = 'CORE-C_Country-180';
+update c_country set countrycodefe = '411' where ad_componentobjectuid = 'CORE-C_Country-181';
+update c_country set countrycodefe = '115' where ad_componentobjectuid = 'CORE-C_Country-186';
+update c_country set countrycodefe = '116' where ad_componentobjectuid = 'CORE-C_Country-187';
+update c_country set countrycodefe = '438' where ad_componentobjectuid = 'CORE-C_Country-101';
+update c_country set countrycodefe = '117' where ad_componentobjectuid = 'CORE-C_Country-190';
+update c_country set countrycodefe = '240' where ad_componentobjectuid = 'CORE-C_Country-194';
+update c_country set countrycodefe = '118' where ad_componentobjectuid = 'CORE-C_Country-198';
+update c_country set countrycodefe = '156' where ad_componentobjectuid = 'CORE-C_Country-199';
+update c_country set countrycodefe = '431' where ad_componentobjectuid = 'CORE-C_Country-203';
+update c_country set countrycodefe = '341' where ad_componentobjectuid = 'CORE-C_Country-205';
+update c_country set countrycodefe = '414' where ad_componentobjectuid = 'CORE-C_Country-206';
+update c_country set countrycodefe = '416' where ad_componentobjectuid = 'CORE-C_Country-207';
+update c_country set countrycodefe = '316' where ad_componentobjectuid = 'CORE-C_Country-209';
+update c_country set countrycodefe = '318' where ad_componentobjectuid = 'CORE-C_Country-210';
+update c_country set countrycodefe = '317' where ad_componentobjectuid = 'CORE-C_Country-211';
+update c_country set countrycodefe = '319' where ad_componentobjectuid = 'CORE-C_Country-213';
+update c_country set countrycodefe = '321' where ad_componentobjectuid = 'CORE-C_Country-217';
+update c_country set countrycodefe = '352' where ad_componentobjectuid = 'CORE-C_Country-218';
+update c_country set countrycodefe = '120' where ad_componentobjectuid = 'CORE-C_Country-219';
+update c_country set countrycodefe = '514' where ad_componentobjectuid = 'CORE-C_Country-220';
+update c_country set countrycodefe = '308' where ad_componentobjectuid = 'CORE-C_Country-221';
+update c_country set countrycodefe = '309' where ad_componentobjectuid = 'CORE-C_Country-222';
+update c_country set countrycodefe = '323' where ad_componentobjectuid = 'CORE-C_Country-223';
+update c_country set countrycodefe = '353' where ad_componentobjectuid = 'CORE-C_Country-224';
+update c_country set countrycodefe = '324' where ad_componentobjectuid = 'CORE-C_Country-225';
+update c_country set countrycodefe = '441' where ad_componentobjectuid = 'CORE-C_Country-226';
+update c_country set countrycodefe = '325' where ad_componentobjectuid = 'CORE-C_Country-227';
+update c_country set countrycodefe = '121' where ad_componentobjectuid = 'CORE-C_Country-228';
+update c_country set countrycodefe = '122' where ad_componentobjectuid = 'CORE-C_Country-229';
+update c_country set countrycodefe = '123' where ad_componentobjectuid = 'CORE-C_Country-230';
+update c_country set countrycodefe = '418' where ad_componentobjectuid = 'CORE-C_Country-231';
+update c_country set countrycodefe = '442' where ad_componentobjectuid = 'CORE-C_Country-232';
+update c_country set countrycodefe = '419' where ad_componentobjectuid = 'CORE-C_Country-233';
+update c_country set countrycodefe = '344' where ad_componentobjectuid = 'CORE-C_Country-234';
+update c_country set countrycodefe = '450' where ad_componentobjectuid = 'CORE-C_Country-235';
+update c_country set countrycodefe = '124' where ad_componentobjectuid = 'CORE-C_Country-236';
+update c_country set countrycodefe = '125' where ad_componentobjectuid = 'CORE-C_Country-237';
+update c_country set countrycodefe = '326' where ad_componentobjectuid = 'CORE-C_Country-238';
+update c_country set countrycodefe = '327' where ad_componentobjectuid = 'CORE-C_Country-239';
+update c_country set countrycodefe = '126' where ad_componentobjectuid = 'CORE-C_Country-240';
+update c_country set countrycodefe = '420' where ad_componentobjectuid = 'CORE-C_Country-241';
+update c_country set countrycodefe = '520' where ad_componentobjectuid = 'CORE-C_Country-242';
+update c_country set countrycodefe = '129' where ad_componentobjectuid = 'CORE-C_Country-244';
+update c_country set countrycodefe = '515' where ad_componentobjectuid = 'CORE-C_Country-248';
+update c_country set countrycodefe = '443' where ad_componentobjectuid = 'CORE-C_Country-249';
+update c_country set countrycodefe = '421' where ad_componentobjectuid = 'CORE-C_Country-250';
+update c_country set countrycodefe = '329' where ad_componentobjectuid = 'CORE-C_Country-251';
+update c_country set countrycodefe = '127' where ad_componentobjectuid = 'CORE-C_Country-253';
+update c_country set countrycodefe = '151' where ad_componentobjectuid = 'CORE-C_Country-254';
+update c_country set countrycodefe = '304' where ad_componentobjectuid = 'CORE-C_Country-255';
+update c_country set countrycodefe = '158' where ad_componentobjectuid = 'CORE-C_Country-256';
+update c_country set countrycodefe = '503' where ad_componentobjectuid = 'CORE-C_Country-257';
+update c_country set countrycodefe = '423' where ad_componentobjectuid = 'CORE-C_Country-105';
+update c_country set countrycodefe = '330' where ad_componentobjectuid = 'CORE-C_Country-258';
+update c_country set countrycodefe = '241' where ad_componentobjectuid = 'CORE-C_Country-260';
+update c_country set countrycodefe = '504' where ad_componentobjectuid = 'CORE-C_Country-262';
+update c_country set countrycodefe = '219' where ad_componentobjectuid = 'CORE-C_Country-263';
+update c_country set countrycodefe = '130' where ad_componentobjectuid = 'CORE-C_Country-264';
+update c_country set countrycodefe = '131' where ad_componentobjectuid = 'CORE-C_Country-265';
+update c_country set countrycodefe = '521' where ad_componentobjectuid = 'CORE-C_Country-268';
+update c_country set countrycodefe = '422' where ad_componentobjectuid = 'CORE-C_Country-269';
+update c_country set countrycodefe = '328' where ad_componentobjectuid = 'CORE-C_Country-270';
+update c_country set countrycodefe = '332' where ad_componentobjectuid = 'CORE-C_Country-271';
+update c_country set countrycodefe = '516' where ad_componentobjectuid = 'CORE-C_Country-272';
+update c_country set countrycodefe = '357' where ad_componentobjectuid = 'CORE-C_Country-273';
+update c_country set countrycodefe = '513' where ad_componentobjectuid = 'CORE-C_Country-275';
+update c_country set countrycodefe = '312' where ad_componentobjectuid = 'CORE-C_Country-278';
+update c_country set countrycodefe = '322' where ad_componentobjectuid = 'CORE-C_Country-283';
+update c_country set countrycodefe = '427' where ad_componentobjectuid = 'CORE-C_Country-285';
+update c_country set countrycodefe = '133' where ad_componentobjectuid = 'CORE-C_Country-287';
+update c_country set countrycodefe = '234' where ad_componentobjectuid = 'CORE-C_Country-290';
+update c_country set countrycodefe = '235' where ad_componentobjectuid = 'CORE-C_Country-292';
+update c_country set countrycodefe = '506' where ad_componentobjectuid = 'CORE-C_Country-293';
+update c_country set countrycodefe = '428' where ad_componentobjectuid = 'CORE-C_Country-294';
+update c_country set countrycodefe = '157' where ad_componentobjectuid = 'CORE-C_Country-295';
+update c_country set countrycodefe = '302' where ad_componentobjectuid = 'CORE-C_Country-296';
+update c_country set countrycodefe = '134' where ad_componentobjectuid = 'CORE-C_Country-297';
+update c_country set countrycodefe = '152' where ad_componentobjectuid = 'CORE-C_Country-298';
+update c_country set countrycodefe = '135' where ad_componentobjectuid = 'CORE-C_Country-299';
+update c_country set countrycodefe = '333' where ad_componentobjectuid = 'CORE-C_Country-300';
+update c_country set countrycodefe = '448' where ad_componentobjectuid = 'CORE-C_Country-301';
+update c_country set countrycodefe = '449' where ad_componentobjectuid = 'CORE-C_Country-302';
+update c_country set countrycodefe = '136' where ad_componentobjectuid = 'CORE-C_Country-304';
+update c_country set countrycodefe = '159' where ad_componentobjectuid = 'CORE-C_Country-305';
+update c_country set countrycodefe = '307' where ad_componentobjectuid = 'CORE-C_Country-308';
+update c_country set countrycodefe = '138' where ad_componentobjectuid = 'CORE-C_Country-309';
+update c_country set countrycodefe = '232' where ad_componentobjectuid = 'CORE-C_Country-310';
+update c_country set countrycodefe = '137' where ad_componentobjectuid = 'CORE-C_Country-312';
+update c_country set countrycodefe = '430' where ad_componentobjectuid = 'CORE-C_Country-107';
+update c_country set countrycodefe = '334' where ad_componentobjectuid = 'CORE-C_Country-315';
+update c_country set countrycodefe = '354' where ad_componentobjectuid = 'CORE-C_Country-317';
+update c_country set countrycodefe = '139' where ad_componentobjectuid = 'CORE-C_Country-318';
+update c_country set countrycodefe = '335' where ad_componentobjectuid = 'CORE-C_Country-319';
+update c_country set countrycodefe = '140' where ad_componentobjectuid = 'CORE-C_Country-321';
+update c_country set countrycodefe = '519' where ad_componentobjectuid = 'CORE-C_Country-323';
+update c_country set countrycodefe = '141' where ad_componentobjectuid = 'CORE-C_Country-325';
+update c_country set countrycodefe = '355' where ad_componentobjectuid = 'CORE-C_Country-327';
+update c_country set countrycodefe = '517' where ad_componentobjectuid = 'CORE-C_Country-329';
+update c_country set countrycodefe = '142' where ad_componentobjectuid = 'CORE-C_Country-330';
+update c_country set countrycodefe = '331' where ad_componentobjectuid = 'CORE-C_Country-332';
+update c_country set countrycodefe = '426' where ad_componentobjectuid = 'CORE-C_Country-333';
+update c_country set countrycodefe = '356' where ad_componentobjectuid = 'CORE-C_Country-337';
+update c_country set countrycodefe = '505' where ad_componentobjectuid = 'CORE-C_Country-338';
+update c_country set countrycodefe = '337' where ad_componentobjectuid = 'CORE-C_Country-340';
+update c_country set countrycodefe = '348' where ad_componentobjectuid = 'CORE-C_Country-345';
+update c_country set countrycodefe = '144' where ad_componentobjectuid = 'CORE-C_Country-347';
+update c_country set countrycodefe = '132' where ad_componentobjectuid = 'CORE-C_Country-348';
+
+--20180131-1000 Codigos de monedas adicionales
+update c_currency set wsfecode = '014' where ad_componentobjectuid = 'CORE-C_Currency-241';
+update c_currency set wsfecode = '059' where ad_componentobjectuid = 'CORE-C_Currency-282';
+update c_currency set wsfecode = '023' where ad_componentobjectuid = 'CORE-C_Currency-205';
+update c_currency set wsfecode = '026' where ad_componentobjectuid = 'CORE-C_Currency-120';
+update c_currency set wsfecode = '031' where ad_componentobjectuid = 'CORE-C_Currency-146';
+update c_currency set wsfecode = '035' where ad_componentobjectuid = 'CORE-C_Currency-308';
+update c_currency set wsfecode = '042' where ad_componentobjectuid = 'CORE-C_Currency-298';
+update c_currency set wsfecode = '009' where ad_componentobjectuid = 'CORE-C_Currency-318';
+
+--20180202-1207 Relacionados con merge r2303 y 2304
+
+-- Columna agregada para el Detalle de Cuentas (CORE)
+alter table T_Acct_Detail add column origin_tableName varchar(150);
+alter table T_Acct_Detail add column procedence_id integer;
+
+-- Agregado de columna para el campo cuenta contable (CORE)
+alter table C_Payment add column accounting_c_charge_id integer;
+alter table C_BankTransfer add column accounting_c_charge_id integer;
+alter table C_CreditCardSettlement add column accounting_c_charge_id integer;
+alter table C_CashLine add column accounting_c_charge_id integer;
+
+-- Actualizacion de las descripciones de registros contables
+-- Se modificarán para liquidaciones de tarj de crédito, facturas, OP/RC y extractos
+
+-- update description on c_creditCardSettlement
+update fact_acct fa set description = (
+    select settlementNo || ' ' || description from C_CreditCardSettlement ccs where ccs.C_CreditCardSettlement_ID = fa.record_id) 
+where ad_table_id = (select ad_table_id from ad_table where tablename = 'C_CreditCardSettlement') and ad_client_id = 1010016;
+
+-- update description on c_invoice
+update fact_acct fa set description = (
+    select i.documentNo || coalesce(' #' || to_char(l.line,'99999'), '') || coalesce(' (' || l.description || ')' ,'')
+    from C_Invoice i  
+    left join C_invoiceLine l on (i.c_invoice_id = l.c_invoice_id) 
+    where i.C_Invoice_ID = fa.record_id and l.c_invoiceLine_id = fa.line_id) 
+where ad_table_id = (select ad_table_id from ad_table where tablename = 'C_Invoice') and ad_client_id = 1010016;
+
+-- update description on c_bankStatement
+update fact_acct fa set description = (
+    select bs.name || coalesce(' #' || to_char(bsl.line, '99999'), '') || coalesce(' (' || bsl.description || ')' ,'')
+    from c_bankStatement bs  
+    left join C_bankStatementLine bsl on (bs.c_bankStatement_id = bsl.c_bankStatement_id) 
+    where bs.c_bankStatement_ID = fa.record_id and bsl.c_bankStatement_id = fa.line_id)
+where ad_table_id = (select ad_table_id from ad_table where tablename = 'C_BankStatement') and ad_client_id = 1010016;
+
+-- update description on allocationHdr
+update fact_acct fa set description = (
+    select a.documentNo || coalesce(' #' || to_char(al.allocationNo, '99999'), '') || coalesce(' (' || al.line_description || ')','')
+    from c_allocationHdr a  
+    left join C_allocationLine al on (a.c_allocationHdr_id = al.c_allocationHdr_id)
+    where a.c_allocationHdr_ID = fa.record_id and al.c_allocationLine_id = fa.line_id)
+where ad_table_id = (select ad_table_id from ad_table where tablename = 'C_AllocationHdr') and ad_client_id = 1010016;
+
+-- El campo Record_ID de la tabla AD_Attachment debe ser de tipo referencia (18), no un boton (28) 
+update ad_column set ad_reference_id = 18 where ad_componentobjectuid = 'CORE-AD_Column-2097';
+
+--20180223-1830 Incorporación de líneas de factura y de pedido a la estructura de descuentos de comprobantes
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_DocumentDiscount','c_orderline_id','integer'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_DocumentDiscount','c_invoiceline_id','integer'));
+
+ALTER TABLE C_DocumentDiscount ADD CONSTRAINT cinvoiceline_cdocumentdiscount FOREIGN KEY (c_invoiceline_id)
+  REFERENCES c_invoiceline (c_invoiceline_id) MATCH SIMPLE
+  ON UPDATE NO ACTION ON DELETE CASCADE;
+ALTER TABLE C_DocumentDiscount ADD CONSTRAINT corderline_cdocumentdiscount FOREIGN KEY (c_orderline_id)
+  REFERENCES c_orderline (c_orderline_id) MATCH SIMPLE
+  ON UPDATE NO ACTION ON DELETE CASCADE;
+
+--20180310-2045 Nueva columna de configuración de descuento de corte por Línea de Artículo
+update ad_system set dummy = (SELECT addcolumnifnotexists('M_DiscountSchemaBreak','m_product_lines_id','integer'));
+
+--20180315-1403 Merge DT 728469
+DROP VIEW rv_orderline_pending;
+CREATE OR REPLACE VIEW rv_orderline_pending AS 
+ SELECT o.ad_client_id, o.ad_org_id, o.isactive, o.created, o.createdby, o.updated, o.updatedby, o.c_order_id, o.documentno, o.dateordered::date AS dateordered, o.datepromised::date AS datepromised, o.c_bpartner_id, o.issotrx, ol.c_orderline_id, ol.m_product_id, ol.qtyordered, ol.qtyinvoiced, ol.qtydelivered, ol.qtyordered - ol.qtyinvoiced AS pendinginvoice, ol.qtyordered - ol.qtydelivered AS pendingdeliver, 
+        CASE
+            WHEN ol.qtyordered <> ol.qtyinvoiced AND ol.qtyordered <> ol.qtydelivered THEN 'ID'::text
+            WHEN ol.qtyordered <> ol.qtyinvoiced AND ol.qtyordered = ol.qtydelivered THEN 'I'::text
+            WHEN ol.qtyordered <> ol.qtydelivered THEN 'D'::text
+            ELSE 'N'::text
+        END AS status
+   FROM c_order o
+   JOIN c_orderline ol ON o.c_order_id = ol.c_order_id AND (ol.qtyordered <> ol.qtydelivered OR ol.qtyordered <> ol.qtyinvoiced) AND (o.docstatus = ANY (ARRAY['CO'::bpchar, 'CL'::bpchar])) AND ol.m_product_id IS NOT NULL
+  ORDER BY o.c_order_id;
+
+ALTER TABLE rv_orderline_pending
+  OWNER TO libertya;
+
+--20180316-1200 Merge DT 728469. Adecuaciones necesarias a fin de corizar desarrollo y evitar pisado de clases OP
+update ad_system set dummy = (SELECT addcolumnifnotexists('AD_Role','paymentmedium','character(1)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('AD_Role','paymentmediumlimit','numeric(20)'));
+

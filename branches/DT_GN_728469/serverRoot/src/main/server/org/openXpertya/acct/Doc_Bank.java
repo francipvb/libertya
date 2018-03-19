@@ -231,13 +231,14 @@ public class Doc_Bank extends Doc {
             }
 
             // BankInTransit   DR      CR              (Payment)
+
             /*
              * Utilizo para contabilizar la cuenta asociada al Payment
              * Ya sea la cuenta por defecto o la cuenta de configuracion contable
              */
             MPayment payment = new MPayment(getCtx(), line.getC_Payment_ID(), getTrxName());
             if(payment != null && payment.getACCOUNTING_C_Charge_ID() > 0) {
-            	fl = fact.createLine( line, MCharge.getAccount(p_vo.Accounting_C_Charge_ID, as, payment.isReceipt() ? new BigDecimal(-1) : null),line.getC_Currency_ID(),line.getTrxAmt().negate());
+            	fl = fact.createLine( line, MCharge.getAccount(payment.getACCOUNTING_C_Charge_ID(), as, payment.isReceipt() ? new BigDecimal(-1) : null),line.getC_Currency_ID(),line.getTrxAmt().negate());
             } else {
             	fl = fact.createLine( line,getAccount( Doc.ACCTTYPE_BankInTransit,as ),line.getC_Currency_ID(),line.getTrxAmt().negate());
             }
