@@ -105,6 +105,17 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 	 * ContraAllocations: Almacena el ID del payment creado al anular el pago.
 	 */
 	private Integer payVoidID = 0;
+
+	/**
+	 * Estado resultante para el contra-documento generado
+	 */
+	private String reversedStatus = DOCSTATUS_Reversed;
+	
+	/**
+	 * Si es distinto de null, es la fecha que se setea al contra-payent
+	 * generado por anulación
+	 */
+	private Timestamp dateForReversalPayment = null;
 	
     /**
      * Descripción de Método
@@ -2582,6 +2593,8 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
     	setAditionalWorkResult(new HashMap<PO, Object>());
         log.info( toString());
 
+        setReversedStatus(DOCSTATUS_Voided);
+        
         // Disytel - Franco Bonafine
         // No es posible anular pagos anular pagos que están contabilizados.
         // TODO: Ver si en el caso de que el pago esté contabilizado sería factible hacer una Inversa/Correccion.
@@ -2623,7 +2636,13 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 //
         if(reversed){
         	setProcessed( true );
-        	setDocStatus(DOCSTATUS_Voided);
+			// Por lo pronto se comenta para que queden consistentes los estados
+			// del comprobante original y el inverso.
+			// Cuando el voidIt tenga otro comportamiento que el reverseIt se
+			// debería descomentar o refactorizar. 
+        	// *******************************************************************
+        	setDocStatus(getReversedStatus());
+        	// *******************************************************************
             setDocAction( DOCACTION_None );        	
         }
         
@@ -2723,10 +2742,14 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
         reversal.addDescription( "{->" + getDocumentNo() + ")" );
         
         // El contradocumento tiene que contener la fecha actual y NO la del documento original
-        reversal.setDateAcct(Env.getDate());
-        reversal.setDateTrx(Env.getDate());
+		Timestamp reversalDate = getDateForReversalPayment() != null ? getDateForReversalPayment() : Env.getDate();
+        reversal.setDateAcct(reversalDate);
+        reversal.setDateTrx(reversalDate);
         
-        reversal.save( get_TrxName());
+        if(!reversal.save( get_TrxName())){
+        	m_processMsg = CLogger.retrieveErrorAsString();
+			return false;
+        }
         // No confirmo el trabajo adicional de cuentas corrientes porque se debe
 		// realizar luego de anular la factura
         reversal.setConfirmAditionalWorks(false);
@@ -2745,10 +2768,8 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
         }
 
         reversal.closeIt();
-        if (CounterAllocationManager.isCounterAllocationActive(getCtx())) {
-        	// Almaceno en la variable de instancia el ID del pago anulado
-        	this.setPayVoidID(reversal.getC_Payment_ID());
-        }
+    	setPayVoidID(reversal.getC_Payment_ID());
+    	
         // Me traigo el trabajo adicional de cuentas corrientes y lo confirmo
 		// después 
 		getAditionalWorkResult().put(reversal,
@@ -2797,9 +2818,12 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
         // de visibilidad con el documento revertido, de modo que ambos documentos aparezcan
         // en el mismo lugar
         //reversal.setDocStatus( DOCSTATUS_Closed );
-        reversal.setDocStatus( DOCSTATUS_Reversed );
+        reversal.setDocStatus( getReversedStatus() );
         reversal.setDocAction( DOCACTION_None );
-        reversal.save( get_TrxName());
+        if(!reversal.save( get_TrxName())){
+        	m_processMsg = CLogger.retrieveErrorAsString();
+        	return false;
+        }
 
         // Disytel FB - Ya no se desasignan automáticamente los pagos. Se debe revertir la asignación manualmente.
         // Unlink & De-Allocate
@@ -2812,7 +2836,7 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
         // Set Status
 
         addDescription( "(" + reversal.getDocumentNo() + "<-)" );
-        setDocStatus(DOCSTATUS_Reversed);
+        setDocStatus(getReversedStatus());
         setDocAction( DOCACTION_None );
         setProcessed( true );
 
@@ -2828,9 +2852,10 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 	        // Create automatic Allocation
 	        // 		El contradocumento tiene que contener la fecha actual y NO la del documento original 
 	        MAllocationHdr alloc = new MAllocationHdr( getCtx(),false, Env.getDate(), getC_Currency_ID(),Msg.translate( getCtx(),"C_Payment_ID" ) + ": " + reversal.getDocumentNo(),get_TrxName());
-	
-	        if( !alloc.save( get_TrxName())) {
-	            log.warning( "Automatic allocation - hdr not saved" );
+	        alloc.setAD_Org_ID(getAD_Org_ID());
+	        if(!alloc.save( get_TrxName())) {
+	        	m_processMsg = CLogger.retrieveErrorAsString();
+    			return false;
 	        } else {
 	        	
 	            // Original Allocation
@@ -2841,7 +2866,8 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 	            aLine.setPaymentInfo( getC_Payment_ID(),0 );
 	
 	            if( !aLine.save( get_TrxName())) {
-	                log.warning( "Automatic allocation - line not saved" );
+	            	m_processMsg = CLogger.retrieveErrorAsString();
+	    			return false;
 	            }
 	
 	            // Reversal Allocation
@@ -2851,12 +2877,22 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 	            aLine.setPaymentInfo( reversal.getC_Payment_ID(),0 );
 	
 	            if( !aLine.save( get_TrxName())) {
-	                log.warning( "Automatic allocation - reversal line not saved" );
+	            	m_processMsg = CLogger.retrieveErrorAsString();
+	    			return false;
 	            }
 	        }
+	        
 	        alloc.setUpdateBPBalance(false);
-	        alloc.processIt( DocAction.ACTION_Complete );
-	        alloc.save( get_TrxName());
+	        
+	        if(!alloc.processIt( DocAction.ACTION_Complete )){
+	        	m_processMsg = alloc.getProcessMsg();
+    			return false;
+	        }
+	        	        
+	        if(!alloc.save( get_TrxName())){
+	        	m_processMsg = CLogger.retrieveErrorAsString();
+    			return false;
+	        }
 	
 	        info.append( " - @C_AllocationHdr_ID@: " ).append( alloc.getDocumentNo());
 
@@ -3271,6 +3307,22 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 	@Override
 	public void cancelProcess() {
 		
+	}
+
+	public String getReversedStatus() {
+		return reversedStatus;
+	}
+
+	public void setReversedStatus(String reversedStatus) {
+		this.reversedStatus = reversedStatus;
+	}
+
+	public Timestamp getDateForReversalPayment() {
+		return dateForReversalPayment;
+	}
+
+	public void setDateForReversalPayment(Timestamp dateForReversalPayment) {
+		this.dateForReversalPayment = dateForReversalPayment;
 	}
 	
 }   // MPayment

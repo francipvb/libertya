@@ -98,7 +98,11 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 				poGenerator.createAllocationHdr(X_C_AllocationHdr.ALLOCATIONTYPE_PaymentOrder);
 				poGenerator.getAllocationHdr().setDateTrx(getBatchDate());
 				poGenerator.getAllocationHdr().setDateAcct(getBatchDate());
-				poGenerator.getAllocationHdr().setDescription(Msg.getMsg(getCtx(), "PaymentBatchPOAllocationDescription") + " " + getDocumentNo());
+				poGenerator.getAllocationHdr()
+						.setDescription(Msg.parseTranslation(Env.getCtx(),
+								"@C_PaymentBatch_ID@: " + getDocumentNo() + " | @PaymentOrder@: "
+										+ poGenerator.getAllocationHdr().getDocumentNo() + " | " + bPartner.getValue()
+										+ " - " + bPartner.getName()));
 				poGenerator.getAllocationHdr().setIsManual(false);
 				poGenerator.getAllocationHdr().setC_BPartner_ID(detail.getC_BPartner_ID());
 								
@@ -351,6 +355,18 @@ public class MPaymentBatchPO extends X_C_PaymentBatchPO implements DocAction {
 						m_processMsg = (isValid?"":" . \n ")+Msg.getMsg(getCtx(), "InvoiceOpenAmountChange") + " \n " + bPartner.getName() + "-" + invoice.getDocumentNo();
 					else 
 						m_processMsg += " \n " + bPartner.getName() + "-" + invoice.getDocumentNo();
+					isValid = false;
+					subValid = false;
+				}
+				
+				// El estado del documento debe ser completo o cerrado
+				if(!invoice.isInvoiceCompletedOrClosed()){
+					String msg = Msg.getMsg(getCtx(), "DocumentStatus", new Object[] { invoice.getDocumentNo(),
+							MRefList.getListName(getCtx(), DOCSTATUS_AD_Reference_ID, invoice.getDocStatus()) });
+					if (isValid)
+						m_processMsg = msg;
+					else
+						m_processMsg += " \n " + msg;
 					isValid = false;
 					subValid = false;
 				}

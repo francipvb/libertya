@@ -20,6 +20,7 @@ setAllowChangePriceList (false);
 setAllowDeliveryReturned (false);
 setAllowOnlyProviders (false);
 setAllowOtherBatchPaymentDate (false);
+setAllowOnlyProviders (false);
 setAllowProposalDue (false);
 setApplyPerception (false);
 setC_DocType_ID (0);

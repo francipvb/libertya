@@ -225,29 +225,52 @@ public class Order  {
 	 */
 	public BigDecimal getOrderProductsTotalAmt(boolean includeTaxAmt, boolean includeOtherTaxesAmt, boolean withoutDocumentTotalAmtForOtherTaxes, boolean updateOtherTaxes, boolean updateTaxes) {
 		BigDecimal amount = BigDecimal.ZERO;
-		List<Integer> otherTaxesUpdated = new ArrayList<Integer>();
+		BigDecimal taxAmount = BigDecimal.ZERO;
+		BigDecimal taxAmountAux = BigDecimal.ZERO;
+		BigDecimal taxBaseAmount = BigDecimal.ZERO;
+		BigDecimal taxBaseAux = BigDecimal.ZERO;
+		Tax oldTax = null;
 		// Suma el importe total con impuestos de cada artículo en el pedido
 		for (OrderProduct orderProduct : getOrderProducts()) {
-			BigDecimal lineAmt = orderProduct.getAllTotalAmt(includeTaxAmt, includeOtherTaxesAmt,
-					withoutDocumentTotalAmtForOtherTaxes, false);
-			amount = amount.add(lineAmt);
+			taxBaseAux = orderProduct.getTaxBaseAmt(withoutDocumentTotalAmtForOtherTaxes, false);
+			taxAmountAux = orderProduct.getTotalTaxAmt(withoutDocumentTotalAmtForOtherTaxes, false);
+			// Verifico si no hay un problema de centavos para este caso en comparación entre el neto + impuesto y el precio total
+			if(orderProduct.getProduct().isTaxIncludedInPrice()){
+				BigDecimal compare = taxBaseAux.add(taxAmountAux)
+						.subtract(orderProduct.getTotalTaxedPrice(withoutDocumentTotalAmtForOtherTaxes, false));
+				// Error de centavos,
+				// Si el importe calculado es mayor al importe total, decremento
+				// importe de impuesto
+				// Si el importe calculado es menor al importe total, aumento
+				// importe de impuesto
+				if(compare.compareTo(BigDecimal.ZERO) != 0){
+					taxAmountAux = taxAmountAux.subtract(compare);
+				}
+			}
+			
+			taxBaseAmount = taxBaseAmount.add(taxBaseAux);
+			taxAmount = taxAmount.add(taxAmountAux);
 			if(updateTaxes){
 				orderProduct.getTax()
-						.setAmount(orderProduct.getTotalTaxAmt(withoutDocumentTotalAmtForOtherTaxes, false));
+						.setAmount(oldTax == null || oldTax != orderProduct.getTax() ? taxAmountAux : taxAmount);
 				orderProduct.getTax()
-						.setTaxBaseAmt(orderProduct.getTaxBaseAmt(withoutDocumentTotalAmtForOtherTaxes, false));
+						.setTaxBaseAmt(oldTax == null || oldTax != orderProduct.getTax() ? taxBaseAux : taxBaseAmount);
+				oldTax = orderProduct.getTax();
 			}
+		}
+		
+		amount = taxBaseAmount;
+		
+		if(includeTaxAmt){
+			amount = amount.add(taxAmount);
+		}
+		
+		if(includeOtherTaxesAmt){
+			amount = amount.add(scaleAmount(getTotalOtherTaxesAmt(false, withoutDocumentTotalAmtForOtherTaxes)));
 			if(updateOtherTaxes){
 				for (Tax otherTax : getOtherTaxes()) {
-					if(!otherTaxesUpdated.contains(otherTax.getId())){
-						otherTax.setAmount(BigDecimal.ZERO);
-						otherTax.setTaxBaseAmt(BigDecimal.ZERO);
-						otherTaxesUpdated.add(otherTax.getId());
-					}
-					otherTax.setAmount(otherTax.getAmount()
-							.add(orderProduct.getTotalOtherTaxAmt(otherTax, withoutDocumentTotalAmtForOtherTaxes, false)));
-					otherTax.setTaxBaseAmt(otherTax.getTaxBaseAmt()
-							.add(orderProduct.getTaxBaseAmt(withoutDocumentTotalAmtForOtherTaxes, false)));
+					otherTax.setTaxBaseAmt(scaleAmount(taxBaseAmount));
+					otherTax.setAmount(scaleAmount(taxBaseAmount.multiply(otherTax.getTaxRateMultiplier())));
 				}
 			}
 		}
@@ -864,18 +887,32 @@ public class Order  {
 		return ratio;
 	}
 	
+	public BigDecimal getOtherTaxesDivisor(){
+		BigDecimal allTaxes = BigDecimal.ZERO;
+		for (Tax otherTax : getOtherTaxes()) {
+			allTaxes = allTaxes.add(otherTax.getRate());
+		}
+		return allTaxes.divide(new BigDecimal(100),4,BigDecimal.ROUND_HALF_UP);
+	}
+	
 	
 	public BigDecimal getTotalOtherTaxesAmt(boolean isTemporalDocumentoDiscountAmt) {
 		return getTotalOtherTaxesAmt(isTemporalDocumentoDiscountAmt, true);
 	}
 	
-	public BigDecimal getTotalOtherTaxesAmt(boolean isTemporalDocumentDiscountAmt, boolean withoutDocumentDiscountAmt) {
+	/*public BigDecimal getTotalOtherTaxesAmt(boolean isTemporalDocumentDiscountAmt, boolean withoutDocumentDiscountAmt) {
 		BigDecimal totalTaxAmt = BigDecimal.ZERO;
 		for (OrderProduct orderProduct : getOrderProducts()) {
 			totalTaxAmt = totalTaxAmt
 					.add(orderProduct.getTotalOtherTaxAmt(withoutDocumentDiscountAmt, isTemporalDocumentDiscountAmt));
 		}
 
+		return scaleAmount(totalTaxAmt);
+	}*/
+	
+	public BigDecimal getTotalOtherTaxesAmt(boolean isTemporalDocumentDiscountAmt, boolean withoutDocumentDiscountAmt) {
+		BigDecimal totalTaxBaseAmt = getTotalTaxBaseAmt(isTemporalDocumentDiscountAmt, withoutDocumentDiscountAmt);
+		BigDecimal totalTaxAmt = totalTaxBaseAmt.multiply(getOtherTaxesDivisor());
 		return scaleAmount(totalTaxAmt);
 	}
 	
@@ -887,6 +924,16 @@ public class Order  {
 		}
 
 		return scaleAmount(totalTaxAmt);
+	}
+
+	public BigDecimal getTotalTaxBaseAmt(boolean isTemporalDocumentDiscountAmt, boolean withoutDocumentDiscountAmt) {
+		BigDecimal totalTaxBaseAmt = BigDecimal.ZERO;
+		for (OrderProduct orderProduct : getOrderProducts()) {
+			totalTaxBaseAmt = totalTaxBaseAmt
+					.add(orderProduct.getTaxBaseAmt(withoutDocumentDiscountAmt, isTemporalDocumentDiscountAmt));
+		}
+
+		return scaleAmount(totalTaxBaseAmt);
 	}
 	
 	/**
@@ -1296,9 +1343,12 @@ public class Order  {
 	public List<Tax> getAllTaxes(){
 		List<Tax> taxes = new ArrayList<Tax>();
 		Map<BigDecimal, Tax> auxTaxes = new HashMap<BigDecimal, Tax>();
-		Tax acumTax;
+		Tax acumTax, oldTax = null;
 		// IVA
 		for (OrderProduct op : getOrderProducts()) {
+			if(oldTax != null && oldTax == op.getTax()){
+				break;
+			}
 			acumTax = auxTaxes.get(op.getTaxRate());
 			if(acumTax == null){
 				acumTax = new Tax(op.getTax().getId(), op.getTaxRate(), op.getTax().getName(), false);
@@ -1308,6 +1358,7 @@ public class Order  {
 			acumTax.setAmount(acumTax.getAmount().add(op.getTax().getAmount()));
 			acumTax.setTaxBaseAmt(acumTax.getTaxBaseAmt().add(op.getTax().getTaxBaseAmt()));
 			auxTaxes.put(op.getTaxRate(), acumTax);
+			oldTax = op.getTax();
 		}
 		taxes.addAll(auxTaxes.values());
 		

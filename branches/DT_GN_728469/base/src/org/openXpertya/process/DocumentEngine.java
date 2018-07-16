@@ -47,6 +47,7 @@ import org.openXpertya.model.MRole;
 import org.openXpertya.model.MSplitting;
 import org.openXpertya.model.MTransfer;
 import org.openXpertya.model.MWarehouseClose;
+import org.openXpertya.model.M_Table;
 import org.openXpertya.model.PO;
 import org.openXpertya.model.X_C_POSJournal;
 import org.openXpertya.plugin.MPluginDocAction;
@@ -1102,11 +1103,15 @@ public class DocumentEngine implements DocAction {
 		 */
 		else if (AD_Table_ID == MInvoice.Table_ID)
 		{
+			M_Table invoiceTable = M_Table.get(Env.getCtx(), AD_Table_ID);
+			MInvoice invoice = (MInvoice)invoiceTable.getPO(recordID, null);
 			//	Complete                    ..  CO
 			if (docStatus.equals(DocumentEngine.STATUS_Completed))
 			{
 				options[index++] = DocumentEngine.ACTION_Void;
-				options[index++] = DocumentEngine.ACTION_Reverse_Correct;
+				if(!invoice.isSOTrx()){
+					options[index++] = DocumentEngine.ACTION_Reverse_Correct;	
+				}
 			}
 		}
 		/********************
@@ -1129,6 +1134,7 @@ public class DocumentEngine implements DocAction {
 			//	Complete                    ..  CO
 			if (docStatus.equals(DocumentEngine.STATUS_Completed))
 			{
+				options[ index++ ] = DocumentEngine.ACTION_ReActivate;
 				options[ index++ ] = DocumentEngine.ACTION_Reverse_Correct;
                 options[ index++ ] = DocumentEngine.ACTION_Reverse_Accrual;
 				options[ index++ ] = DocumentEngine.ACTION_Void;
@@ -1267,13 +1273,14 @@ public class DocumentEngine implements DocAction {
             // Complete                    ..  CO
 
             if( docStatus.equals( DocumentEngine.STATUS_Completed )) {
-                options[ 0 ] = DocumentEngine.ACTION_ReActivate;
+                options[index++] = DocumentEngine.ACTION_ReActivate;
             }
 	    } else if (AD_Table_ID == MCreditCardSettlement.Table_ID) {
 
 			// Complete                    ..  CO
 			if (docStatus.equals(DocumentEngine.STATUS_Completed)) {
-				options[ 0 ] = DocumentEngine.ACTION_Void;
+				options[index++] = DocumentEngine.ACTION_Void;
+				options[index++] = DocumentEngine.ACTION_Reverse_Correct;
 			}
 	    }
 		return index;

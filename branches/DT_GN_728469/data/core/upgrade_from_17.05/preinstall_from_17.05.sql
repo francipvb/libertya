@@ -2034,7 +2034,7 @@ ALTER FUNCTION c_pos_declaracionvalores_payments_filtered(anyarray)
   OWNER TO libertya; 
   
 --20180105-1030 Incorporación de currencyconverts en el informe Resumen de Ventas
-﻿CREATE OR REPLACE FUNCTION v_dailysales_current_account_filtered(
+CREATE OR REPLACE FUNCTION v_dailysales_current_account_filtered(
     orgid integer,
     posid integer,
     userid integer,
@@ -3633,3 +3633,1409 @@ ALTER TABLE rv_orderline_pending
 update ad_system set dummy = (SELECT addcolumnifnotexists('AD_Role','paymentmedium','character(1)'));
 update ad_system set dummy = (SELECT addcolumnifnotexists('AD_Role','paymentmediumlimit','numeric(20)'));
 
+--20180328-1156 Los procesadores contables de Wide Systems y WideFast-Track por defecto deben estar deshabilitados
+update c_acctprocessor set isactive = 'N' where ad_componentobjectuid in ('CORE-C_AcctProcessor-1000008', 'CORE-C_AcctProcessor-1000005');
+
+--20180405-1040 Merge r2345 y r2348
+CREATE VIEW saldosOPA_v AS
+SELECT sb.ad_client_id, sb.ad_org_id, sb.documentno, sb.c_bpartner_id, sb.datetrx, sb.grandtotal, (sb.grandtotal - ((sb.cashlineavailable + sb.paymentavailable) + sb.invoiceopen)) AS imputado, ((sb.cashlineavailable + sb.paymentavailable) + sb.invoiceopen) AS saldo FROM (SELECT a.ad_client_id, a.ad_org_id, a.documentno, a.c_bpartner_id, (a.datetrx)::date AS datetrx, a.grandtotal, sum(CASE WHEN (al.c_cashline_id IS NOT NULL) THEN abs(cashlineavailable(al.c_cashline_id)) ELSE (0)::numeric END) AS cashlineavailable, sum(CASE WHEN (al.c_payment_id IS NOT NULL) THEN paymentavailable(al.c_payment_id) ELSE (0)::numeric END) AS paymentavailable, sum(CASE WHEN (al.c_invoice_credit_id IS NOT NULL) THEN invoiceopen(al.c_invoice_credit_id, 0) ELSE (0)::numeric END) AS invoiceopen FROM (c_allocationhdr a JOIN c_allocationline al ON ((al.c_allocationhdr_id = a.c_allocationhdr_id))) WHERE ((((a.allocationtype)::text = 'OPA'::text) AND (((cashlineavailable(al.c_cashline_id) < (0)::numeric) OR (paymentavailable(al.c_payment_id) > (0)::numeric)) OR (invoiceopen(al.c_invoice_credit_id, 0) > (0)::numeric))) AND (a.docstatus = ANY (ARRAY['CL'::bpchar, 'CO'::bpchar]))) GROUP BY a.ad_client_id, a.ad_org_id, a.documentno, a.c_bpartner_id, a.datetrx, a.grandtotal) sb ORDER BY sb.documentno;
+
+ALTER TABLE C_BPartner ADD COLUMN paymentblocked character(1);
+ALTER TABLE C_BPartner ADD COLUMN paymentblockeddescr character varying(255);
+ALTER TABLE M_Product ADD COLUMN marketingblocked character(1);
+ALTER TABLE M_Product ADD COLUMN marketingblockeddescr character varying(255);
+
+--20180411-1408 Merge relacionado con r2354
+update ad_field set isreadonly = 'N' where ad_componentobjectuid = 'HTCA2CORE-AD_Field-1019910-20180405102350';
+update ad_field set isreadonly = 'N' where ad_componentobjectuid = 'HTCA2CORE-AD_Field-1019911-20180405102403';
+
+ALTER TABLE C_BPartner ALTER COLUMN paymentBlocked SET DEFAULT 'N';
+UPDATE C_BPartner SET paymentBlocked='N' WHERE paymentBlocked IS NULL;
+ALTER TABLE C_BPartner ALTER COLUMN paymentBlocked SET NOT NULL;
+
+ALTER TABLE M_Product ALTER COLUMN marketingBlocked SET DEFAULT 'N';
+UPDATE M_Product SET marketingBlocked='N' WHERE marketingBlocked IS NULL;
+ALTER TABLE M_Product ALTER COLUMN marketingBlocked SET NOT NULL;
+
+--20180411-1910 Parametrización que permite discriminar el arrastre de descuentos y recargos
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_DocType','dragorderlinesurcharges','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_DocType','dragorderdocumentsurcharges','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_Invoice','managedragordersurcharges','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+
+UPDATE C_DocType
+SET dragorderlinesurcharges = 'Y'
+WHERE dragorderlinediscounts = 'Y';
+
+UPDATE C_DocType
+SET dragorderdocumentsurcharges = 'Y'
+WHERE dragorderdocumentdiscounts = 'Y';
+
+UPDATE C_Invoice
+SET managedragordersurcharges = 'Y'
+WHERE managedragorderdiscounts = 'Y';
+
+--20180418-1420 Acceso a acciones de documento por perfil
+CREATE TABLE AD_Document_Action_Access
+(
+ad_document_action_access_id integer NOT NULL,
+ad_role_id integer NOT NULL,
+c_doctype_id integer NOT NULL,
+ad_ref_list_id integer NOT NULL,
+ad_client_id integer NOT NULL,
+ad_org_id integer NOT NULL,
+isactive character(1) NOT NULL DEFAULT 'Y'::bpchar,
+created timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+createdby integer NOT NULL,
+updated timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+updatedby integer NOT NULL,
+ad_componentobjectuid character varying(100),
+ad_componentversion_id integer,
+CONSTRAINT ad_document_action_access_key PRIMARY KEY (ad_document_action_access_id),
+CONSTRAINT ad_document_action_role_access_fk FOREIGN KEY (ad_role_id)
+REFERENCES ad_role (ad_role_id) MATCH SIMPLE
+ON UPDATE NO ACTION ON DELETE CASCADE,
+CONSTRAINT ad_document_action_doctype_access_fk FOREIGN KEY (c_doctype_id)
+REFERENCES c_doctype (c_doctype_id) MATCH SIMPLE
+ON UPDATE NO ACTION ON DELETE CASCADE,
+CONSTRAINT ad_document_action_reflist_access_fk FOREIGN KEY (ad_ref_list_id)
+REFERENCES ad_ref_list (ad_ref_list_id) MATCH SIMPLE
+ON UPDATE NO ACTION ON DELETE NO ACTION
+)
+WITH (
+OIDS=TRUE
+);
+ALTER TABLE AD_Document_Action_Access
+OWNER TO libertya;
+
+--Estado de documento Revertido para comprobantes de compras en estado anulado
+update c_invoice
+set docstatus = 'RE'
+where ad_client_id = 1010016 and issotrx = 'N' and docstatus = 'VO';
+
+--20180425-1135 Merge relacionado con r2361 
+update ad_system set dummy = (SELECT addcolumnifnotexists('GL_JournalBatch', 'IsReActivated', 'character(1)'));
+
+--20180427-1030 Fix de cashlines en la funview v_documents_org_filtered
+CREATE OR REPLACE FUNCTION v_documents_org_filtered(
+    bpartner integer,
+    summaryonly boolean,
+    condition character,
+    dateto timestamp without time zone)
+  RETURNS SETOF v_documents_org_type_condition AS
+$BODY$
+declare
+    consulta varchar;
+    orderby1 varchar;
+    orderby2 varchar;
+    orderby3 varchar;
+    leftjoin1 varchar;
+    leftjoin2 varchar;
+    advancedcondition varchar;
+    advancedconditioncashlineexception varchar;
+    whereclauseConditionDebit varchar;
+    whereclauseConditionCredit varchar;
+    whereclauseConditionCreditCashException varchar;
+    whereclauseDateTo varchar;
+    selectallocationNull varchar;
+    selectallocationPayment varchar;
+    selectallocationCashline varchar;
+    selectallocationCredit varchar;
+    selectAllocationReferencePayment varchar;
+    selectAllocationReferenceCashline varchar;
+    selectAllocationReferenceCredit varchar;
+    adocument v_documents_org_type_condition;
+   
+BEGIN
+    whereclauseDateTo = ' ( 1 = 1 ) ';
+    -- Armar la condición para fecha de corte
+    if dateTo is not null then 
+		whereclauseDateTo = ' dateacct::date <= ''' || dateTo || '''::date ';
+    end if;
+    
+    --Si no se deben mostrar todos, entonces agregar la condicion por la forma de pago
+    if condition <> 'A' then
+		--Si se debe mostrar sólo efectivo, entonces no se debe mostrar los anticipos, si o si debe tener una factura asociada
+		advancedcondition = 'il.paymentrule is null OR ';
+		advancedconditioncashlineexception = ' (1=1) ';
+		if condition = 'B' then
+			advancedcondition = '';
+			advancedconditioncashlineexception = ' (1=2) ';
+		end if;
+		whereclauseConditionDebit = ' (i.paymentrule = ''' || condition || ''') ';
+		whereclauseConditionCredit = ' (' || advancedcondition || ' il.paymentrule = ''' || condition || ''') ';
+		whereclauseConditionCreditCashException = '( CASE WHEN il.paymentrule is not null THEN il.paymentrule = ''' || condition || ''' WHEN ic.paymentrule is not null THEN ic.paymentrule = ''' || condition || ''' ELSE '|| advancedconditioncashlineexception ||' END ) ';
+	else
+		whereclauseConditionDebit = ' (1 = 1) ';
+		whereclauseConditionCredit = ' (1 = 1) ';
+		whereclauseConditionCreditCashException = ' (1 = 1) '; 
+    end if;    
+
+    -- recuperar informacion minima indispensable si summaryonly es true.  en caso de ser false, debe joinearse/ordenarse, etc.
+    if summaryonly = false then
+
+        orderby1 = ' ORDER BY ''C_Invoice''::text, i.c_invoice_id, i.ad_client_id, i.ad_org_id, i.isactive, i.created, i.createdby, i.updated, i.updatedby, i.c_bpartner_id, i.c_doctype_id, dt.signo_issotrx, dt.name, dt.printname, i.documentno, i.issotrx, i.docstatus,
+                 CASE
+                     WHEN i.c_invoicepayschedule_id IS NOT NULL THEN ips.duedate
+                     ELSE i.dateinvoiced
+                 END, i.dateacct, i.c_currency_id, i.c_conversiontype_id, i.grandtotal, i.c_invoicepayschedule_id, ips.duedate, i.dateinvoiced, bp.socreditstatus ';
+
+        orderby2 = ' ORDER BY ''C_Payment''::text, p.c_payment_id, p.ad_client_id, COALESCE(il.ad_org_id, p.ad_org_id), p.isactive, p.created, p.createdby, p.updated, p.updatedby, p.c_bpartner_id, p.c_doctype_id, dt.signo_issotrx, dt.name, dt.printname, p.documentno, p.issotrx, p.docstatus, p.datetrx, p.dateacct, p.c_currency_id, p.c_conversiontype_id, p.payamt, NULL::integer, p.duedate, bp.socreditstatus ';
+
+        orderby3 = ' ORDER BY ''C_CashLine''::text, cl.c_cashline_id, cl.ad_client_id, COALESCE(il.ad_org_id, ic.ad_org_id, cl.ad_org_id), cl.isactive, cl.created, cl.createdby, cl.updated, cl.updatedby,
+                CASE
+                    WHEN cl.c_bpartner_id IS NOT NULL THEN cl.c_bpartner_id
+		    WHEN il.c_bpartner_id IS NOT NULL THEN il.c_bpartner_id
+                    ELSE ic.c_bpartner_id
+                END, dt.c_doctype_id,
+                CASE
+                    WHEN cl.amount < 0.0 THEN 1
+                    ELSE (-1)
+                END, dt.name, dt.printname, ''@line@''::text || cl.line::character varying::text,
+                CASE
+                    WHEN cl.amount < 0.0 THEN ''N''::bpchar
+                    ELSE ''Y''::bpchar
+                END, cl.docstatus, c.statementdate, c.dateacct, cl.c_currency_id, NULL::integer, abs(cl.amount), NULL::timestamp without time zone, COALESCE(bp.socreditstatus, bp2.socreditstatus, bp3.socreditstatus) ';
+	
+		selectallocationNull = ' NULL::integer ';
+		selectallocationPayment = selectallocationNull;
+		selectallocationCashline = selectallocationNull;
+		selectallocationCredit = selectallocationNull;
+	
+    else
+        orderby1 = '';
+        orderby2 = '';
+        orderby3 = '';
+
+		selectAllocationReferencePayment = ' al.c_payment_id = p.c_payment_id ';
+		selectAllocationReferenceCashline = ' al.c_cashline_id = cl.c_cashline_id ';
+		selectAllocationReferenceCredit = ' al.c_invoice_credit_id = i.c_invoice_id ';
+	
+		selectallocationPayment = ' (SELECT ah.c_allocationhdr_id FROM c_allocationline al INNER JOIN c_allocationhdr ah on ah.c_allocationhdr_id = al.c_allocationhdr_id WHERE allocationtype <> ''MAN'' AND ah.dateacct::date = p.dateacct::date AND ' || selectAllocationReferencePayment || ' AND ' || whereclauseDateTo || ' ORDER BY ah.created LIMIT 1) as c_allocationhdr_id ';
+		selectallocationCashline = ' (SELECT ah.c_allocationhdr_id FROM c_allocationline al INNER JOIN c_allocationhdr ah on ah.c_allocationhdr_id = al.c_allocationhdr_id WHERE allocationtype <> ''MAN'' AND ah.dateacct::date = c.dateacct::date AND ' || selectAllocationReferenceCashline || ' AND ' || whereclauseDateTo || ' ORDER BY ah.created LIMIT 1) as c_allocationhdr_id ';
+		selectallocationCredit = ' (SELECT ah.c_allocationhdr_id FROM c_allocationline al INNER JOIN c_allocationhdr ah on ah.c_allocationhdr_id = al.c_allocationhdr_id WHERE allocationtype <> ''MAN'' AND ah.dateacct::date = i.dateacct::date AND ' || selectAllocationReferenceCredit || ' AND ' || whereclauseDateTo || ' ORDER BY ah.created LIMIT 1) as c_allocationhdr_id ';
+	
+    end if;    
+
+    consulta = ' SELECT * FROM 
+
+        (        ( SELECT DISTINCT ''C_Invoice''::text AS documenttable, i.c_invoice_id AS document_id, i.ad_client_id, i.ad_org_id, i.isactive, i.created, i.createdby, i.updated, i.updatedby, i.c_bpartner_id, i.c_doctype_id, dt.signo_issotrx, dt.name AS doctypename, dt.printname AS doctypeprintname, i.documentno, i.issotrx, i.docstatus,
+                        CASE
+                            WHEN i.c_invoicepayschedule_id IS NOT NULL THEN ips.duedate
+                            ELSE i.dateinvoiced
+                        END AS datetrx, i.dateacct, i.c_currency_id, i.c_conversiontype_id, i.grandtotal AS amount, i.c_invoicepayschedule_id, ips.duedate, i.dateinvoiced AS truedatetrx, bp.socreditstatus, i.c_order_id, '
+				|| selectallocationCredit || 
+               ' FROM c_invoice_v i
+              JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+         JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id and (' || $1 || ' = -1  or bp.c_bpartner_id = ' || $1 || ')
+    LEFT JOIN c_invoicepayschedule ips ON i.c_invoicepayschedule_id = ips.c_invoicepayschedule_id
+    WHERE 
+
+' || whereclauseConditionDebit || '
+' || orderby1 || '
+
+    )
+        UNION ALL
+                ( SELECT DISTINCT ''C_Payment''::text AS documenttable, p.c_payment_id AS document_id, p.ad_client_id, COALESCE(il.ad_org_id, p.ad_org_id) AS ad_org_id, p.isactive, p.created, p.createdby, p.updated, p.updatedby, p.c_bpartner_id, p.c_doctype_id, dt.signo_issotrx, dt.name AS doctypename, dt.printname AS doctypeprintname, p.documentno, p.issotrx, p.docstatus, p.datetrx, p.dateacct, p.c_currency_id, p.c_conversiontype_id, p.payamt AS amount, NULL::integer AS c_invoicepayschedule_id, p.duedate, p.datetrx AS truedatetrx, bp.socreditstatus, 0 as c_order_id, '
+		|| selectallocationPayment || 
+                  ' FROM c_payment p
+              JOIN c_doctype dt ON p.c_doctype_id = dt.c_doctype_id
+         JOIN c_bpartner bp ON p.c_bpartner_id = bp.c_bpartner_id AND (' || $1 || ' = -1 or p.c_bpartner_id = ' || $1 || ')
+	LEFT JOIN c_allocationline al ON al.c_payment_id = p.c_payment_id 
+	LEFT JOIN c_invoice il ON il.c_invoice_id = al.c_invoice_id
+	LEFT JOIN M_BoletaDepositoLine bdlr on bdlr.c_reverse_payment_id = p.c_payment_id
+	LEFT JOIN M_BoletaDeposito bdr on bdr.M_BoletaDeposito_ID = bdlr.M_BoletaDeposito_ID
+	LEFT JOIN M_BoletaDepositoLine bdle on bdle.c_depo_payment_id = p.c_payment_id
+	LEFT JOIN M_BoletaDeposito bde on bde.M_BoletaDeposito_ID = bdle.M_BoletaDeposito_ID
+	LEFT JOIN M_BoletaDeposito bddb on bddb.c_boleta_payment_id = p.c_payment_id
+  WHERE 
+CASE
+    WHEN il.ad_org_id IS NOT NULL AND il.ad_org_id <> p.ad_org_id THEN p.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar])
+    ELSE 1 = 1
+END 
+
+AND (CASE WHEN bdr.M_BoletaDeposito_ID IS NOT NULL 
+		OR bde.M_BoletaDeposito_ID IS NOT NULL 
+		OR bddb.M_BoletaDeposito_ID IS NOT NULL THEN p.docstatus NOT IN (''CO'',''CL'') 
+	ELSE 1 = 1
+	END) 
+
+AND ' || whereclauseConditionCredit || '
+
+' || orderby2 || '
+
+
+)
+
+UNION ALL
+
+        ( SELECT DISTINCT ''C_CashLine''::text AS documenttable, cl.c_cashline_id AS document_id, cl.ad_client_id, COALESCE(il.ad_org_id, ic.ad_org_id, cl.ad_org_id) AS ad_org_id, cl.isactive, cl.created, cl.createdby, cl.updated, cl.updatedby,
+                CASE
+                    WHEN cl.c_bpartner_id IS NOT NULL THEN cl.c_bpartner_id
+		    WHEN il.c_bpartner_id IS NOT NULL THEN il.c_bpartner_id
+                    ELSE ic.c_bpartner_id
+                END AS c_bpartner_id, dt.c_doctype_id,
+                CASE
+                    WHEN cl.amount < 0.0 THEN 1
+                    ELSE (-1)
+                END AS signo_issotrx, dt.name AS doctypename, dt.printname AS doctypeprintname, ''@line@''::text || cl.line::character varying::text AS documentno,
+                CASE
+                    WHEN cl.amount < 0.0 THEN ''N''::bpchar
+                    ELSE ''Y''::bpchar
+                END AS issotrx, cl.docstatus, c.statementdate AS datetrx, c.dateacct, cl.c_currency_id, NULL::integer AS c_conversiontype_id, abs(cl.amount) AS amount, NULL::integer AS c_invoicepayschedule_id, NULL::timestamp without time zone AS duedate, c.statementdate AS truedatetrx, COALESCE(bp.socreditstatus, bp2.socreditstatus, bp3.socreditstatus) AS socreditstatus, 0 as c_order_id, '
+                || selectallocationCashline || 
+       ' FROM (
+		select cl.* FROM c_cashline cl 
+		where (' || $1 || ' = -1 or cl.c_bpartner_id = ' || $1 || ')
+		union 
+		select cl.* FROM c_cashline cl 
+		JOIN c_invoice ic on ic.c_invoice_id = cl.c_invoice_id AND (' || $1 || ' = -1 or ic.c_bpartner_id = ' || $1 || ')
+		union 
+		select cl.* FROM c_cashline cl 
+		JOIN c_allocationline al ON al.c_cashline_id = cl.c_cashline_id
+		JOIN c_invoice il ON il.c_invoice_id = al.c_invoice_id AND (' || $1 || ' = -1 or il.c_bpartner_id = ' || $1 || ')
+       ) as cl
+      JOIN c_cash c ON cl.c_cash_id = c.c_cash_id
+   LEFT JOIN c_bpartner bp ON cl.c_bpartner_id = bp.c_bpartner_id AND (' || $1 || ' = -1 or cl.c_bpartner_id = ' || $1 || ')
+   JOIN ( SELECT d.ad_client_id, d.c_doctype_id, d.name, d.printname
+         FROM c_doctype d
+        WHERE d.doctypekey::text = ''CMC''::text) dt ON cl.ad_client_id = dt.ad_client_id
+   LEFT JOIN c_allocationline al ON al.c_cashline_id = cl.c_cashline_id
+   LEFT JOIN c_invoice il ON il.c_invoice_id = al.c_invoice_id AND (' || $1 || ' = -1 or il.c_bpartner_id = ' || $1 || ')
+   LEFT JOIN c_bpartner bp2 ON il.c_bpartner_id = bp2.c_bpartner_id
+   LEFT JOIN c_invoice ic on ic.c_invoice_id = cl.c_invoice_id AND (' || $1 || ' = -1 or ic.c_bpartner_id = ' || $1 || ')
+   LEFT JOIN c_bpartner bp3 ON ic.c_bpartner_id = bp3.c_bpartner_id
+  WHERE (CASE WHEN cl.c_bpartner_id IS NOT NULL THEN (' || $1 || ' = -1 or cl.c_bpartner_id = ' || $1 || ')
+        WHEN il.c_bpartner_id IS NOT NULL THEN (' || $1 || ' = -1 or il.c_bpartner_id = ' || $1 || ')
+        WHEN ic.c_bpartner_id IS NOT NULL THEN (' || $1 || ' = -1 or ic.c_bpartner_id = ' || $1 || ')
+        ELSE 1 = 2 END)
+    AND (CASE WHEN (il.ad_org_id IS NOT NULL AND il.ad_org_id <> cl.ad_org_id) OR (ic.ad_org_id IS NOT NULL AND ic.ad_org_id <> cl.ad_org_id)
+        THEN cl.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar])
+        ELSE 1 = 1 END)
+
+    AND (' || whereclauseConditionCreditCashException || ' )
+
+' || orderby3 || '
+
+)) AS d  
+WHERE ' || whereclauseDateTo || ' ; ';
+
+-- raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_documents_org_filtered(integer, boolean, character, timestamp without time zone)
+  OWNER TO libertya;
+  
+--20180507-1330 Nueva tabla que permite configurar cláusulas where por organización en un único procesador contable
+CREATE TABLE c_acctprocessortable
+(
+  c_acctprocessortable_id integer NOT NULL,
+  ad_client_id integer NOT NULL,
+  ad_org_id integer NOT NULL,
+  isactive character(1) NOT NULL DEFAULT 'Y'::bpchar,
+  created timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  createdby integer NOT NULL,
+  updated timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  updatedby integer NOT NULL,
+  c_acctprocessor_id integer NOT NULL,
+  ad_table_id integer NOT NULL,
+  whereclause character varying(2000),
+  CONSTRAINT c_acctprocessortable_key PRIMARY KEY (c_acctprocessortable_id),
+  CONSTRAINT c_acctprocessortable_acctprocessor FOREIGN KEY (c_acctprocessor_id)
+      REFERENCES c_acctprocessor (c_acctprocessor_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT c_acctprocessortable_table FOREIGN KEY (ad_table_id)
+      REFERENCES ad_table (ad_table_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION
+)
+WITH (
+  OIDS=TRUE
+);
+ALTER TABLE c_acctprocessortable
+  OWNER TO libertya;
+  
+--20180510-2335 Nuevo parámetro de grupo de ec en el informe de estado de cuenta de ec
+update ad_system set dummy = (SELECT addcolumnifnotexists('t_estadodecuenta', 'c_bp_group_id', 'integer'));
+
+--20180516-1500 Nueva columna para indicar que el asiento fue reactivado
+update ad_system set dummy = (SELECT addcolumnifnotexists('GL_Journal', 'IsReActivated', 'character(1) NOT NULL DEFAULT ''N''::bpchar'));
+
+--20180524-1040 Mejoras a la función para determinar el pendiente y actualizarlo
+CREATE OR REPLACE FUNCTION getqtyreserved(
+    clientid integer,
+    orgid integer,
+    locatorid integer,
+    productid integer,
+    dateto date)
+  RETURNS numeric AS
+$BODY$
+/***********
+Obtiene la cantidad reservada a fecha de corte. Si no hay fecha de corte, entonces se devuelven los pendientes actuales.
+Por lo pronto no se utiliza el pendiente a fecha de corte ya que primero deberíamos analizar e implementar 
+una forma en la que se determine cuando un pedido fue completo, anulado, etc.
+*/
+DECLARE
+	reserved numeric;
+BEGIN
+	reserved := 0;
+	--Si no hay fecha de corte o es mayor o igual a la fecha actual, entonces se suman las cantidades reservadas de los pedidos
+	--if ( dateTo is null OR dateTo >= current_date ) THEN
+		SELECT INTO reserved coalesce(sum(ol.qtyreserved - coalesce(movementqty,0)),0)
+		from c_orderline ol
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		inner join c_doctype dto on dto.c_doctype_id = o.c_doctypetarget_id
+		inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+		inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+		left join (select iol.c_orderline_id, sum(iol.movementqty) as movementqty  
+				from m_inoutline as iol  
+				inner join m_inout as io on io.m_inout_id = iol.m_inout_id  
+				inner join c_doctype as dt on dt.c_doctype_id = io.c_doctype_id  
+				join c_orderline ol on ol.c_orderline_id = iol.c_orderline_id
+				where ol.ad_client_id = clientid
+					and ol.ad_org_id = orgid 
+					and dt.doctypekey = 'DC' 
+					and dt.reservestockmanagment = 'N'
+					and io.docstatus in ('CO','CL')
+					and iol.m_product_id = productid
+					and ol.qtyreserved <> 0
+				group by iol.c_orderline_id) as dc on dc.c_orderline_id = ol.c_orderline_id
+		where o.ad_client_id = clientid
+			and o.ad_org_id = orgid 
+			and ol.qtyreserved <> 0
+			and o.processed = 'Y' 
+			and ol.m_product_id = productid
+			and l.m_locator_id = locatorid
+			and o.issotrx = 'Y'
+			and dto.doctypekey <> 'SOSOT';
+	/*ELSE
+		SELECT INTO reserved coalesce(sum(qty),0)
+		from (
+		-- Cantidad pedida a fecha de corte
+		select coalesce(sum(ol.qtyordered),0) as qty
+			from c_orderline ol
+			inner join c_order o on o.c_order_id = ol.c_order_id
+			inner join c_doctype dt on dt.c_doctype_id = o.c_doctypetarget_id
+			inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+			inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+			where o.ad_client_id = clientid
+				and o.ad_org_id = orgid
+				and o.processed = 'Y' 
+				and ol.m_product_id = productid
+				and l.m_locator_id = locatorid
+				and o.issotrx = 'Y'
+				and dt.doctypekey NOT IN ('SOSOT')
+				and o.dateordered::date <= dateTo::date
+				and o.dateordered::date <= current_date
+		union all
+		-- Notas de crédito con (o sin) el check Actualizar Cantidades de Pedido
+		select coalesce(sum(il.qtyinvoiced),0) as qty
+		from c_invoiceline il
+		inner join c_invoice i on i.c_invoice_id = il.c_invoice_id
+		inner join c_doctype dt on dt.c_doctype_id = i.c_doctypetarget_id
+		inner join c_orderline ol on ol.c_orderline_id = il.c_orderline_id
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+		inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+		where o.ad_client_id = clientid
+			and o.ad_org_id = orgid
+			and o.processed = 'Y' 
+			and ol.m_product_id = productid
+			and l.m_locator_id = locatorid
+			and i.issotrx = 'Y'
+			and il.m_inoutline_id is null
+			and dt.signo_issotrx = '-1'
+			and o.dateordered::date <= dateTo::date
+			and i.dateinvoiced::date > dateTo::date
+			and i.dateinvoiced::date <= current_date
+		union all
+		--En transaction las salidas son negativas y las entradas positivas
+		select coalesce(sum(t.movementqty),0) as qty
+		from m_transaction t
+		inner join m_inoutline iol on iol.m_inoutline_id = t.m_inoutline_id
+		inner join m_inout io on io.m_inout_id = iol.m_inout_id
+		inner join c_doctype dt on dt.c_doctype_id = io.c_doctype_id
+		inner join c_orderline ol on ol.c_orderline_id = iol.c_orderline_id
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		where t.ad_client_id = clientid
+			and t.ad_org_id = orgid
+			and t.m_product_id = productid
+			and t.m_locator_id = locatorid
+			and dt.reservestockmanagment = 'Y'
+			and o.dateordered::date <= dateTo::date
+			and t.movementdate::date <= dateTo::date
+			and t.movementdate::date <= current_date
+		union all
+		--Cantidades transferidas
+		select coalesce(sum(ol.qtyordered * -1),0) as qty
+		from c_orderline ol
+		inner join c_order o on o.c_order_id = ol.c_order_id
+		inner join c_orderline rl on rl.c_orderline_id = ol.ref_orderline_id
+		inner join c_order r on r.c_order_id = rl.c_order_id
+		inner join c_doctype dt on dt.c_doctype_id = o.c_doctype_id
+		inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+		inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+		where o.ad_client_id = clientid
+			and o.ad_org_id = orgid
+			and o.processed = 'Y' 
+			and ol.m_product_id = productid
+			and l.m_locator_id = locatorid
+			and o.issotrx = 'Y'
+			and dt.doctypekey IN ('SOSOT')
+			and r.dateordered::date <= dateTo::date
+			and o.dateordered::date <= dateTo::date
+			and o.dateordered::date <= current_date
+		) todo;
+	END IF;*/
+	
+	return reserved;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION getqtyreserved(integer, integer, integer, integer, date)
+  OWNER TO libertya;
+
+CREATE OR REPLACE FUNCTION update_reserved(
+    clientid integer,
+    orgid integer,
+    productid integer)
+  RETURNS void AS
+$BODY$
+/***********
+Actualiza la cantidad reservada de los depósitos de la compañía, organización y artículo parametro, 
+siempre y cuando existan los regitros en m_storage 
+y sólo sobre locators marcados como default ya que asi se realiza al procesar pedidos.
+Las cantidades reservadas se obtienen de pedidos procesados. 
+IMPORTANTE: No funciona para artículos que no son ITEMS (Stockeables)
+*/
+BEGIN
+	update m_storage s
+	set qtyreserved = getqtyreserved(clientid, orgid, s.m_locator_id, productid, null::date)
+	where ad_client_id = clientid
+		and (orgid = 0 or ad_org_id = orgid)
+		and (productid = 0 or m_product_id = productid)
+		and s.m_locator_id IN (select defaultLocator 
+					from (select m_warehouse_id, max(m_locator_id) as defaultLocator
+						from m_locator l
+						where l.isdefault = 'Y' and l.isactive = 'Y'
+						GROUP by m_warehouse_id) as dl);
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION update_reserved(integer, integer, integer)
+  OWNER TO libertya;
+
+--20180524-1125 Fixes a la actualización de pendientes cuando los parámetros son 0
+CREATE OR REPLACE FUNCTION update_reserved(
+    clientid integer,
+    orgid integer,
+    productid integer)
+  RETURNS void AS
+$BODY$
+/***********
+Actualiza la cantidad reservada de los depósitos de la compañía, organización y artículo parametro, 
+siempre y cuando existan los regitros en m_storage 
+y sólo sobre locators marcados como default ya que asi se realiza al procesar pedidos.
+Las cantidades reservadas se obtienen de pedidos procesados. 
+IMPORTANTE: No funciona para artículos que no son ITEMS (Stockeables)
+*/
+BEGIN
+	update m_storage s
+	set qtyreserved = getqtyreserved(clientid, s.ad_org_id, s.m_locator_id, s.m_product_id, null::date)
+	where ad_client_id = clientid
+		and (orgid = 0 or ad_org_id = orgid)
+		and (productid = 0 or m_product_id = productid)
+		and s.m_locator_id IN (select defaultLocator 
+					from (select m_warehouse_id, max(m_locator_id) as defaultLocator
+						from m_locator l
+						where l.isdefault = 'Y' and l.isactive = 'Y'
+						GROUP by m_warehouse_id) as dl);
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION update_reserved(integer, integer, integer)
+  OWNER TO libertya;
+  
+--20180611-1600 Nueva view para detalle de transferencias entre almacenes
+CREATE OR REPLACE VIEW m_transfer_detailed_v AS 
+ SELECT t.ad_client_id, t.ad_org_id, t.m_transfer_id, t.documentno, t.datetrx::date as datetrx, t.duedate::date as duedate, 
+	t.description, t.docstatus, t.createdby, t.updatedby, t.movementtype, t.c_charge_id, t.c_doctype_id,
+	t.m_warehouse_id, t.m_warehouseto_id, t.c_bpartner_id, t.c_order_id, tl.m_product_id, tl.line, tl.qty
+FROM m_transfer t
+JOIN m_transferline tl ON tl.m_transfer_id = t.m_transfer_id
+WHERE t.transfertype = 'T' and t.docstatus IN ('CO','CL','VO','RE')
+ORDER BY t.datetrx, t.documentno, tl.line;
+
+ALTER TABLE m_transfer_detailed_v
+  OWNER TO libertya;
+  
+--20180627-1130 Mejoras a la funview v_documents por nuevos parámetros
+--Funview v_documents_org_filtered(integer, boolean, character, timestamp without time zone, integer, character, boolean)
+CREATE OR REPLACE FUNCTION v_documents_org_filtered(
+    bpartner integer,
+    summaryonly boolean,
+    condition character,
+    dateto timestamp without time zone,
+    orgid integer,
+    accountType character,
+    addstatusclause boolean)
+  RETURNS SETOF v_documents_org_type_condition AS
+$BODY$
+declare
+    consulta varchar;
+    orderby1 varchar;
+    orderby2 varchar;
+    orderby3 varchar;
+    leftjoin1 varchar;
+    leftjoin2 varchar;
+    advancedcondition varchar;
+    advancedconditioncashlineexception varchar;
+    whereclauseConditionDebit varchar;
+    whereclauseConditionCredit varchar;
+    whereclauseConditionCreditCashException varchar;
+    whereclauseDateTo varchar;
+    selectallocationNull varchar;
+    selectallocationPayment varchar;
+    selectallocationCashline varchar;
+    selectallocationCredit varchar;
+    selectAllocationReferencePayment varchar;
+    selectAllocationReferenceCashline varchar;
+    selectAllocationReferenceCredit varchar;
+    adocument v_documents_org_type_condition;
+    whereclauseOrgPayment varchar;
+    whereclauseOrgCashline varchar;
+    selectOrgPayment varchar;
+    selectOrgCashline varchar;
+    whereclauseAccountTypeStd varchar;
+    whereclauseAccountTypeCashLine varchar;
+    whereclauseDocStatusPayment varchar;
+    whereclauseDocStatusCashLine varchar;
+    whereclauseDocStatusInvoice varchar;
+BEGIN
+    whereclauseDateTo = ' ( 1 = 1 ) ';
+    -- Armar la condición para fecha de corte
+    if dateTo is not null then 
+		whereclauseDateTo = ' dateacct::date <= ''' || dateTo || '''::date ';
+    end if;
+    
+    --Si no se deben mostrar todos, entonces agregar la condicion por la forma de pago
+    if condition <> 'A' then
+		--Si se debe mostrar sólo efectivo, entonces no se debe mostrar los anticipos, si o si debe tener una factura asociada
+		advancedcondition = 'il.paymentrule is null OR ';
+		advancedconditioncashlineexception = ' (1=1) ';
+		if condition = 'B' then
+			advancedcondition = '';
+			advancedconditioncashlineexception = ' (1=2) ';
+		end if;
+		whereclauseConditionDebit = ' (i.paymentrule = ''' || condition || ''') ';
+		whereclauseConditionCredit = ' (' || advancedcondition || ' il.paymentrule = ''' || condition || ''') ';
+		whereclauseConditionCreditCashException = '( CASE WHEN il.paymentrule is not null THEN il.paymentrule = ''' || condition || ''' WHEN ic.paymentrule is not null THEN ic.paymentrule = ''' || condition || ''' ELSE '|| advancedconditioncashlineexception ||' END ) ';
+	else
+		whereclauseConditionDebit = ' (1 = 1) ';
+		whereclauseConditionCredit = ' (1 = 1) ';
+		whereclauseConditionCreditCashException = ' (1 = 1) '; 
+    end if;    
+
+    whereclauseOrgPayment = ' (1 = 1) ';
+    whereclauseOrgCashline = ' (1 = 1) ';
+
+    selectOrgPayment = ' p.ad_org_id ';
+    selectOrgCashline = ' cl.ad_org_id ';
+    
+    if (orgid is not null and orgid > 0) then
+	whereclauseOrgPayment = ' CASE WHEN il.ad_org_id IS NOT NULL AND il.ad_org_id <> p.ad_org_id THEN p.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar]) ELSE 1 = 1 END ';
+	whereclauseOrgCashline = ' (CASE WHEN (il.ad_org_id IS NOT NULL AND il.ad_org_id <> cl.ad_org_id) OR (ic.ad_org_id IS NOT NULL AND ic.ad_org_id <> cl.ad_org_id) THEN cl.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar]) ELSE 1 = 1 END) ';
+
+	selectOrgPayment = ' COALESCE(il.ad_org_id, p.ad_org_id) AS ad_org_id ';
+        selectOrgCashline = ' COALESCE(il.ad_org_id, ic.ad_org_id, cl.ad_org_id) AS ad_org_id ';
+    end if;
+
+    -- Tipo de Cuenta
+    whereclauseAccountTypeStd = ' (1=1) ';
+    whereclauseAccountTypeCashLine = ' (1=1) ';
+    
+    if (accountType is not null and accountType <> 'B') then
+	if (accountType = 'V') then 
+		whereclauseAccountTypeStd = ' bp.isvendor = ''Y'' ';
+		whereclauseAccountTypeCashLine = ' (CASE WHEN cl.c_bpartner_id IS NOT NULL THEN bp.isvendor = ''Y'' 
+							WHEN il.c_bpartner_id IS NOT NULL THEN bp2.isvendor = ''Y'' 
+							WHEN ic.c_bpartner_id IS NOT NULL THEN bp3.isvendor = ''Y'' 
+							ELSE 1 = 2 END) ';
+	else 
+		whereclauseAccountTypeStd = ' bp.iscustomer = ''Y'' '; 
+		whereclauseAccountTypeCashLine = ' (CASE WHEN cl.c_bpartner_id IS NOT NULL THEN bp.iscustomer = ''Y'' 
+							WHEN il.c_bpartner_id IS NOT NULL THEN bp2.iscustomer = ''Y'' 
+							WHEN ic.c_bpartner_id IS NOT NULL THEN bp3.iscustomer = ''Y'' 
+							ELSE 1 = 2 END) ';
+	end if;
+    end if;
+
+    whereclauseDocStatusPayment = ' (1=1) ';
+    whereclauseDocStatusCashLine = ' (1=1) ';
+    whereclauseDocStatusInvoice = ' (1=1) ';
+    if addstatusclause then
+	whereclauseDocStatusPayment = ' p.docstatus IN (''CO'',''CL'') ';
+	whereclauseDocStatusCashLine = ' cl.docstatus IN (''CO'',''CL'') ';
+	whereclauseDocStatusInvoice = ' i.docstatus IN (''CO'',''CL'') ';
+    end if;
+    
+    -- recuperar informacion minima indispensable si summaryonly es true.  en caso de ser false, debe joinearse/ordenarse, etc.
+    if summaryonly = false then
+
+        orderby1 = ' ORDER BY ''C_Invoice''::text, i.c_invoice_id, i.ad_client_id, i.ad_org_id, i.isactive, i.created, i.createdby, i.updated, i.updatedby, i.c_bpartner_id, i.c_doctype_id, dt.signo_issotrx, dt.name, dt.printname, i.documentno, i.issotrx, i.docstatus,
+                 CASE
+                     WHEN i.c_invoicepayschedule_id IS NOT NULL THEN ips.duedate
+                     ELSE i.dateinvoiced
+                 END, i.dateacct, i.c_currency_id, i.c_conversiontype_id, i.grandtotal, i.c_invoicepayschedule_id, ips.duedate, i.dateinvoiced, bp.socreditstatus ';
+
+        orderby2 = ' ORDER BY ''C_Payment''::text, p.c_payment_id, p.ad_client_id, ' || selectOrgPayment || ', p.isactive, p.created, p.createdby, p.updated, p.updatedby, p.c_bpartner_id, p.c_doctype_id, dt.signo_issotrx, dt.name, dt.printname, p.documentno, p.issotrx, p.docstatus, p.datetrx, p.dateacct, p.c_currency_id, p.c_conversiontype_id, p.payamt, NULL::integer, p.duedate, bp.socreditstatus ';
+
+        orderby3 = ' ORDER BY ''C_CashLine''::text, cl.c_cashline_id, cl.ad_client_id, ' || selectOrgCashline || ', cl.isactive, cl.created, cl.createdby, cl.updated, cl.updatedby,
+                CASE
+                    WHEN cl.c_bpartner_id IS NOT NULL THEN cl.c_bpartner_id
+		    WHEN il.c_bpartner_id IS NOT NULL THEN il.c_bpartner_id
+                    ELSE ic.c_bpartner_id
+                END, dt.c_doctype_id,
+                CASE
+                    WHEN cl.amount < 0.0 THEN 1
+                    ELSE (-1)
+                END, dt.name, dt.printname, ''@line@''::text || cl.line::character varying::text,
+                CASE
+                    WHEN cl.amount < 0.0 THEN ''N''::bpchar
+                    ELSE ''Y''::bpchar
+                END, cl.docstatus, c.statementdate, c.dateacct, cl.c_currency_id, NULL::integer, abs(cl.amount), NULL::timestamp without time zone, COALESCE(bp.socreditstatus, bp2.socreditstatus, bp3.socreditstatus) ';
+	
+	selectallocationNull = ' NULL::integer ';
+	selectallocationPayment = selectallocationNull;
+	selectallocationCashline = selectallocationNull;
+	selectallocationCredit = selectallocationNull;
+	
+    else
+        orderby1 = '';
+        orderby2 = '';
+        orderby3 = '';
+
+	selectAllocationReferencePayment = ' al.c_payment_id = p.c_payment_id ';
+	selectAllocationReferenceCashline = ' al.c_cashline_id = cl.c_cashline_id ';
+	selectAllocationReferenceCredit = ' al.c_invoice_credit_id = i.c_invoice_id ';
+
+	selectallocationPayment = ' (SELECT ah.c_allocationhdr_id FROM c_allocationline al INNER JOIN c_allocationhdr ah on ah.c_allocationhdr_id = al.c_allocationhdr_id WHERE allocationtype <> ''MAN'' AND ah.dateacct::date = p.dateacct::date AND ' || selectAllocationReferencePayment || ' AND ' || whereclauseDateTo || ' ORDER BY ah.created LIMIT 1) as c_allocationhdr_id ';
+	selectallocationCashline = ' (SELECT ah.c_allocationhdr_id FROM c_allocationline al INNER JOIN c_allocationhdr ah on ah.c_allocationhdr_id = al.c_allocationhdr_id WHERE allocationtype <> ''MAN'' AND ah.dateacct::date = c.dateacct::date AND ' || selectAllocationReferenceCashline || ' AND ' || whereclauseDateTo || ' ORDER BY ah.created LIMIT 1) as c_allocationhdr_id ';
+	selectallocationCredit = ' (SELECT ah.c_allocationhdr_id FROM c_allocationline al INNER JOIN c_allocationhdr ah on ah.c_allocationhdr_id = al.c_allocationhdr_id WHERE allocationtype <> ''MAN'' AND ah.dateacct::date = i.dateacct::date AND ' || selectAllocationReferenceCredit || ' AND ' || whereclauseDateTo || ' ORDER BY ah.created LIMIT 1) as c_allocationhdr_id ';
+	
+    end if;    
+
+    consulta = ' SELECT * FROM 
+
+        (        ( SELECT DISTINCT ''C_Invoice''::text AS documenttable, i.c_invoice_id AS document_id, i.ad_client_id, i.ad_org_id, i.isactive, i.created, i.createdby, i.updated, i.updatedby, i.c_bpartner_id, i.c_doctype_id, dt.signo_issotrx, dt.name AS doctypename, dt.printname AS doctypeprintname, i.documentno, i.issotrx, i.docstatus,
+                        CASE
+                            WHEN i.c_invoicepayschedule_id IS NOT NULL THEN ips.duedate
+                            ELSE i.dateinvoiced
+                        END AS datetrx, i.dateacct, i.c_currency_id, i.c_conversiontype_id, i.grandtotal AS amount, i.c_invoicepayschedule_id, ips.duedate, i.dateinvoiced AS truedatetrx, bp.socreditstatus, i.c_order_id, '
+				|| selectallocationCredit || 
+               ' FROM c_invoice_v i
+              JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+         JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id and (' || $1 || ' = -1  or bp.c_bpartner_id = ' || $1 || ')
+    LEFT JOIN c_invoicepayschedule ips ON i.c_invoicepayschedule_id = ips.c_invoicepayschedule_id
+    WHERE 
+
+' || whereclauseDocStatusInvoice || '
+AND ' || whereclauseConditionDebit || ' 
+AND ' || whereclauseAccountTypeStd || '
+' || orderby1 || '
+
+    )
+        UNION ALL
+                ( SELECT DISTINCT ''C_Payment''::text AS documenttable, p.c_payment_id AS document_id, p.ad_client_id, ' || selectOrgPayment || ', p.isactive, p.created, p.createdby, p.updated, p.updatedby, p.c_bpartner_id, p.c_doctype_id, dt.signo_issotrx, dt.name AS doctypename, dt.printname AS doctypeprintname, p.documentno, p.issotrx, p.docstatus, p.datetrx, p.dateacct, p.c_currency_id, p.c_conversiontype_id, p.payamt AS amount, NULL::integer AS c_invoicepayschedule_id, p.duedate, p.datetrx AS truedatetrx, bp.socreditstatus, 0 as c_order_id, '
+		|| selectallocationPayment || 
+                  ' FROM c_payment p
+              JOIN c_doctype dt ON p.c_doctype_id = dt.c_doctype_id
+         JOIN c_bpartner bp ON p.c_bpartner_id = bp.c_bpartner_id AND (' || $1 || ' = -1 or p.c_bpartner_id = ' || $1 || ')
+	LEFT JOIN c_allocationline al ON al.c_payment_id = p.c_payment_id 
+	LEFT JOIN c_invoice il ON il.c_invoice_id = al.c_invoice_id
+	LEFT JOIN M_BoletaDepositoLine bdlr on bdlr.c_reverse_payment_id = p.c_payment_id
+	LEFT JOIN M_BoletaDeposito bdr on bdr.M_BoletaDeposito_ID = bdlr.M_BoletaDeposito_ID
+	LEFT JOIN M_BoletaDepositoLine bdle on bdle.c_depo_payment_id = p.c_payment_id
+	LEFT JOIN M_BoletaDeposito bde on bde.M_BoletaDeposito_ID = bdle.M_BoletaDeposito_ID
+	LEFT JOIN M_BoletaDeposito bddb on bddb.c_boleta_payment_id = p.c_payment_id
+  WHERE 
+
+' || whereclauseDocStatusPayment || '
+AND ' || whereclauseOrgPayment || '
+AND (CASE WHEN bdr.M_BoletaDeposito_ID IS NOT NULL 
+		OR bde.M_BoletaDeposito_ID IS NOT NULL 
+		OR bddb.M_BoletaDeposito_ID IS NOT NULL THEN p.docstatus NOT IN (''CO'',''CL'') 
+	ELSE 1 = 1
+	END) 
+
+AND ' || whereclauseConditionCredit || '
+AND ' || whereclauseAccountTypeStd || '
+' || orderby2 || '
+
+
+)
+
+UNION ALL
+
+        ( SELECT DISTINCT ''C_CashLine''::text AS documenttable, cl.c_cashline_id AS document_id, cl.ad_client_id, ' || selectOrgCashline || ', cl.isactive, cl.created, cl.createdby, cl.updated, cl.updatedby,
+                CASE
+                    WHEN cl.c_bpartner_id IS NOT NULL THEN cl.c_bpartner_id
+		    WHEN il.c_bpartner_id IS NOT NULL THEN il.c_bpartner_id
+                    ELSE ic.c_bpartner_id
+                END AS c_bpartner_id, dt.c_doctype_id,
+                CASE
+                    WHEN cl.amount < 0.0 THEN 1
+                    ELSE (-1)
+                END AS signo_issotrx, dt.name AS doctypename, dt.printname AS doctypeprintname, ''@line@''::text || cl.line::character varying::text AS documentno,
+                CASE
+                    WHEN cl.amount < 0.0 THEN ''N''::bpchar
+                    ELSE ''Y''::bpchar
+                END AS issotrx, cl.docstatus, c.statementdate AS datetrx, c.dateacct, cl.c_currency_id, NULL::integer AS c_conversiontype_id, abs(cl.amount) AS amount, NULL::integer AS c_invoicepayschedule_id, NULL::timestamp without time zone AS duedate, c.statementdate AS truedatetrx, COALESCE(bp.socreditstatus, bp2.socreditstatus, bp3.socreditstatus) AS socreditstatus, 0 as c_order_id, '
+                || selectallocationCashline || 
+       ' FROM (
+		select cl.* FROM c_cashline cl 
+		where (' || $1 || ' = -1 or cl.c_bpartner_id = ' || $1 || ') AND ' || whereclauseDocStatusCashLine || '
+		union 
+		select cl.* FROM c_cashline cl 
+		JOIN c_invoice ic on ic.c_invoice_id = cl.c_invoice_id AND (' || $1 || ' = -1 or ic.c_bpartner_id = ' || $1 || ') AND ' || whereclauseDocStatusCashLine || '
+		union 
+		select cl.* FROM c_cashline cl 
+		JOIN c_allocationline al ON al.c_cashline_id = cl.c_cashline_id
+		JOIN c_invoice il ON il.c_invoice_id = al.c_invoice_id AND (' || $1 || ' = -1 or il.c_bpartner_id = ' || $1 || ') AND ' || whereclauseDocStatusCashLine || '
+       ) as cl
+      JOIN c_cash c ON cl.c_cash_id = c.c_cash_id
+   LEFT JOIN c_bpartner bp ON cl.c_bpartner_id = bp.c_bpartner_id AND (' || $1 || ' = -1 or cl.c_bpartner_id = ' || $1 || ')
+   JOIN ( SELECT d.ad_client_id, d.c_doctype_id, d.name, d.printname
+         FROM c_doctype d
+        WHERE d.doctypekey::text = ''CMC''::text) dt ON cl.ad_client_id = dt.ad_client_id
+   LEFT JOIN c_allocationline al ON al.c_cashline_id = cl.c_cashline_id
+   LEFT JOIN c_invoice il ON il.c_invoice_id = al.c_invoice_id AND (' || $1 || ' = -1 or il.c_bpartner_id = ' || $1 || ')
+   LEFT JOIN c_bpartner bp2 ON il.c_bpartner_id = bp2.c_bpartner_id
+   LEFT JOIN c_invoice ic on ic.c_invoice_id = cl.c_invoice_id AND (' || $1 || ' = -1 or ic.c_bpartner_id = ' || $1 || ')
+   LEFT JOIN c_bpartner bp3 ON ic.c_bpartner_id = bp3.c_bpartner_id
+  WHERE (CASE WHEN cl.c_bpartner_id IS NOT NULL THEN (' || $1 || ' = -1 or cl.c_bpartner_id = ' || $1 || ')
+        WHEN il.c_bpartner_id IS NOT NULL THEN (' || $1 || ' = -1 or il.c_bpartner_id = ' || $1 || ')
+        WHEN ic.c_bpartner_id IS NOT NULL THEN (' || $1 || ' = -1 or ic.c_bpartner_id = ' || $1 || ')
+        ELSE 1 = 2 END)
+
+    AND ' || whereclauseOrgCashline || '
+    AND (' || whereclauseConditionCreditCashException || ' )
+    AND ' || whereclauseAccountTypeCashLine || '
+
+' || orderby3 || '
+
+)) AS d  
+WHERE ' || whereclauseDateTo || ' ; ';
+
+-- raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_documents_org_filtered(integer, boolean, character, timestamp without time zone, integer, character, boolean)
+  OWNER TO libertya;
+  
+--Funview v_documents_org_filtered(integer, boolean, character, timestamp without time zone)
+CREATE OR REPLACE FUNCTION v_documents_org_filtered(
+    bpartner integer,
+    summaryonly boolean,
+    condition character,
+    dateto timestamp without time zone)
+  RETURNS SETOF v_documents_org_type_condition AS
+$BODY$
+BEGIN
+   return query select * from v_documents_org_filtered(bpartner, summaryonly, condition, dateto, 0, 'B', false);
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_documents_org_filtered(integer, boolean, character, timestamp without time zone)
+  OWNER TO libertya;
+  
+--20180629-1224 Incremento de tamaño de la columna para registrar el último changelog id
+DROP VIEW ad_plugin_v;
+
+alter table ad_plugin alter column component_last_changelog type character varying(60);
+
+CREATE OR REPLACE VIEW ad_plugin_v AS 
+ SELECT cv.name, cv.ad_componentobjectuid, cv.version, p.created, p.updated, p.createdby, p.updatedby, p.component_export_date, p.component_last_changelog
+   FROM ad_componentversion cv
+   JOIN ad_plugin p ON p.ad_componentversion_id = cv.ad_componentversion_id
+  ORDER BY p.created;
+
+ALTER TABLE ad_plugin_v
+  OWNER TO libertya;
+  
+--20180629-1620 Incorporación del estado WC para inclusión de comprobantes
+CREATE OR REPLACE FUNCTION v_documents_org_filtered(
+    bpartner integer,
+    summaryonly boolean,
+    condition character,
+    dateto timestamp without time zone,
+    orgid integer,
+    accountType character,
+    addstatusclause boolean)
+  RETURNS SETOF v_documents_org_type_condition AS
+$BODY$
+declare
+    consulta varchar;
+    orderby1 varchar;
+    orderby2 varchar;
+    orderby3 varchar;
+    leftjoin1 varchar;
+    leftjoin2 varchar;
+    advancedcondition varchar;
+    advancedconditioncashlineexception varchar;
+    whereclauseConditionDebit varchar;
+    whereclauseConditionCredit varchar;
+    whereclauseConditionCreditCashException varchar;
+    whereclauseDateTo varchar;
+    selectallocationNull varchar;
+    selectallocationPayment varchar;
+    selectallocationCashline varchar;
+    selectallocationCredit varchar;
+    selectAllocationReferencePayment varchar;
+    selectAllocationReferenceCashline varchar;
+    selectAllocationReferenceCredit varchar;
+    adocument v_documents_org_type_condition;
+    whereclauseOrgPayment varchar;
+    whereclauseOrgCashline varchar;
+    selectOrgPayment varchar;
+    selectOrgCashline varchar;
+    whereclauseAccountTypeStd varchar;
+    whereclauseAccountTypeCashLine varchar;
+    whereclauseDocStatusPayment varchar;
+    whereclauseDocStatusCashLine varchar;
+    whereclauseDocStatusInvoice varchar;
+BEGIN
+    whereclauseDateTo = ' ( 1 = 1 ) ';
+    -- Armar la condición para fecha de corte
+    if dateTo is not null then 
+		whereclauseDateTo = ' dateacct::date <= ''' || dateTo || '''::date ';
+    end if;
+    
+    --Si no se deben mostrar todos, entonces agregar la condicion por la forma de pago
+    if condition <> 'A' then
+		--Si se debe mostrar sólo efectivo, entonces no se debe mostrar los anticipos, si o si debe tener una factura asociada
+		advancedcondition = 'il.paymentrule is null OR ';
+		advancedconditioncashlineexception = ' (1=1) ';
+		if condition = 'B' then
+			advancedcondition = '';
+			advancedconditioncashlineexception = ' (1=2) ';
+		end if;
+		whereclauseConditionDebit = ' (i.paymentrule = ''' || condition || ''') ';
+		whereclauseConditionCredit = ' (' || advancedcondition || ' il.paymentrule = ''' || condition || ''') ';
+		whereclauseConditionCreditCashException = '( CASE WHEN il.paymentrule is not null THEN il.paymentrule = ''' || condition || ''' WHEN ic.paymentrule is not null THEN ic.paymentrule = ''' || condition || ''' ELSE '|| advancedconditioncashlineexception ||' END ) ';
+	else
+		whereclauseConditionDebit = ' (1 = 1) ';
+		whereclauseConditionCredit = ' (1 = 1) ';
+		whereclauseConditionCreditCashException = ' (1 = 1) '; 
+    end if;    
+
+    whereclauseOrgPayment = ' (1 = 1) ';
+    whereclauseOrgCashline = ' (1 = 1) ';
+
+    selectOrgPayment = ' p.ad_org_id ';
+    selectOrgCashline = ' cl.ad_org_id ';
+    
+    if (orgid is not null and orgid > 0) then
+	whereclauseOrgPayment = ' CASE WHEN il.ad_org_id IS NOT NULL AND il.ad_org_id <> p.ad_org_id THEN p.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar]) ELSE 1 = 1 END ';
+	whereclauseOrgCashline = ' (CASE WHEN (il.ad_org_id IS NOT NULL AND il.ad_org_id <> cl.ad_org_id) OR (ic.ad_org_id IS NOT NULL AND ic.ad_org_id <> cl.ad_org_id) THEN cl.docstatus = ANY (ARRAY[''CO''::bpchar, ''CL''::bpchar]) ELSE 1 = 1 END) ';
+
+	selectOrgPayment = ' COALESCE(il.ad_org_id, p.ad_org_id) AS ad_org_id ';
+        selectOrgCashline = ' COALESCE(il.ad_org_id, ic.ad_org_id, cl.ad_org_id) AS ad_org_id ';
+    end if;
+
+    -- Tipo de Cuenta
+    whereclauseAccountTypeStd = ' (1=1) ';
+    whereclauseAccountTypeCashLine = ' (1=1) ';
+    
+    if (accountType is not null and accountType <> 'B') then
+	if (accountType = 'V') then 
+		whereclauseAccountTypeStd = ' bp.isvendor = ''Y'' ';
+		whereclauseAccountTypeCashLine = ' (CASE WHEN cl.c_bpartner_id IS NOT NULL THEN bp.isvendor = ''Y'' 
+							WHEN il.c_bpartner_id IS NOT NULL THEN bp2.isvendor = ''Y'' 
+							WHEN ic.c_bpartner_id IS NOT NULL THEN bp3.isvendor = ''Y'' 
+							ELSE 1 = 2 END) ';
+	else 
+		whereclauseAccountTypeStd = ' bp.iscustomer = ''Y'' '; 
+		whereclauseAccountTypeCashLine = ' (CASE WHEN cl.c_bpartner_id IS NOT NULL THEN bp.iscustomer = ''Y'' 
+							WHEN il.c_bpartner_id IS NOT NULL THEN bp2.iscustomer = ''Y'' 
+							WHEN ic.c_bpartner_id IS NOT NULL THEN bp3.iscustomer = ''Y'' 
+							ELSE 1 = 2 END) ';
+	end if;
+    end if;
+
+    whereclauseDocStatusPayment = ' (1=1) ';
+    whereclauseDocStatusCashLine = ' (1=1) ';
+    whereclauseDocStatusInvoice = ' (1=1) ';
+    if addstatusclause then
+	whereclauseDocStatusPayment = ' p.docstatus IN (''CO'',''CL'',''WC'') ';
+	whereclauseDocStatusCashLine = ' cl.docstatus IN (''CO'',''CL'',''WC'') ';
+	whereclauseDocStatusInvoice = ' i.docstatus IN (''CO'',''CL'',''WC'') ';
+    end if;
+    
+    -- recuperar informacion minima indispensable si summaryonly es true.  en caso de ser false, debe joinearse/ordenarse, etc.
+    if summaryonly = false then
+
+        orderby1 = ' ORDER BY ''C_Invoice''::text, i.c_invoice_id, i.ad_client_id, i.ad_org_id, i.isactive, i.created, i.createdby, i.updated, i.updatedby, i.c_bpartner_id, i.c_doctype_id, dt.signo_issotrx, dt.name, dt.printname, i.documentno, i.issotrx, i.docstatus,
+                 CASE
+                     WHEN i.c_invoicepayschedule_id IS NOT NULL THEN ips.duedate
+                     ELSE i.dateinvoiced
+                 END, i.dateacct, i.c_currency_id, i.c_conversiontype_id, i.grandtotal, i.c_invoicepayschedule_id, ips.duedate, i.dateinvoiced, bp.socreditstatus ';
+
+        orderby2 = ' ORDER BY ''C_Payment''::text, p.c_payment_id, p.ad_client_id, ' || selectOrgPayment || ', p.isactive, p.created, p.createdby, p.updated, p.updatedby, p.c_bpartner_id, p.c_doctype_id, dt.signo_issotrx, dt.name, dt.printname, p.documentno, p.issotrx, p.docstatus, p.datetrx, p.dateacct, p.c_currency_id, p.c_conversiontype_id, p.payamt, NULL::integer, p.duedate, bp.socreditstatus ';
+
+        orderby3 = ' ORDER BY ''C_CashLine''::text, cl.c_cashline_id, cl.ad_client_id, ' || selectOrgCashline || ', cl.isactive, cl.created, cl.createdby, cl.updated, cl.updatedby,
+                CASE
+                    WHEN cl.c_bpartner_id IS NOT NULL THEN cl.c_bpartner_id
+		    WHEN il.c_bpartner_id IS NOT NULL THEN il.c_bpartner_id
+                    ELSE ic.c_bpartner_id
+                END, dt.c_doctype_id,
+                CASE
+                    WHEN cl.amount < 0.0 THEN 1
+                    ELSE (-1)
+                END, dt.name, dt.printname, ''@line@''::text || cl.line::character varying::text,
+                CASE
+                    WHEN cl.amount < 0.0 THEN ''N''::bpchar
+                    ELSE ''Y''::bpchar
+                END, cl.docstatus, c.statementdate, c.dateacct, cl.c_currency_id, NULL::integer, abs(cl.amount), NULL::timestamp without time zone, COALESCE(bp.socreditstatus, bp2.socreditstatus, bp3.socreditstatus) ';
+	
+	selectallocationNull = ' NULL::integer ';
+	selectallocationPayment = selectallocationNull;
+	selectallocationCashline = selectallocationNull;
+	selectallocationCredit = selectallocationNull;
+	
+    else
+        orderby1 = '';
+        orderby2 = '';
+        orderby3 = '';
+
+	selectAllocationReferencePayment = ' al.c_payment_id = p.c_payment_id ';
+	selectAllocationReferenceCashline = ' al.c_cashline_id = cl.c_cashline_id ';
+	selectAllocationReferenceCredit = ' al.c_invoice_credit_id = i.c_invoice_id ';
+
+	selectallocationPayment = ' (SELECT ah.c_allocationhdr_id FROM c_allocationline al INNER JOIN c_allocationhdr ah on ah.c_allocationhdr_id = al.c_allocationhdr_id WHERE allocationtype <> ''MAN'' AND ah.dateacct::date = p.dateacct::date AND ' || selectAllocationReferencePayment || ' AND ' || whereclauseDateTo || ' ORDER BY ah.created LIMIT 1) as c_allocationhdr_id ';
+	selectallocationCashline = ' (SELECT ah.c_allocationhdr_id FROM c_allocationline al INNER JOIN c_allocationhdr ah on ah.c_allocationhdr_id = al.c_allocationhdr_id WHERE allocationtype <> ''MAN'' AND ah.dateacct::date = c.dateacct::date AND ' || selectAllocationReferenceCashline || ' AND ' || whereclauseDateTo || ' ORDER BY ah.created LIMIT 1) as c_allocationhdr_id ';
+	selectallocationCredit = ' (SELECT ah.c_allocationhdr_id FROM c_allocationline al INNER JOIN c_allocationhdr ah on ah.c_allocationhdr_id = al.c_allocationhdr_id WHERE allocationtype <> ''MAN'' AND ah.dateacct::date = i.dateacct::date AND ' || selectAllocationReferenceCredit || ' AND ' || whereclauseDateTo || ' ORDER BY ah.created LIMIT 1) as c_allocationhdr_id ';
+	
+    end if;    
+
+    consulta = ' SELECT * FROM 
+
+        (        ( SELECT DISTINCT ''C_Invoice''::text AS documenttable, i.c_invoice_id AS document_id, i.ad_client_id, i.ad_org_id, i.isactive, i.created, i.createdby, i.updated, i.updatedby, i.c_bpartner_id, i.c_doctype_id, dt.signo_issotrx, dt.name AS doctypename, dt.printname AS doctypeprintname, i.documentno, i.issotrx, i.docstatus,
+                        CASE
+                            WHEN i.c_invoicepayschedule_id IS NOT NULL THEN ips.duedate
+                            ELSE i.dateinvoiced
+                        END AS datetrx, i.dateacct, i.c_currency_id, i.c_conversiontype_id, i.grandtotal AS amount, i.c_invoicepayschedule_id, ips.duedate, i.dateinvoiced AS truedatetrx, bp.socreditstatus, i.c_order_id, '
+				|| selectallocationCredit || 
+               ' FROM c_invoice_v i
+              JOIN c_doctype dt ON i.c_doctypetarget_id = dt.c_doctype_id
+         JOIN c_bpartner bp ON bp.c_bpartner_id = i.c_bpartner_id and (' || $1 || ' = -1  or bp.c_bpartner_id = ' || $1 || ')
+    LEFT JOIN c_invoicepayschedule ips ON i.c_invoicepayschedule_id = ips.c_invoicepayschedule_id
+    WHERE 
+
+' || whereclauseDocStatusInvoice || '
+AND ' || whereclauseConditionDebit || ' 
+AND ' || whereclauseAccountTypeStd || '
+' || orderby1 || '
+
+    )
+        UNION ALL
+                ( SELECT DISTINCT ''C_Payment''::text AS documenttable, p.c_payment_id AS document_id, p.ad_client_id, ' || selectOrgPayment || ', p.isactive, p.created, p.createdby, p.updated, p.updatedby, p.c_bpartner_id, p.c_doctype_id, dt.signo_issotrx, dt.name AS doctypename, dt.printname AS doctypeprintname, p.documentno, p.issotrx, p.docstatus, p.datetrx, p.dateacct, p.c_currency_id, p.c_conversiontype_id, p.payamt AS amount, NULL::integer AS c_invoicepayschedule_id, p.duedate, p.datetrx AS truedatetrx, bp.socreditstatus, 0 as c_order_id, '
+		|| selectallocationPayment || 
+                  ' FROM c_payment p
+              JOIN c_doctype dt ON p.c_doctype_id = dt.c_doctype_id
+         JOIN c_bpartner bp ON p.c_bpartner_id = bp.c_bpartner_id AND (' || $1 || ' = -1 or p.c_bpartner_id = ' || $1 || ')
+	LEFT JOIN c_allocationline al ON al.c_payment_id = p.c_payment_id 
+	LEFT JOIN c_invoice il ON il.c_invoice_id = al.c_invoice_id
+	LEFT JOIN M_BoletaDepositoLine bdlr on bdlr.c_reverse_payment_id = p.c_payment_id
+	LEFT JOIN M_BoletaDeposito bdr on bdr.M_BoletaDeposito_ID = bdlr.M_BoletaDeposito_ID
+	LEFT JOIN M_BoletaDepositoLine bdle on bdle.c_depo_payment_id = p.c_payment_id
+	LEFT JOIN M_BoletaDeposito bde on bde.M_BoletaDeposito_ID = bdle.M_BoletaDeposito_ID
+	LEFT JOIN M_BoletaDeposito bddb on bddb.c_boleta_payment_id = p.c_payment_id
+  WHERE 
+
+' || whereclauseDocStatusPayment || '
+AND ' || whereclauseOrgPayment || '
+AND (CASE WHEN bdr.M_BoletaDeposito_ID IS NOT NULL 
+		OR bde.M_BoletaDeposito_ID IS NOT NULL 
+		OR bddb.M_BoletaDeposito_ID IS NOT NULL THEN p.docstatus NOT IN (''CO'',''CL'') 
+	ELSE 1 = 1
+	END) 
+
+AND ' || whereclauseConditionCredit || '
+AND ' || whereclauseAccountTypeStd || '
+' || orderby2 || '
+
+
+)
+
+UNION ALL
+
+        ( SELECT DISTINCT ''C_CashLine''::text AS documenttable, cl.c_cashline_id AS document_id, cl.ad_client_id, ' || selectOrgCashline || ', cl.isactive, cl.created, cl.createdby, cl.updated, cl.updatedby,
+                CASE
+                    WHEN cl.c_bpartner_id IS NOT NULL THEN cl.c_bpartner_id
+		    WHEN il.c_bpartner_id IS NOT NULL THEN il.c_bpartner_id
+                    ELSE ic.c_bpartner_id
+                END AS c_bpartner_id, dt.c_doctype_id,
+                CASE
+                    WHEN cl.amount < 0.0 THEN 1
+                    ELSE (-1)
+                END AS signo_issotrx, dt.name AS doctypename, dt.printname AS doctypeprintname, ''@line@''::text || cl.line::character varying::text AS documentno,
+                CASE
+                    WHEN cl.amount < 0.0 THEN ''N''::bpchar
+                    ELSE ''Y''::bpchar
+                END AS issotrx, cl.docstatus, c.statementdate AS datetrx, c.dateacct, cl.c_currency_id, NULL::integer AS c_conversiontype_id, abs(cl.amount) AS amount, NULL::integer AS c_invoicepayschedule_id, NULL::timestamp without time zone AS duedate, c.statementdate AS truedatetrx, COALESCE(bp.socreditstatus, bp2.socreditstatus, bp3.socreditstatus) AS socreditstatus, 0 as c_order_id, '
+                || selectallocationCashline || 
+       ' FROM (
+		select cl.* FROM c_cashline cl 
+		where (' || $1 || ' = -1 or cl.c_bpartner_id = ' || $1 || ') AND ' || whereclauseDocStatusCashLine || '
+		union 
+		select cl.* FROM c_cashline cl 
+		JOIN c_invoice ic on ic.c_invoice_id = cl.c_invoice_id AND (' || $1 || ' = -1 or ic.c_bpartner_id = ' || $1 || ') AND ' || whereclauseDocStatusCashLine || '
+		union 
+		select cl.* FROM c_cashline cl 
+		JOIN c_allocationline al ON al.c_cashline_id = cl.c_cashline_id
+		JOIN c_invoice il ON il.c_invoice_id = al.c_invoice_id AND (' || $1 || ' = -1 or il.c_bpartner_id = ' || $1 || ') AND ' || whereclauseDocStatusCashLine || '
+       ) as cl
+      JOIN c_cash c ON cl.c_cash_id = c.c_cash_id
+   LEFT JOIN c_bpartner bp ON cl.c_bpartner_id = bp.c_bpartner_id AND (' || $1 || ' = -1 or cl.c_bpartner_id = ' || $1 || ')
+   JOIN ( SELECT d.ad_client_id, d.c_doctype_id, d.name, d.printname
+         FROM c_doctype d
+        WHERE d.doctypekey::text = ''CMC''::text) dt ON cl.ad_client_id = dt.ad_client_id
+   LEFT JOIN c_allocationline al ON al.c_cashline_id = cl.c_cashline_id
+   LEFT JOIN c_invoice il ON il.c_invoice_id = al.c_invoice_id AND (' || $1 || ' = -1 or il.c_bpartner_id = ' || $1 || ')
+   LEFT JOIN c_bpartner bp2 ON il.c_bpartner_id = bp2.c_bpartner_id
+   LEFT JOIN c_invoice ic on ic.c_invoice_id = cl.c_invoice_id AND (' || $1 || ' = -1 or ic.c_bpartner_id = ' || $1 || ')
+   LEFT JOIN c_bpartner bp3 ON ic.c_bpartner_id = bp3.c_bpartner_id
+  WHERE (CASE WHEN cl.c_bpartner_id IS NOT NULL THEN (' || $1 || ' = -1 or cl.c_bpartner_id = ' || $1 || ')
+        WHEN il.c_bpartner_id IS NOT NULL THEN (' || $1 || ' = -1 or il.c_bpartner_id = ' || $1 || ')
+        WHEN ic.c_bpartner_id IS NOT NULL THEN (' || $1 || ' = -1 or ic.c_bpartner_id = ' || $1 || ')
+        ELSE 1 = 2 END)
+
+    AND ' || whereclauseOrgCashline || '
+    AND (' || whereclauseConditionCreditCashException || ' )
+    AND ' || whereclauseAccountTypeCashLine || '
+
+' || orderby3 || '
+
+)) AS d  
+WHERE ' || whereclauseDateTo || ' ; ';
+
+-- raise notice '%', consulta;
+FOR adocument IN EXECUTE consulta LOOP
+	return next adocument;
+END LOOP;
+
+END
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
+ALTER FUNCTION v_documents_org_filtered(integer, boolean, character, timestamp without time zone, integer, character, boolean)
+  OWNER TO libertya;
+  
+--20180702-1112 Merge r2404
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_DocType','AllowOnlyProviders','character(1) NOT NULL DEFAULT ''N'''));
+
+--20180704-1608 Importe imputado a un payment con fecha de corte
+CREATE OR REPLACE FUNCTION paymentallocated(
+    p_c_payment_id integer,
+    p_c_currency_id integer,
+    p_dateto timestamp without time zone)
+  RETURNS numeric AS
+$BODY$
+/*************************************************************************
+ * The contents of this file are subject to the Compiere License.  You may
+ * obtain a copy of the License at    http://www.compiere.org/license.html
+ * Software is on an  "AS IS" basis,  WITHOUT WARRANTY OF ANY KIND, either
+ * express or implied. See the License for details. Code: Compiere ERP+CRM
+ * Copyright (C) 1999-2001 Jorg Janke, ComPiere, Inc. All Rights Reserved.
+ *
+ * converted to postgreSQL by Karsten Thiemann (Schaeffer AG), 
+ * kthiemann@adempiere.org
+ *************************************************************************
+ * Title:	Calculate Allocated Payment Amount in Payment Currency
+ * Description:
+    --
+    SELECT paymentAllocated(C_Payment_ID,C_Currency_ID), PayAmt, IsAllocated
+    FROM C_Payment_v 
+    WHERE C_Payment_ID<1000000;
+    --
+    UPDATE C_Payment_v 
+    SET IsAllocated=CASE WHEN paymentAllocated(C_Payment_ID, C_Currency_ID)=PayAmt THEN 'Y' ELSE 'N' END
+    WHERE C_Payment_ID>=1000000;
+ ****
+ *-Pasado a Liberya a partir en Adempiere 360LTS
+ *-ids son enteros
+ *-se asume que todos los montos son no negativos
+ *-no se utilza la vista C_Payment_V y no se corrige por AP/CM (de todas maneras
+ * Libertya actual no estaba usando esto y la vista siempre retorna 1 y multiplicaba
+ * por este monto)
+ *-no se utiliza multiplicadores: retorna siempre algo en el entorno [0..PayAmt]
+ *-la obtencion del si esta asociado a un cargo y la monto del pago es obtenido
+ *  en una sola setencia sql
+ *-se utiliza el redondeo por moneda en vez del redondeo a 2 (aunque esto
+ * ultimo tiene su sentido teniendo en cuenta que liberya maneja solo 2 decimales)
+ ************************************************************************/
+DECLARE
+	v_AllocatedAmt		NUMERIC := 0;
+    	v_PayAmt        	NUMERIC;
+    	r   			RECORD;
+BEGIN
+    --  Charge - nothing available
+    SELECT 
+      INTO v_PayAmt MAX(PayAmt) 
+    FROM C_Payment 
+    WHERE C_Payment_ID=p_C_Payment_ID AND C_Charge_ID > 0;
+    
+    IF (v_PayAmt IS NOT NULL) THEN
+        RETURN v_PayAmt;
+    END IF;
+    
+	--	Calculate Allocated Amount
+	FOR r IN
+		SELECT	a.AD_Client_ID, a.AD_Org_ID, al.Amount, a.C_Currency_ID, a.DateTrx
+			FROM	C_AllocationLine al
+	          INNER JOIN C_AllocationHdr a ON (al.C_AllocationHdr_ID=a.C_AllocationHdr_ID)
+			WHERE	al.C_Payment_ID = p_C_Payment_ID
+          	AND   a.IsActive='Y'
+          	AND (p_dateto IS NULL OR a.dateacct::date <= p_dateto::date)
+	LOOP
+		v_AllocatedAmt := v_AllocatedAmt
+			+ currencyConvert(r.Amount, r.C_Currency_ID, 
+			p_C_Currency_ID, r.DateTrx, null, r.AD_Client_ID, r.AD_Org_ID);
+	END LOOP;
+	--  NO en libertya:	Round to penny
+	-- en vez se redondea usando la moneda
+	v_AllocatedAmt := currencyRound(COALESCE(v_AllocatedAmt,0),p_c_currency_id,NULL); 
+	RETURN	v_AllocatedAmt;
+END;
+
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION paymentallocated(integer, integer, timestamp without time zone)
+  OWNER TO libertya;
+
+CREATE OR REPLACE FUNCTION paymentallocated(
+    p_c_payment_id integer,
+    p_c_currency_id integer)
+  RETURNS numeric AS
+$BODY$
+BEGIN
+    RETURN paymentallocated(p_c_payment_id, p_c_currency_id, null::timestamp);
+END;
+
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+ALTER FUNCTION paymentallocated(integer, integer)
+  OWNER TO libertya; 
+
+--20180706-1830 Flag que marca un pedido cuando fue reactivado
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_Order','isreactivated','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+
+--20180710-0926 View especifica para el reporte de movimientos bancarios
+create or replace view c_payment_movements_v as
+select 	p.*, (p.payamt * dt.signo_issotrx * -1) as payamtsign
+from c_payment p
+inner join c_doctype dt on p.c_doctype_id = dt.c_doctype_id;
+
+--20180712-2125 Nueva columna para registrar la cantidad devuelta de un pedido
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_OrderLine','qtyreturned','numeric(22,4) NOT NULL DEFAULT 0'));
+
+--Nueva columna para registrar la configuración para permitir entregar devoluciones a la información de la compañía
+update ad_system set dummy = (SELECT addcolumnifnotexists('ad_clientinfo','allowdeliveryreturned','character(1) NOT NULL DEFAULT ''Y''::bpchar'));
+
+--La cantidad reservada de un artículo es la suma del qtyreserved de los pedidos de cliente
+CREATE OR REPLACE FUNCTION getqtyreserved(
+clientid integer,
+orgid integer,
+locatorid integer,
+productid integer,
+dateto date)
+RETURNS numeric AS
+$BODY$
+/***********
+Obtiene la cantidad reservada a fecha de corte. Si no hay fecha de corte, entonces se devuelven los pendientes actuales.
+Por lo pronto no se utiliza el pendiente a fecha de corte ya que primero deberíamos analizar e implementar 
+una forma en la que se determine cuando un pedido fue completo, anulado, etc.
+*/
+DECLARE
+reserved numeric;
+BEGIN
+reserved := 0;
+--Si no hay fecha de corte o es mayor o igual a la fecha actual, entonces se suman las cantidades reservadas de los pedidos
+--if ( dateTo is null OR dateTo >= current_date ) THEN
+SELECT INTO reserved coalesce(sum(ol.qtyreserved),0)
+from c_orderline ol
+inner join c_order o on o.c_order_id = ol.c_order_id
+inner join c_doctype dto on dto.c_doctype_id = o.c_doctypetarget_id
+inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+where o.ad_client_id = clientid
+and o.ad_org_id = orgid 
+and ol.qtyreserved <> 0
+and o.processed = 'Y' 
+and ol.m_product_id = productid
+and l.m_locator_id = locatorid
+and o.issotrx = 'Y'
+and dto.doctypekey <> 'SOSOT';
+/*ELSE
+SELECT INTO reserved coalesce(sum(qty),0)
+from (
+-- Cantidad pedida a fecha de corte
+select coalesce(sum(ol.qtyordered),0) as qty
+from c_orderline ol
+inner join c_order o on o.c_order_id = ol.c_order_id
+inner join c_doctype dt on dt.c_doctype_id = o.c_doctypetarget_id
+inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+where o.ad_client_id = clientid
+and o.ad_org_id = orgid
+and o.processed = 'Y' 
+and ol.m_product_id = productid
+and l.m_locator_id = locatorid
+and o.issotrx = 'Y'
+and dt.doctypekey NOT IN ('SOSOT')
+and o.dateordered::date <= dateTo::date
+and o.dateordered::date <= current_date
+union all
+-- Notas de crédito con (o sin) el check Actualizar Cantidades de Pedido
+select coalesce(sum(il.qtyinvoiced),0) as qty
+from c_invoiceline il
+inner join c_invoice i on i.c_invoice_id = il.c_invoice_id
+inner join c_doctype dt on dt.c_doctype_id = i.c_doctypetarget_id
+inner join c_orderline ol on ol.c_orderline_id = il.c_orderline_id
+inner join c_order o on o.c_order_id = ol.c_order_id
+inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+where o.ad_client_id = clientid
+and o.ad_org_id = orgid
+and o.processed = 'Y' 
+and ol.m_product_id = productid
+and l.m_locator_id = locatorid
+and i.issotrx = 'Y'
+and il.m_inoutline_id is null
+and dt.signo_issotrx = '-1'
+and o.dateordered::date <= dateTo::date
+and i.dateinvoiced::date > dateTo::date
+and i.dateinvoiced::date <= current_date
+union all
+--En transaction las salidas son negativas y las entradas positivas
+select coalesce(sum(t.movementqty),0) as qty
+from m_transaction t
+inner join m_inoutline iol on iol.m_inoutline_id = t.m_inoutline_id
+inner join m_inout io on io.m_inout_id = iol.m_inout_id
+inner join c_doctype dt on dt.c_doctype_id = io.c_doctype_id
+inner join c_orderline ol on ol.c_orderline_id = iol.c_orderline_id
+inner join c_order o on o.c_order_id = ol.c_order_id
+where t.ad_client_id = clientid
+and t.ad_org_id = orgid
+and t.m_product_id = productid
+and t.m_locator_id = locatorid
+and dt.reservestockmanagment = 'Y'
+and o.dateordered::date <= dateTo::date
+and t.movementdate::date <= dateTo::date
+and t.movementdate::date <= current_date
+union all
+--Cantidades transferidas
+select coalesce(sum(ol.qtyordered * -1),0) as qty
+from c_orderline ol
+inner join c_order o on o.c_order_id = ol.c_order_id
+inner join c_orderline rl on rl.c_orderline_id = ol.ref_orderline_id
+inner join c_order r on r.c_order_id = rl.c_order_id
+inner join c_doctype dt on dt.c_doctype_id = o.c_doctype_id
+inner join m_warehouse w on w.m_warehouse_id = o.m_warehouse_id
+inner join m_locator l on l.m_warehouse_id = w.m_warehouse_id
+where o.ad_client_id = clientid
+and o.ad_org_id = orgid
+and o.processed = 'Y' 
+and ol.m_product_id = productid
+and l.m_locator_id = locatorid
+and o.issotrx = 'Y'
+and dt.doctypekey IN ('SOSOT')
+and r.dateordered::date <= dateTo::date
+and o.dateordered::date <= dateTo::date
+and o.dateordered::date <= current_date
+) todo;
+END IF;*/
+
+return reserved;
+END;
+$BODY$
+LANGUAGE plpgsql VOLATILE
+COST 100;
+ALTER FUNCTION getqtyreserved(integer, integer, integer, integer, date)
+OWNER TO libertya;
+
+--Nueva función para calcular la cantidad reservada de un pedido
+CREATE OR REPLACE FUNCTION calculateqtyreserved(orderlineid integer)
+RETURNS numeric(22,4) AS
+$BODY$
+/***********
+* Obtener la cantidad reservada de la línea de pedido parámetro. 
+**/
+DECLARE
+reserved numeric(22,4);
+r record;
+BEGIN
+reserved := 0;
+
+--Verificar si la compañía permite entregar devoluciones
+select into r ol.qtyordered, ol.qtydelivered, ol.qtytransferred, ol.qtyreturned, ci.allowdeliveryreturned 
+from ad_clientinfo ci 
+join c_orderline ol on ol.ad_client_id = ci.ad_client_id
+where ol.c_orderline_id = orderlineid;
+
+-- Cálculo del reservado:
+-- Cantidad pedida - 
+-- Cantidad entregada - 
+-- Cantidad transferida -
+-- Cantidad devuelta, sii no se permite entregar devoluciones
+reserved = r.qtydelivered + r.qtytransferred;
+
+IF r.allowdeliveryreturned = 'N' THEN
+reserved = reserved + r.qtyreturned;
+END IF;
+
+reserved = r.qtyordered - reserved;
+
+return reserved;
+END;
+$BODY$
+LANGUAGE plpgsql VOLATILE
+COST 100;
+ALTER FUNCTION calculateqtyreserved(integer)
+OWNER TO libertya;
+
+--Mejora a la vista del informe de seguimiento de pedidos/notas de credito
+DROP VIEW rv_orderline_pending;
+
+CREATE OR REPLACE VIEW rv_orderline_pending AS 
+SELECT o.ad_client_id, o.ad_org_id, o.isactive, o.created, o.createdby, o.updated, o.updatedby, o.c_order_id, o.documentno, o.dateordered::date AS dateordered, o.datepromised::date AS datepromised, o.c_bpartner_id, o.issotrx, ol.c_orderline_id, ol.m_product_id, ol.qtyordered, ol.qtyinvoiced, ol.qtydelivered, ol.qtyordered - ol.qtyinvoiced AS pendinginvoice, ol.qtyreserved AS pendingdeliver, 
+CASE
+WHEN ol.qtyordered <> ol.qtyinvoiced AND ol.qtyreserved <> 0 THEN NULL::text
+WHEN ol.qtyordered <> ol.qtyinvoiced AND ol.qtyreserved = 0 THEN 'I'::text
+WHEN ol.qtyreserved <> 0 THEN 'D'::text
+ELSE 'N'::text
+END AS status
+FROM c_order o
+JOIN c_orderline ol ON o.c_order_id = ol.c_order_id AND (ol.qtyreserved <> 0 OR ol.qtyordered <> ol.qtyinvoiced) AND (o.docstatus = ANY (ARRAY['CO'::bpchar, 'CL'::bpchar])) AND ol.m_product_id IS NOT NULL
+ORDER BY o.c_order_id;

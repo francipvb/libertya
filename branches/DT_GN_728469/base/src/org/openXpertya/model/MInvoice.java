@@ -52,6 +52,8 @@ import org.openXpertya.util.Env;
 import org.openXpertya.util.MProductCache;
 import org.openXpertya.util.MeasurableTask;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.ReservedUtil;
+import org.openXpertya.util.SalesUtil;
 import org.openXpertya.util.StringUtil;
 import org.openXpertya.util.TimeStatsLogger;
 import org.openXpertya.util.TimeUtil;
@@ -70,7 +72,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 	/**
 	 * 
 	 */
-	private static final long serialVersionUID = 1L;
+	private static final long serialVersionUID = 1L; 
 
 	private static final String VOID_FISCAL_DESCRIPTION_PREFERENCE_NAME = "FiscalDescription_VoidedDocument";
 
@@ -91,6 +93,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 	private boolean isTPVInstance = false;
 
 	private boolean dragDocumentDiscountAmts = false;
+	private boolean dragDocumentSurchargesAmts = false;
 
 	/**
 	 * Caja diaria a asignar al contra-documento que se genera al anular este
@@ -261,13 +264,11 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			int C_DocTypeTarget_ID, boolean isSOTrx, boolean counter,
 			String trxName, boolean setOrder, boolean setInOut, 
 			boolean copyDocumentDiscounts, boolean copyManualInvoiceTaxes) {
-		return copyFrom( from,  dateDoc,
-				 C_DocTypeTarget_ID,  isSOTrx,  counter,
-				 trxName,  setOrder,  setInOut, 
-				 copyDocumentDiscounts, copyManualInvoiceTaxes,false);
+		return copyFrom(from, dateDoc, C_DocTypeTarget_ID, isSOTrx, counter,
+				trxName, setOrder, setInOut, copyDocumentDiscounts, copyManualInvoiceTaxes, 
+				false);
 	}
-
-	// copyFrom
+	
 	/**
 	 * 
 	 * @param from
@@ -284,13 +285,15 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 	public static MInvoice copyFrom(MInvoice from, Timestamp dateDoc,
 			int C_DocTypeTarget_ID, boolean isSOTrx, boolean counter,
 			String trxName, boolean setOrder, boolean setInOut, 
-			boolean copyDocumentDiscounts, boolean copyManualInvoiceTaxes, boolean voiding) {
+			boolean copyDocumentDiscounts, boolean copyManualInvoiceTaxes, 
+			boolean voidProcess) {
 		MInvoice to = new MInvoice(from.getCtx(), 0, trxName);
 
 		PO.copyValues(from, to, from.getAD_Client_ID(), from.getAD_Org_ID());
 		to.setC_Invoice_ID(0);
 		to.set_ValueNoCheck("DocumentNo", null);
 		to.setIsCopy(true);
+		to.setVoidProcess(voidProcess);
 
 		/*
 		* Ponger en null el cae y el vto cae del documento copiado para evitar errores
@@ -323,6 +326,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		to.setIsApproved(false);
 		to.setC_Payment_ID(0);
 		to.setC_CashLine_ID(0);
+		to.setCreateCashLine(false);
 		to.setIsPaid(false);
 		to.setIsInDispute(false);
 
@@ -339,6 +343,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		to.setProcessed(false);
 
 		to.setManageDragOrderDiscounts(false);
+		to.setManageDragOrderSurcharges(false);
 
 		// delete references
 
@@ -366,7 +371,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		}
 		
 		// Seteo la bandera que indica si se trata de una anulación.
-		to.setVoidProcess(voiding);
+		to.setVoidProcess(voidProcess);
 
 		if (!to.save(trxName)) {
 			throw new IllegalStateException("Could not create Invoice: " + CLogger.retrieveErrorAsString());
@@ -382,8 +387,15 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			throw new IllegalStateException("Could not create Invoice Lines");
 		}
 
-		// Descuentos manuales de la factura
-		if (copyManualInvoiceTaxes) {
+		
+		try {
+			to.copyAutomaticInvoiceTaxes(from);
+		} catch (Exception e) {
+			throw new IllegalStateException(e.getMessage());
+		}
+		
+		// Impuestos manuales de la factura
+		if (copyManualInvoiceTaxes || voidProcess) {
 			try {
 				to.copyManualInvoiceTaxes(from);
 			} catch (Exception e) {
@@ -398,6 +410,13 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			} catch (Exception e) {
 				throw new IllegalStateException(e.getMessage());
 			}
+		}
+		
+		// Calcular totales
+		try {
+			to.calculateTotalAmounts();
+		} catch (Exception e) {
+			throw new IllegalStateException(e.getMessage());
 		}
 
 		return to;
@@ -538,9 +557,23 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		return DB.getSQLValueTimestamp( trxName,sql);
 	}
 
+	public void copyAutomaticInvoiceTaxes(MInvoice from) throws Exception {
+		List<MInvoiceTax> invoiceTaxes = MInvoiceTax.getTaxesFromInvoice(from, false);
+		MInvoiceTax newInvoiceTax;
+		for (MInvoiceTax mInvoiceTax : invoiceTaxes) {
+			newInvoiceTax = new MInvoiceTax(getCtx(), 0, get_TrxName());
+			newInvoiceTax.setC_Invoice_ID(getID());
+			newInvoiceTax.setC_Tax_ID(mInvoiceTax.getC_Tax_ID());
+			newInvoiceTax.setTaxAmt(mInvoiceTax.getTaxAmt());
+			newInvoiceTax.setTaxBaseAmt(mInvoiceTax.getTaxBaseAmt());
+			if (!newInvoiceTax.save()) {
+				throw new Exception(CLogger.retrieveErrorAsString());
+			}
+		}
+	}
+	
 	public void copyManualInvoiceTaxes(MInvoice from) throws Exception {
-		List<MInvoiceTax> invoiceTaxes = MInvoiceTax.getTaxesFromInvoice(from,
-				true);
+		List<MInvoiceTax> invoiceTaxes = MInvoiceTax.getTaxesFromInvoice(from, true);
 		MInvoiceTax newInvoiceTax;
 		for (MInvoiceTax mInvoiceTax : invoiceTaxes) {
 			newInvoiceTax = new MInvoiceTax(getCtx(), 0, get_TrxName());
@@ -1298,7 +1331,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		setUser1_ID(order.getUser1_ID());
 		setUser2_ID(order.getUser2_ID());
 
-		if (isDragDocumentDiscountAmts()) {
+		if (isDragDocumentDiscountAmts() || isDragDocumentSurchargesAmts()) {
 			setC_Charge_ID(order.getC_Charge_ID());
 			setChargeAmt(order.getChargeAmt());
 		}
@@ -2358,7 +2391,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		// arrastra descuentos del pedido, siempre y cuando en el pedido se
 		// hayan aplicado descuentos
 		if (!newRecord && is_ValueChanged("ManualGeneralDiscount")) {
-			if (isManageDragOrderDiscounts()
+			if (isManageDragOrderDiscountsSurcharges(false)
 					&& !isSkipManualGeneralDiscountValidation()) {
 				log.saveError("ManualGeneralDiscountNotAllowed", "");
 				return false;
@@ -2787,9 +2820,12 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			log.fine("Lines -> #" + no);
 		}
 
-		if (is_ValueChanged("AD_Org_ID") || is_ValueChanged("C_BPartner_ID")
-				|| is_ValueChanged("ApplyPercepcion")
-				|| is_ValueChanged("C_Invoice_Orig_ID")) {
+		if (!isTPVInstance() && 
+				!isVoidProcess() && 
+				(is_ValueChanged("AD_Org_ID") 
+					|| is_ValueChanged("C_BPartner_ID")
+					|| is_ValueChanged("ApplyPercepcion")
+					|| is_ValueChanged("C_Invoice_Orig_ID"))) {
 			try {
 
 				recalculatePercepciones();
@@ -2806,7 +2842,8 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		// actualizo el esquema de pagos de la factura
 		if (!isSkipApplyPaymentTerm()
 				&& (is_ValueChanged("C_PaymentTerm_ID")
-						|| is_ValueChanged("DateRecepted") || recalculateIPS)) {
+						|| is_ValueChanged("DateRecepted") 
+						|| recalculateIPS)) {
 			// Vuelvo a cargar la factura desde BD
 			MInvoice invoiceUpdated = new MInvoice(getCtx(), getID(),
 					get_TrxName());
@@ -3357,13 +3394,17 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 					// crédito por mercadería no retirada ya que luego no
 					// concuerdan los movimientos de mercadería con lo facturado
 					BigDecimal dcNoNC = isUpdateOrderQty() ? MInOut
-							.getDCMovementQty(orderLine.getID(),
+							.getNotInvoicedQtyReturned(getCtx(), orderLine.getID(),
 									get_TrxName()) : null;
 					dcNoNC = dcNoNC != null && dcNoNC.compareTo(BigDecimal.ZERO) > 0?dcNoNC:BigDecimal.ZERO;
-					BigDecimal pending = orderLine.getPendingDeliveredQty().subtract(dcNoNC);
-					boolean reservedGreater = pending.compareTo(orderLine.getQtyInvoiced()) > 0;
-					BigDecimal qtyToCompare = reservedGreater ? orderLine
-							.getQtyInvoiced() : pending;
+					// Pendiente de entrega de mercadería
+					BigDecimal pending = ReservedUtil.getOrderLinePending(orderLine);
+					// La cantidad facturada sin lo pendiente a facturar que
+					// corresponde con las devoluciones no facturadas
+					BigDecimal pendingInvoiced = orderLine.getQtyInvoiced().subtract(dcNoNC);
+					// Obtener el menor de ambos para saber contra qué comparamos
+					boolean reservedGreater = pending.compareTo(pendingInvoiced) > 0;
+					BigDecimal qtyToCompare = reservedGreater ? pendingInvoiced : pending;
 					String lastMsgDescription = reservedGreater ? "Invoiced"
 							: "Reserved";
 					if (line.getQtyInvoiced().compareTo(qtyToCompare) > 0) {
@@ -3570,6 +3611,9 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 	public boolean calculateTaxTotal() {
 		log.fine("");
 
+		if(isTPVInstance() || isVoidProcess()){
+			return true;
+		}
 		// Delete Taxes
 
 		if (isSOTrx() && !isTPVInstance()) {
@@ -3693,7 +3737,6 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			e.printStackTrace();
 		}
 
-		// setGrandTotal(totalLines.add(totalTax()));
 		return true;
 	} // calculateTaxTotal
 
@@ -4913,9 +4956,8 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 
 	public boolean voidIt() {
 		log.info(toString());
-
-		voidProcess = true;
-
+		boolean result = true;
+		
 		if (DOCSTATUS_Closed.equals(getDocStatus())
 				|| DOCSTATUS_Reversed.equals(getDocStatus())
 				|| DOCSTATUS_Voided.equals(getDocStatus())) {
@@ -4927,7 +4969,8 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		
 		// Not Processed
 
-		if (DOCSTATUS_Drafted.equals(getDocStatus())
+		if (!isSOTrx() 
+				|| DOCSTATUS_Drafted.equals(getDocStatus())
 				|| DOCSTATUS_Invalid.equals(getDocStatus())
 				|| DOCSTATUS_InProgress.equals(getDocStatus())
 				|| DOCSTATUS_Approved.equals(getDocStatus())
@@ -4939,14 +4982,34 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			MDocType docType = MDocType.get(getCtx(), getC_DocTypeTarget_ID());
 			boolean isCredit = docType.getDocBaseType().equals(
 					MDocType.DOCBASETYPE_ARCreditMemo);
+			
+			// Controlar si existe en algún allocation 
+			if (isInAllocation(getVoiderAllocationID())) {
+				m_processMsg = "@FreeInvoiceNeededError@";
+				return false;
+			}
+			
+			// Si el período está cerrado no se puede anular un comprobante de compras
+			if (!isSOTrx() && !MPeriod.isOpen(getCtx(), getDateAcct(), docType.getDocBaseType(), docType)) {
+				m_processMsg = "@PeriodClosed@";
+				return false;
+			}
+			
+			// Si está contabilizado elimino la contabilidad 
+			if (isPosted()) {
+				MFactAcct.delete(Table_ID, getID(), get_TrxName());
+			}
+			
 			for (int i = 0; i < lines.length; i++) {
 				MInvoiceLine line = lines[i];
 				BigDecimal old = line.getQtyInvoiced();
 
 				if (old.compareTo(Env.ZERO) != 0) {
 					line.setQty(Env.ZERO);
+					line.setPrice(Env.ZERO);
 					line.setTaxAmt(Env.ZERO);
 					line.setLineNetAmt(Env.ZERO);
+					line.setLineNetAmount(Env.ZERO);
 					line.setLineTotalAmt(Env.ZERO);
 					line.addDescription(Msg.getMsg(getCtx(), "Voided") + " ("
 							+ old + ")");
@@ -4958,28 +5021,50 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 								line.getM_InOutLine_ID(), get_TrxName());
 
 						ioLine.setIsInvoiced(false);
-						ioLine.save(get_TrxName());
+						if(!ioLine.save(get_TrxName())){
+							setProcessMsg(CLogger.retrieveErrorAsString());
+							return false;
+						}
 						line.setM_InOutLine_ID(0);
 					}
 
-					line.save(get_TrxName());
+					if(!line.save(get_TrxName())){
+						setProcessMsg(CLogger.retrieveErrorAsString());
+						return false;
+					}
 				}
 			}
-
+			
+			// Impuestos manuales a 0
+			try {
+				List<MInvoiceTax> manualInvoiceTaxes = MInvoiceTax
+						.getTaxesFromInvoice(this, true);
+				for (MInvoiceTax mInvoiceTax : manualInvoiceTaxes) {
+					mInvoiceTax.setTaxBaseAmt(BigDecimal.ZERO);
+					mInvoiceTax.setTaxAmt(BigDecimal.ZERO);
+					if (!mInvoiceTax.save(get_TrxName())) {
+						throw new Exception(CLogger.retrieveErrorAsString());
+					}
+				}
+			} catch (Exception e) {
+				m_processMsg = e.getMessage();
+				return false;
+			}
+			
+			setTotalLines(BigDecimal.ZERO);
+			setGrandTotal(BigDecimal.ZERO);
 			addDescription(Msg.getMsg(getCtx(), "Voided"));
 			setIsPaid(true);
 			setC_Payment_ID(0);
 			setM_AuthorizationChain_ID(0);
 			setAuthorizationChainStatus(null);
-			setSkipAuthorizationChain(true);		
+			setSkipAuthorizationChain(true);
 		} else {
-			return reverseCorrectIt();
+			voidProcess = true;
+			result = reverseCorrectIt();
 		}
 
-		setProcessed(true);
-		setDocAction(DOCACTION_None);
-
-		return true;
+		return result;
 	} // voidIt
 
 	/**
@@ -5007,7 +5092,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 	public boolean reverseCorrectIt() {
 		setAditionalWorkResult(new HashMap<PO, Object>());
 		log.info(toString());
-
+		
 		// Disytel - Franco Bonafine
 		// No es posible anular o revertir facturas que se encuentran en alguna
 		// asignación.
@@ -5025,12 +5110,6 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		MDocType reversalDocType = docType;
 		boolean isCredit = docType.getDocBaseType().equals(
 				MDocType.DOCBASETYPE_ARCreditMemo);
-		
-		// Si el período está cerrado no se puede anular un comprobante de compras
-		if (!isSOTrx() && !MPeriod.isOpen(getCtx(), getDateAcct(), docType.getDocBaseType(), docType)) {
-			m_processMsg = "@PeriodClosed@";
-			return false;
-		}
 		
 		// ////////////////////////////////////////////////////////////////
 		// LOCALIZACIÓN ARGENTINA
@@ -5091,11 +5170,13 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		
 		// Deep Copy
 
-		Timestamp dateDoc = isSOTrx()?Env.getDate():getDateAcct();
+		Timestamp dateDoc = Env.getDate();
+		
+		reversalDocType = reversalDocType != null ? reversalDocType : docType;
 
 		MInvoice reversal = copyFrom(this, dateDoc,
 				reversalDocType.getC_DocType_ID(), isSOTrx(), false,
-				get_TrxName(), true, true, true, !isSOTrx(), voidProcess);
+				get_TrxName(), true, true, true, !isSOTrx(), true);
 
 		if (reversal == null) {
 			m_processMsg = "Could not create Invoice Reversal";
@@ -5115,11 +5196,6 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			setAuthorizationChainStatus(null);
 			reversal.setM_AuthorizationChain_ID(0);
 			reversal.setAuthorizationChainStatus(null);
-		}
-		
-		if(!isSOTrx()){
-			reversal.setDateAcct(getDateAcct());
-			reversal.setDateInvoiced(getDateInvoiced());
 		}
 		
 		// Seteo la bandera que indica si se trata de una anulación.
@@ -5149,7 +5225,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		// docType. Invertir montos
 		// Ademas, para la localización argentina no hay que invertir las
 		// cantidades ni los montos (usa distinto doctype)
-		if (!localeARActive || (docType == reversalDocType)) {
+		if (!localeARActive || (docType.getID() == reversalDocType.getID())) {
 
 			// Reverse Line Qty
 			MInvoiceLine[] rLines = reversal.getLines(false);
@@ -5160,6 +5236,10 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				rLine.setQtyEntered(rLine.getQtyEntered().negate());
 				rLine.setQtyInvoiced(rLine.getQtyInvoiced().negate());
 				rLine.setLineNetAmt(rLine.getLineNetAmt().negate());
+				rLine.setLineNetAmount(rLine.getLineNetAmount().negate());
+				rLine.setLineBonusAmt(rLine.getLineBonusAmt().negate());
+				rLine.setLineDiscountAmt(rLine.getLineDiscountAmt().negate());
+				rLine.setDocumentDiscountAmt(rLine.getDocumentDiscountAmt().negate());
 
 				if ((rLine.getTaxAmt() != null)
 						&& (rLine.getTaxAmt().compareTo(Env.ZERO) != 0)) {
@@ -5172,8 +5252,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				}
 
 				if (!rLine.save(get_TrxName())) {
-					m_processMsg = "Could not correct Invoice Reversal Line";
-
+					m_processMsg = CLogger.retrieveErrorAsString();
 					return false;
 				}
 			}
@@ -5192,7 +5271,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 						}
 					}
 				} catch (Exception e) {
-					m_processMsg = "Could not create Reversal Manual Invoice Taxes";
+					m_processMsg = e.getMessage();
 					return false;
 				}
 			}
@@ -5240,12 +5319,14 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		// documentos aparezcan
 		// en el mismo lugar
 		// reversal.setDocStatus( DOCSTATUS_Closed );
-		reversal.setDocStatus(DOCSTATUS_Voided);
+		reversal.setProcessed(true);
+		reversal.setDocStatus(isVoidProcess()?DOCSTATUS_Voided:DOCSTATUS_Reversed);
 
 		reversal.setDocAction(DOCACTION_None);
-		reversal.save(get_TrxName());
-
-		//
+		if(!reversal.save(get_TrxName())){
+			setProcessMsg(CLogger.retrieveErrorAsString());
+			return false;
+		}
 
 		addDescription("(" + reversal.getDocumentNo() + "<-)");
 
@@ -5265,12 +5346,18 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 							iLine.getM_InOutLine_ID(), get_TrxName());
 	
 					ioLine.setIsInvoiced(false);
-					ioLine.save(get_TrxName());
+					if(!ioLine.save(get_TrxName())){
+						setProcessMsg(CLogger.retrieveErrorAsString());
+						return false;
+					}
 	
 					// Reconsiliation
 	
 					iLine.setM_InOutLine_ID(0);
-					iLine.save(get_TrxName());
+					if(!iLine.save(get_TrxName())){
+						setProcessMsg(CLogger.retrieveErrorAsString());
+						return false;
+					}
 				}
 			}
 		}
@@ -5302,14 +5389,17 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		}
 
 		setProcessed(true);
-		setDocStatus(DOCSTATUS_Reversed);
+		setDocStatus(isVoidProcess()?DOCSTATUS_Voided:DOCSTATUS_Reversed);
 		setDocAction(DOCACTION_None);
 
 		StringBuffer info = new StringBuffer(reversal.getDocumentNo());
 
 		// Reverse existing Allocations
 
-		save(); // for allocation reversal
+		if(!save()){
+			setProcessMsg(CLogger.retrieveErrorAsString());
+			return false;
+		}
 
 		// Disytel FB - Ya no se desasignan automáticamente los pagos. Se debe
 		// revertir la asignación manualmente.
@@ -5345,8 +5435,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			allocHdr.setC_POSJournal_ID(reversal.getC_POSJournal_ID());
 
 			if (!allocHdr.save()) {
-				m_processMsg = "Could not create reversal allocation header: "
-						+ CLogger.retrieveErrorAsString();
+				m_processMsg = CLogger.retrieveErrorAsString();
 				return false;
 			}
 			// Se crea la línea de imputación.
@@ -5360,13 +5449,16 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			allocLine.setC_BPartner_ID(getC_BPartner_ID());
 
 			if (!allocLine.save()) {
-				m_processMsg = "Could not create reversal allocation line";
+				m_processMsg = CLogger.retrieveErrorAsString();
 				return false;
 			}
 			allocHdr.setUpdateBPBalance(false);
 			// Se completa la imputación.
 			allocHdr.processIt(MAllocationHdr.ACTION_Complete);
-			allocHdr.save();
+			if(!allocHdr.save()){
+				m_processMsg = CLogger.retrieveErrorAsString();
+				return false;
+			}
 		}
 
 		// Imprimir fiscalmente el documento reverso si es que así lo requiere y
@@ -5378,7 +5470,7 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 				return false;
 			}
 		}
-
+		
 		return true;
 	} // reverseCorrectIt
 
@@ -6284,14 +6376,10 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 	}
 
 	public void updateTotalDocumentDiscount() throws Exception {
-		BigDecimal linesTotalDocumentDiscount = getTotalDocumentDiscountAmtFromLines(false);
-		if (!Util.isEmpty(linesTotalDocumentDiscount, true)) {
-			getChargeAmt();
-			setChargeAmt(linesTotalDocumentDiscount.negate());
-			calculateTaxTotal();
-			if (!save()) {
-				throw new Exception(CLogger.retrieveErrorAsString());
-			}
+		getTotalDocumentDiscountAmtFromLines(true);
+		calculateTaxTotal();
+		if (!save()) {
+			throw new Exception(CLogger.retrieveErrorAsString());
 		}
 	}
 
@@ -6684,6 +6772,83 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		}
 		return total;
 	}
+	
+	/**
+	 * Calcula y setea los importes totales del documento en base a
+	 * c_invoicetax: Neto, TotalLines, Grandtotal.
+	 */
+	public void calculateTotalAmounts() throws Exception{
+		// Obtener la suma de los impuestos automáticos y manuales para luego
+		// desde ahi setear los totales
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		BigDecimal taxBaseAmt = BigDecimal.ZERO;
+		BigDecimal automaticTaxesAmt = BigDecimal.ZERO;
+		BigDecimal manualTaxesAmt = BigDecimal.ZERO;
+		try {
+			// Impuestos automáticos
+			ps = DB.prepareStatement(
+					SalesUtil.getSQLTaxAmountsForTotals(X_C_InvoiceTax.Table_Name, "c_invoice_id", getID(), false),
+					get_TrxName());
+			rs = ps.executeQuery();
+			if(rs.next()){
+				taxBaseAmt = rs.getBigDecimal("taxbaseamt");
+				automaticTaxesAmt = automaticTaxesAmt.add(rs.getBigDecimal("taxamt"));
+			}
+			
+			// Impuestos manuales
+			ps = DB.prepareStatement(
+					SalesUtil.getSQLTaxAmountsForTotals(X_C_InvoiceTax.Table_Name, "c_invoice_id", getID(), true),
+					get_TrxName());
+			rs = ps.executeQuery();
+			if(rs.next()){
+				manualTaxesAmt = manualTaxesAmt.add(rs.getBigDecimal("taxamt"));
+			}
+			
+			// Actualizar totales
+			setNetAmount(taxBaseAmt);
+			setTotalLines(taxBaseAmt.add(automaticTaxesAmt));
+			setGrandTotal(taxBaseAmt.add(automaticTaxesAmt).add(manualTaxesAmt));
+		} catch (Exception e) {
+			throw e;
+		} finally{
+			try {
+				if(rs != null)rs.close();
+				if(ps != null)ps.close();
+			} catch (Exception e2) {
+				throw e2;
+			}
+		}
+	}
+	
+	/**
+	 * @param bothMandatory
+	 *            true si se debe controlar ambas gestiones de descuentos y
+	 *            recargos
+	 * @return true si se debe gestionar descuentos y/o recargos, dependiendo
+	 *         del parámetro
+	 */
+	public boolean isManageDragOrderDiscountsSurcharges(boolean bothMandatory){
+		return bothMandatory?isManageDragOrderDiscounts() && isManageDragOrderSurcharges():
+			isManageDragOrderDiscounts() || isManageDragOrderSurcharges();
+	}
+
+	public boolean isDragDocumentSurchargesAmts() {
+		return dragDocumentSurchargesAmts;
+	}
+
+	public void setDragDocumentSurchargesAmts(boolean dragDocumentSurchargesAmts) {
+		this.dragDocumentSurchargesAmts = dragDocumentSurchargesAmts;
+	}
+	
+	/**
+	 * @return true si el estado es completo o cerrado, false caso contrario
+	 */
+	public boolean isInvoiceCompletedOrClosed(){
+		return MInvoice.DOCSTATUS_Closed.equals(getDocStatus())
+				|| MInvoice.DOCSTATUS_Completed.equals(getDocStatus());
+	}
+
 } // MInvoice
 
 /*

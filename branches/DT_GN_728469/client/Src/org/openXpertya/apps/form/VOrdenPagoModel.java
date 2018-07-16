@@ -1781,10 +1781,15 @@ public class VOrdenPagoModel {
 			return (MAllocationHdr.ALLOCATIONTYPE_AdvancedPaymentOrder);
 	}
 
-	protected String getAllocHdrDescription() {
-		String name = getAllocHdrDescriptionMsg();
-		return Msg.parseTranslation(getCtx(), name + " " + getInvoicesDate().toString().substring(0, 10) + " [" + name
-				+ " " + getHdrAllocationType() + "]");
+	protected String getAllocHdrDescription(MAllocationHdr hdr) {
+		String msg = getDescription();
+		// Descripción predefinida
+		if(Util.isEmpty(msg, true)){
+			String name = getAllocHdrDescriptionMsg();
+			msg = Msg.parseTranslation(getCtx(), name + " " + hdr.getDocumentNo() + " | " + getBPartner().getValue()
+					+ " - " + getBPartner().getName());
+		}
+		return msg;
 	}
 
 	/**
@@ -1813,7 +1818,7 @@ public class VOrdenPagoModel {
 	 */
 	private boolean generarPagosDesdeMediosPagos(List<MedioPago> pagos, MAllocationHdr hdr) throws Exception {
 
-		String HdrDescription = getAllocHdrDescription();
+		String HdrDescription = getAllocHdrDescription(hdr);
 		boolean saveOk = true;
 		String errorMsg = null;
 
@@ -1985,7 +1990,14 @@ public class VOrdenPagoModel {
 
 				pay.setDescription(HdrDescription);
 				pay.setIsReceipt(false);
-				pay.setC_DocType_ID(isSOTrx());
+				pay.setC_DocType_ID(DB.getSQLValue(getTrxName(), 	" SELECT C_DocType_ID " +
+																	" FROM C_DocType " +
+																	" WHERE AD_Client_ID = " + Env.getAD_Client_ID(m_ctx) +
+																	" AND IsActive = 'Y' " +
+																	" AND DocTypeKey = '"+(isSOTrx()?"CR":"VP")+"'"));
+				// En caso de que no se encuentre el doctype, se busca a partir del tipo de transaccion (cobro/pago)
+				if (pay.getC_DocType_ID()==0)
+					pay.setC_DocType_ID(isSOTrx());
 				pay.setC_BPartner_ID(C_BPartner_ID);
 
 				// El amount y currency se lo asigno en la segunda vuelta
@@ -2767,7 +2779,7 @@ public class VOrdenPagoModel {
 	 * Actualiza el AllocationHdr que representa el encabezado de una OP u OPA.
 	 */
 	private void updateAllocationHdr(MAllocationHdr hdr) {
-		String HdrDescription = getAllocHdrDescription();
+		String HdrDescription = getAllocHdrDescription(hdr);
 
 		hdr.setC_BPartner_ID(C_BPartner_ID);
 		hdr.setC_Currency_ID(C_Currency_ID);

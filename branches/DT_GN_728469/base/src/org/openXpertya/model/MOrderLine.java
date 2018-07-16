@@ -30,6 +30,7 @@ import org.openXpertya.util.DisplayUtil;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.MProductCache;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.ReservedUtil;
 import org.openXpertya.util.Util;
 
 /**
@@ -64,7 +65,7 @@ public class MOrderLine extends X_C_OrderLine {
 	private boolean allowAnyQty = false;
 	
 	private Integer tpvGeneratedInvoiceLineID = 0; 
-		
+	
 	/**
 	 * Lugar de Retiro. Utilizado para evitar reserva de stock en pedidos que se
 	 * retiran por TPV. Por defecto el lugar de retiro es Almacén lo cual
@@ -1105,7 +1106,7 @@ public class MOrderLine extends X_C_OrderLine {
             return success;
         }
 
-        if( !newRecord && is_ValueChanged( "C_Tax_ID" )) {
+		if (!newRecord && !getOrder().isTPVInstance() && is_ValueChanged("C_Tax_ID")) {
 
             // Recalculate Tax for old Tax
 
@@ -1166,18 +1167,20 @@ public class MOrderLine extends X_C_OrderLine {
      */
 
     private boolean updateHeader() {
-        // Recalculate Tax for this Tax
-    	if(!getOrder().isTPVInstance()){
-        	MOrderTax tax = MOrderTax.get( this,getPrecision(),false,get_TrxName());    // current Tax
-
-	        if( !tax.calculateTaxFromLines()) {
-	            return false;
-	        }
-	
-	        if( !tax.save( get_TrxName())) {
-	            return false;
-	        }
+    	if(getOrder().isTPVInstance()){
+    		return true;
     	}
+    	
+        // Recalculate Tax for this Tax
+    	MOrderTax tax = MOrderTax.get( this,getPrecision(),false,get_TrxName());    // current Tax
+
+        if( !tax.calculateTaxFromLines()) {
+            return false;
+        }
+
+        if( !tax.save( get_TrxName())) {
+            return false;
+        }
         // Recalcula los importes del encabezado del pedido.
         if (getOrder().updateAmounts()) {
         	return getOrder().save(); 
@@ -1258,14 +1261,7 @@ public class MOrderLine extends X_C_OrderLine {
      * @return Indica si la línea contiene artículos que aún no han sido entregados.
      */
     public boolean hasNotDeliveredProducts() {
-    	return getPendingDeliveredQty().compareTo(BigDecimal.ZERO) != 0;
-    }
-
-	/**
-	 * @return la diferencia entre la cantidad pedida y la cantidad entregada
-	 */
-    public BigDecimal getPendingDeliveredQty(){
-    	return getQtyOrdered().subtract(getQtyDelivered()).subtract(getQtyTransferred());
+    	return ReservedUtil.getOrderLinePending(this).compareTo(BigDecimal.ZERO) != 0;
     }
 
 	/**
