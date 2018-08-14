@@ -2225,6 +2225,27 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
         }                      // while count != 0
     }                          // explodeBOM
 
+    protected boolean isBinding(MDocType dt){
+    	// Binding
+        boolean binding = !dt.isProposal();
+        // Not binding - i.e. Target=0
+        if( //Voiding
+        	DOCACTION_Void.equals( getDocAction())
+        	//OR Closing Binding Quotation
+        	|| 
+        	( MDocType.DOCSUBTYPESO_Quotation.equals( dt.getDocSubTypeSO()) 
+        			&& DOCACTION_Close.equals( getDocAction())
+        	)
+        	//OR isDropShip
+        	|| isDropShip()
+        	) 
+        {
+            binding = false;
+        }
+        
+        return binding;
+    }
+    
     /**
      * Descripción de Método
      *
@@ -2244,18 +2265,7 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
 		// Este flag permite determinar si se debe realizar la reserva de stock
 		// y actualización del pendiente en la línea del pedido
         // Para presupuestos no se debe reservar
-        boolean binding = !dt.isProposal();
-
-        // Not binding - i.e. Target=0
-
-        if( ( MDocType.DOCSUBTYPESO_Quotation.equals( dt.getDocSubTypeSO()) 
-        				&& DOCACTION_Close.equals( getDocAction()))
-        		
-        		|| isDropShip()) {
-        	
-            binding = false;
-        }
-
+        boolean binding = isBinding(dt);
         boolean isSOTrx = isSOTrx();
 
         log.fine( "Binding=" + binding + " - IsSOTrx=" + isSOTrx );
@@ -2610,18 +2620,7 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
         }
 
         // Binding
-        boolean binding = !dt.isProposal();
-        // Not binding - i.e. Target=0
-        if(( MDocType.DOCSUBTYPESO_Quotation.equals( dt.getDocSubTypeSO()) 
-        			&& DOCACTION_Close.equals( getDocAction())
-        	)
-        	//OR isDropShip
-        	|| isDropShip()
-        	) 
-        {
-            binding = false;
-        }
-
+        boolean binding = isBinding(dt);
         boolean isSOTrx = isSOTrx();
 
         log.fine( "Binding=" + binding + " - IsSOTrx=" + isSOTrx );
@@ -3654,12 +3653,14 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
 					}
 					// Setear la cantidad transferida para que no se pueda remitir
 					orderLine.setQtyTransferred(orderLine.getQtyOrdered());
+					orderLine.setQtyReserved(ReservedUtil.getOrderLinePending(orderLine));
 					if(!orderLine.save()){
 						m_processMsg = CLogger.retrieveErrorAsString();
 						return DocAction.STATUS_Invalid;
 					}
 					// Setear la cantidad transferida a la línea original
 					refOrderLine.setQtyTransferred(orderLine.getQtyOrdered());
+					refOrderLine.setQtyReserved(ReservedUtil.getOrderLinePending(refOrderLine));
 					if(!refOrderLine.save()){
 						m_processMsg = CLogger.retrieveErrorAsString();
 						return DocAction.STATUS_Invalid;
@@ -4426,6 +4427,7 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
 			
             // Actualizar la cantidad reservada o pedida en el stock
 			if (MProduct.isProductStocked(getCtx(), line.getM_Product_ID())
+					&& isBinding(dt)
 					&& !MStorage.add(getCtx(), getM_Warehouse_ID(), locatorID,
 							line.getM_Product_ID(), 0, 0, BigDecimal.ZERO,
 							qtyReserved, qtyOrdered, get_TrxName())) {
@@ -4449,6 +4451,10 @@ public class MOrder extends X_C_Order implements DocAction, Authorization  {
      */
 
     public String getSummary() {
+    	if(!Util.isEmpty(super.getSummary(), true)){
+    		return super.getSummary();
+    	}
+    	
         StringBuffer sb = new StringBuffer();
 
         sb.append( getDocumentNo());
