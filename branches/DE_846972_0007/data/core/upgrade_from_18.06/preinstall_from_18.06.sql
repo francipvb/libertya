@@ -1644,3 +1644,6 @@ ALTER FUNCTION redirect_um(integer, integer, varchar, varchar, boolean)
   
 -- 20181207-1153 Indice para bpartners en allocations
 update ad_system set dummy = (SELECT addindexifnotexists('c_allocationhdr_bpartner','c_allocationhdr','c_bpartner_id'));
+
+-- 20181213-1730 Nueva columna para permitir indicar el dato No A La Orden en exportación de pagos electrónicos Patagonia
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_bpartner_banklist','nottoorder','character(1) NOT NULL DEFAULT ''N''::bpchar'));
