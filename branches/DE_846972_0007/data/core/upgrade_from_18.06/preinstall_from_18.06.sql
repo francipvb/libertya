@@ -1651,3 +1651,45 @@ update ad_system set dummy = (SELECT addcolumnifnotexists('c_bpartner_banklist',
 --20181221-1050 La unicidad de liquidaciones debe incluir la fecha de pago
 ALTER TABLE c_creditcardsettlement DROP CONSTRAINT uniquecreditcardsettlement;
 ALTER TABLE c_creditcardsettlement ADD CONSTRAINT uniquecreditcardsettlement UNIQUE (settlementno, c_bpartner_id, paymentdate);
+
+--20181221-1715 Nueva tabla temporal para el informe de Declaración de Valores para mejorar performance
+CREATE TABLE t_pos_declaracionvalores ( 
+  t_pos_declaracionvalores_id integer NOT NULL,
+  ad_pinstance_id integer NOT NULL,
+  ad_client_id integer NOT NULL,
+  ad_org_id integer NOT NULL,
+  isactive character(1) NOT NULL DEFAULT 'Y'::bpchar,
+  created timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  createdby integer NOT NULL,
+  updated timestamp without time zone NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone,
+  updatedby integer NOT NULL,
+  c_posjournal_id integer, 
+  ad_user_id integer, 
+  c_currency_id integer, 
+  datetrx date, 
+  docstatus character(2), 
+  category varchar, 
+  tendertype character(3), 
+  description text, 
+  c_charge_id integer, 
+  chargename character varying(60), 
+  doc_id integer, 
+  ingreso numeric(22,2), 
+  egreso numeric(22,2), 
+  c_invoice_id integer, 
+  invoice_documentno character varying(30), 
+  invoice_grandtotal numeric(22,2), 
+  entidadfinanciera_value varchar, 
+  entidadfinanciera_name varchar, 
+  bp_entidadfinanciera_value varchar, 
+  bp_entidadfinanciera_name varchar, 
+  cupon varchar, 
+  creditcard varchar, 
+  generated_invoice_documentno varchar, 
+  allocation_active character(1), 
+  c_pos_id integer, 
+  posname character varying(60),
+  CONSTRAINT t_pos_declaracionvalores_key PRIMARY KEY (t_pos_declaracionvalores_id)
+ );
+ALTER TABLE t_pos_declaracionvalores 
+  OWNER TO libertya;
