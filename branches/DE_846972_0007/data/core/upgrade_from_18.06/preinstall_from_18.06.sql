@@ -1647,3 +1647,7 @@ update ad_system set dummy = (SELECT addindexifnotexists('c_allocationhdr_bpartn
 
 -- 20181213-1730 Nueva columna para permitir indicar el dato No A La Orden en exportación de pagos electrónicos Patagonia
 update ad_system set dummy = (SELECT addcolumnifnotexists('c_bpartner_banklist','nottoorder','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+
+--20181221-1050 La unicidad de liquidaciones debe incluir la fecha de pago
+ALTER TABLE c_creditcardsettlement DROP CONSTRAINT uniquecreditcardsettlement;
+ALTER TABLE c_creditcardsettlement ADD CONSTRAINT uniquecreditcardsettlement UNIQUE (settlementno, c_bpartner_id, paymentdate);
