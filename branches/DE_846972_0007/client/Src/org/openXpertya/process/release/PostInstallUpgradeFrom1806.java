@@ -31,6 +31,11 @@ public class PostInstallUpgradeFrom1806 extends PluginPostInstallProcess {
 	protected final static String COUPON_LIST_BY_STATUS_JASPER_REPORT_UID = "RPRT2CORE-AD_JasperReport-1010181-20170125125731";
 	protected final static String COUPON_LIST_BY_STATUS_JASPER_REPORT_FILENAME = "CouponListByStatus.jasper";
 	
+	/** UID del Informe de Detalle de Margen Negativo */
+	// FIXME El UID se debe modificar cuando se realice el merge con el CORE ya que el UID va a cambiar
+	protected final static String NEGATIVE_MARGIN_DETAIL_JASPER_REPORT_UID = "T007-AD_Process-1010617";
+	protected final static String NEGATIVE_MARGIN_DETAIL_JASPER_REPORT_FILENAME = "NegativeMarginDetail.jrxml";
+	
 	@Override
 	protected String doIt() throws Exception {
 		super.doIt();
@@ -97,7 +102,6 @@ public class PostInstallUpgradeFrom1806 extends PluginPostInstallProcess {
 						.readBinaryFromJar(
 								jarFileURL,
 								getBinaryFileURL(ORDER_STATUS_REPORT_JASPER_REPORT_FILENAME)));
-
 		
 		// Listado de Cupones Totalizados por Estado
 		MJasperReport
@@ -109,6 +113,17 @@ public class PostInstallUpgradeFrom1806 extends PluginPostInstallProcess {
 							.readBinaryFromJar(
 									jarFileURL,
 									getBinaryFileURL(COUPON_LIST_BY_STATUS_JASPER_REPORT_FILENAME)));
+		
+		// Detalle de Margen Negativo
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				NEGATIVE_MARGIN_DETAIL_JASPER_REPORT_UID,
+				NEGATIVE_MARGIN_DETAIL_JASPER_REPORT_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(NEGATIVE_MARGIN_DETAIL_JASPER_REPORT_FILENAME)));
 		
 		return " ";
 	}
