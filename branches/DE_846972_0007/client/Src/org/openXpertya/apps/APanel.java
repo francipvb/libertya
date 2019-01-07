@@ -739,32 +739,8 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
 
                             // Query automatically if high volume and no query
 
-                            if( mTab.isHighVolume() && ( (query == null) ||!query.isActive())) {
-                            	int records = 0; //Luciano Disytel  - Portado por JorgeV 2009-03-02
-                				Find find = null;
-                				do{
-                					MField[] findFields = mTab.getFields();
-                					find = new Find (Env.getFrame(this), m_curWindowNo, mTab.getName(),
-                							mTab.getAD_Table_ID(), mTab.getTableName(), 
-                							mTab.getWhereExtended(), findFields, 10);
-                					if (find.getQuery()!=null)
-                						records = find.getNoOfRecords(find.getQuery(),false);
-                					else 
-                						records=0;
-                					if( records > MAX_RECORDS && find.getQuery() != null)
-                						ADialog.info(m_curWindowNo, this, "Resultado de busqueda muy extenso. " +
-                								"Cambie o agregue criterios de busqueda");
-                					if(find.getQuery() == null) break;
-                				}while(records > MAX_RECORDS);
-                				query = find.getQuery();
-                				find = null;
-                				//initialQuery = true;	//	don't switch to single row
-                				if(query == null){
-                					query = new MQuery(mTab.getTableName());
-                					query.addRestriction("1=2");
-                				}
-                                find = null;
-                			}
+                        	query = doHighVolume(mTab, query);
+                        	
                         } else if( wb != 0 )
 
                         // workbench dynamic query for dependent windows
@@ -933,6 +909,45 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
         return showWindow;
     }    // initPanel
 
+    /**
+	 * Realiza la gestión para tablas con Volumen Alto
+	 * 
+	 * @param mTab
+	 *            pestaña
+	 * @param query
+	 *            consulta actual
+	 * @return consulta modificada por búsqueda satisfactoria o cancelada
+	 */
+    private MQuery doHighVolume(MTab mTab, MQuery query){
+    	if( mTab.isHighVolume() && mTab.getTabLevel() == 0 && ( (query == null) ||!query.isActive())) {
+        	int records = 0; //Luciano Disytel  - Portado por JorgeV 2009-03-02
+			Find find = null;
+			do{
+				MField[] findFields = mTab.getFields();
+				find = new Find (Env.getFrame(this), m_curWindowNo, mTab.getName(),
+						mTab.getAD_Table_ID(), mTab.getTableName(), 
+						mTab.getWhereExtended(), findFields, 10);
+				if (find.getQuery()!=null)
+					records = find.getNoOfRecords(find.getQuery(),false);
+				else 
+					records=0;
+				if( records > MAX_RECORDS && find.getQuery() != null)
+					ADialog.info(m_curWindowNo, this, "Resultado de busqueda muy extenso. " +
+							"Cambie o agregue criterios de busqueda");
+				if(find.getQuery() == null) break;
+			}while(records > MAX_RECORDS);
+			query = find.getQuery();
+			find = null;
+			//initialQuery = true;	//	don't switch to single row
+			if(query == null){
+				query = new MQuery(mTab.getTableName());
+				query.addRestriction("1=2");
+			}
+            find = null;
+		}
+    	return query;
+    }
+    
     /**
      * Descripción de Método
      *
@@ -1340,6 +1355,10 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
             if( back && m_curTab.isCurrent()) {
                 m_curTab.dataRefresh();
             } else {                           // Requery & autoSize
+            	
+            	// Volumen alto a pestañas de nivel 0 en cualquier orden
+            	m_curTab.setQuery(doHighVolume(m_curTab, m_curTab.getQuery()));
+            	
                 m_curGC.query( m_onlyCurrentRows,m_onlyCurrentDays );
             }
 
