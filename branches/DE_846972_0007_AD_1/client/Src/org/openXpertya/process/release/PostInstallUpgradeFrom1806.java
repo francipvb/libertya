@@ -28,6 +28,7 @@ public class PostInstallUpgradeFrom1806 extends PluginPostInstallProcess {
 	protected final static String ORDER_STATUS_REPORT_JASPER_REPORT_FILENAME = "OrderStatus.jrxml";
 
 	/** UID del Informe de Pedidos por Línea de Artículo */
+	// FIXME Modificar UID cuando se mergee al trunk
 	protected final static String ORDERS_FOR_PRODUCT_LINES_REPORT_JASPER_REPORT_UID = "TA71-AD_Process-1010617";
 	protected final static String ORDERS_FOR_PRODUCT_LINES_REPORT_JASPER_REPORT_FILENAME = "OrdersForProductLines.jrxml";
 	
