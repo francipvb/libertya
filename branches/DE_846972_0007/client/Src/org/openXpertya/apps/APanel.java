@@ -57,7 +57,6 @@ import org.openXpertya.apps.form.VInOutMatrixDetail;
 import org.openXpertya.apps.form.VInvoiceRemGen;
 import org.openXpertya.apps.form.VOrderMatrixDetail;
 import org.openXpertya.apps.form.VPriceInstanceMatrix;
-import org.openXpertya.apps.form.VProdPricGen;
 import org.openXpertya.apps.form.VSocialConversation;
 import org.openXpertya.apps.form.VUpcInstanceMatrix;
 import org.openXpertya.apps.search.Find;
@@ -73,20 +72,16 @@ import org.openXpertya.grid.ed.VButton;
 import org.openXpertya.grid.ed.VDocAction;
 import org.openXpertya.model.DataStatusEvent;
 import org.openXpertya.model.DataStatusListener;
-import org.openXpertya.model.MCash;
 import org.openXpertya.model.MDocType;
 import org.openXpertya.model.MField;
-import org.openXpertya.model.MPriceListVersion;
 import org.openXpertya.model.MQuery;
 import org.openXpertya.model.MRole;
 import org.openXpertya.model.MTab;
 import org.openXpertya.model.MWindow;
 import org.openXpertya.model.MWindowVO;
 import org.openXpertya.model.MWorkbench;
-import org.openXpertya.model.M_Table;
 import org.openXpertya.model.M_Window;
 import org.openXpertya.model.X_C_OrderLine;
-import org.openXpertya.model.X_C_SocialConversation;
 import org.openXpertya.model.X_M_InOutLine;
 import org.openXpertya.print.AReport;
 import org.openXpertya.process.ProcessInfo;
@@ -94,7 +89,6 @@ import org.openXpertya.process.ProcessInfoUtil;
 import org.openXpertya.util.ASyncProcess;
 import org.openXpertya.util.CLogMgt;
 import org.openXpertya.util.CLogger;
-import org.openXpertya.util.DB;
 import org.openXpertya.util.Env;
 import org.openXpertya.util.Language;
 import org.openXpertya.util.Msg;
@@ -733,15 +727,7 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
 
                     if( tab == 0 ) {
 
-                        // initial user query for single workbench tab
-
-                        if( m_mWorkbench.getWindowCount() == 1 ) {
-
-                            // Query automatically if high volume and no query
-
-                        	query = doHighVolume(mTab, query);
-                        	
-                        } else if( wb != 0 )
+                        if( wb != 0 )
 
                         // workbench dynamic query for dependent windows
 
@@ -922,6 +908,8 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
     	if( mTab.isHighVolume() && mTab.getTabLevel() == 0 && ( (query == null) ||!query.isActive())) {
         	int records = 0; //Luciano Disytel  - Portado por JorgeV 2009-03-02
 			Find find = null;
+			// Al realizar búsquedas no se debe tener en cuenta los registros de últimos días
+			m_onlyCurrentRows = false; 
 			do{
 				MField[] findFields = mTab.getFields();
 				find = new Find (Env.getFrame(this), m_curWindowNo, mTab.getName(),
@@ -1356,10 +1344,11 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
                 m_curTab.dataRefresh();
             } else {                           // Requery & autoSize
             	
+            	boolean m_onlyCurrentRows_old = m_onlyCurrentRows;
             	// Volumen alto a pestañas de nivel 0 en cualquier orden
             	m_curTab.setQuery(doHighVolume(m_curTab, m_curTab.getQuery()));
-            	
                 m_curGC.query( m_onlyCurrentRows,m_onlyCurrentDays );
+                m_onlyCurrentRows = m_onlyCurrentRows_old;
             }
 
             // Set initial record
@@ -1719,7 +1708,7 @@ public final class APanel extends CPanel implements DataStatusListener,ChangeLis
         if( m_curAPanelTab != null ) {
             manualCmd = false;
         }
-
+        
         log.config( "Manual=" + manualCmd );
         m_errorDisplayed = false;
         m_curGC.stopEditor( true );
