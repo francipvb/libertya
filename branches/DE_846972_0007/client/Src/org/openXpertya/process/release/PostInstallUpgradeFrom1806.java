@@ -36,6 +36,10 @@ public class PostInstallUpgradeFrom1806 extends PluginPostInstallProcess {
 	protected final static String NEGATIVE_MARGIN_DETAIL_JASPER_REPORT_UID = "T007-AD_Process-1010617";
 	protected final static String NEGATIVE_MARGIN_DETAIL_JASPER_REPORT_FILENAME = "NegativeMarginDetail.jrxml";
 	
+	/** UID del informe de Movimientos Valorizados Detallado */
+	protected final static String VALUED_MOVEMENTS_DETAIL_JASPER_REPORT_UID = "CORE-AD_JasperReport-1010117";
+	protected final static String VALUED_MOVEMENTS_DETAIL_JASPER_REPORT_FILENAME = "ValuedMovementsDetail.jasper";
+	
 	@Override
 	protected String doIt() throws Exception {
 		super.doIt();
@@ -124,6 +128,17 @@ public class PostInstallUpgradeFrom1806 extends PluginPostInstallProcess {
 						.readBinaryFromJar(
 								jarFileURL,
 								getBinaryFileURL(NEGATIVE_MARGIN_DETAIL_JASPER_REPORT_FILENAME)));
+		
+		// Reporte de Movimientos Valorizados Detallado
+		MJasperReport
+			.updateBinaryData(
+					get_TrxName(),
+					getCtx(),
+					VALUED_MOVEMENTS_DETAIL_JASPER_REPORT_UID,
+					JarHelper
+							.readBinaryFromJar(
+									jarFileURL,
+									getBinaryFileURL(VALUED_MOVEMENTS_DETAIL_JASPER_REPORT_FILENAME)));
 		
 		return " ";
 	}
