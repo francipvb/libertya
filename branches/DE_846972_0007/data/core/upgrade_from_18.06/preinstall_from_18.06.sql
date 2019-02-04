@@ -1777,3 +1777,9 @@ $BODY$
   COST 100;
 ALTER FUNCTION update_ordered(integer, integer, integer, date)
   OWNER TO libertya;
+  
+--20190204-1820 Incorporación de nuevas columnas para registro de datos para importación de novedades
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_payment','banklist_registerno','character varying(60)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_payment','bank_payment_msg_description','character varying(255)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('i_paymentbanknews','payment_amount','numeric(20,2)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('i_paymentbanknews','payment_status_msg_description','character varying(255)'));
