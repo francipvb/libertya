@@ -1783,3 +1783,6 @@ update ad_system set dummy = (SELECT addcolumnifnotexists('c_payment','banklist_
 update ad_system set dummy = (SELECT addcolumnifnotexists('c_payment','bank_payment_msg_description','character varying(255)'));
 update ad_system set dummy = (SELECT addcolumnifnotexists('i_paymentbanknews','payment_amount','numeric(20,2)'));
 update ad_system set dummy = (SELECT addcolumnifnotexists('i_paymentbanknews','payment_status_msg_description','character varying(255)'));
+
+--20190204-1820 Incorporación de nuevas columnas para registro de datos para importación de novedades
+update ad_system set dummy = (SELECT addcolumnifnotexists('i_gljournal','importonlyjournal','character(1)'));
