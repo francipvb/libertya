@@ -1847,3 +1847,6 @@ WITH (
 );
 ALTER TABLE c_controlador_fiscal_closing_info
   OWNER TO libertya;
+
+--20190403-1500 Cuentas contables ajustables por índice de inflación
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_elementvalue','isadjustable','character(1) NOT NULL DEFAULT ''N''::bpchar'));
