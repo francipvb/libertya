@@ -1864,7 +1864,7 @@ CREATE TABLE c_inflation_index
   updatedby integer NOT NULL,
   c_period_id integer NOT NULL,
   description character varying(255),
-  inflationindex numeric(4,2) NOT NULL DEFAULT 0,
+  inflationindex numeric(8,4) NOT NULL DEFAULT 0,
   CONSTRAINT c_inflation_index_key PRIMARY KEY (c_inflation_index_id),
   CONSTRAINT adclient_inflation_index FOREIGN KEY (ad_client_id)
       REFERENCES ad_client (ad_client_id) MATCH SIMPLE
@@ -1881,3 +1881,8 @@ WITH (
 );
 ALTER TABLE c_inflation_index
   OWNER TO libertya;
+
+--20190405-1500 Nuevas columnas para extensión de informe de balance contable para aplicar índices de inflación
+update ad_system set dummy = (SELECT addcolumnifnotexists('t_acct_balance','isadjustable','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('t_acct_balance','balanceadjusted','numeric(12,2) DEFAULT 0'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('t_acct_balance','ApplyInflationIndex','character(1) NOT NULL DEFAULT ''N''::bpchar'));
