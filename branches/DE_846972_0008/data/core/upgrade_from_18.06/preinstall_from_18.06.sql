@@ -1786,3 +1786,8 @@ update ad_system set dummy = (SELECT addcolumnifnotexists('i_paymentbanknews','p
 
 --20190204-1820 Incorporación de nuevas columnas para registro de datos para importación de novedades
 update ad_system set dummy = (SELECT addcolumnifnotexists('i_gljournal','importonlyjournal','character(1)'));
+
+--20190424-1100 Nueva configuración de proveedor para transferencias electrónicas
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_BPartner_BankList','cbu','character varying(30)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_BPartner_BankList','transferbankaccounttype','character(2)'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('C_BPartner_BankList','transferconcept','character(3)'));
