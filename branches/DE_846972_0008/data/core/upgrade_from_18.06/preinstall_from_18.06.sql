@@ -1791,3 +1791,6 @@ update ad_system set dummy = (SELECT addcolumnifnotexists('i_gljournal','importo
 update ad_system set dummy = (SELECT addcolumnifnotexists('C_BPartner_BankList','cbu','character varying(30)'));
 update ad_system set dummy = (SELECT addcolumnifnotexists('C_BPartner_BankList','transferbankaccounttype','character(2)'));
 update ad_system set dummy = (SELECT addcolumnifnotexists('C_BPartner_BankList','transferconcept','character(3)'));
+
+--20190430-2230 Incorporación del dato del cobro que genera el descuento/recargo en el TPV
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_documentdiscount','c_payment_id','integer'));
