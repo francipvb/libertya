@@ -2326,3 +2326,6 @@ update ad_column set ad_reference_id = 30, updated=now() where ad_componentobjec
 
 -- 20190514-110000.  Estado de la sincronizacion.  P: Pending - S: Sincronizado	- E: Error
 alter table c_promotion_code add column suitesyncstatus character(1) not null default 'P';
+
+--20190521-1200 Nueva columna en boletas de depósito para registrar cargos contables y trasladarlos al pago generado
+update ad_system set dummy = (SELECT addcolumnifnotexists('m_boletadeposito','accounting_c_charge_id','integer'));
