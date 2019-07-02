@@ -7,7 +7,7 @@ import java.math.*;
 import org.openXpertya.util.*;
 /** Modelo Generado por T_Acct_Balance
  *  @author Comunidad de Desarrollo Libertya*         *Basado en Codigo Original Modificado, Revisado y Optimizado de:*         * Jorg Janke 
- *  @version  - 2014-03-12 16:09:56.329 */
+ *  @version  - 2019-07-01 20:36:50.921 */
 public class X_T_Acct_Balance extends org.openXpertya.model.PO
 {
 /** Constructor estándar */
@@ -47,20 +47,6 @@ public String toString()
 StringBuffer sb = new StringBuffer ("X_T_Acct_Balance[").append(getID()).append("]");
 return sb.toString();
 }
-/** Set Process Instance.
-Instance of the process */
-public void setAD_PInstance_ID (int AD_PInstance_ID)
-{
-set_Value ("AD_PInstance_ID", new Integer(AD_PInstance_ID));
-}
-/** Get Process Instance.
-Instance of the process */
-public int getAD_PInstance_ID() 
-{
-Integer ii = (Integer)get_Value("AD_PInstance_ID");
-if (ii == null) return 0;
-return ii.intValue();
-}
 /** Set Account Code */
 public void setAcct_Code (String Acct_Code)
 {
@@ -91,6 +77,20 @@ public String getAcct_Description()
 {
 return (String)get_Value("Acct_Description");
 }
+/** Set Process Instance.
+Instance of the process */
+public void setAD_PInstance_ID (int AD_PInstance_ID)
+{
+set_Value ("AD_PInstance_ID", new Integer(AD_PInstance_ID));
+}
+/** Get Process Instance.
+Instance of the process */
+public int getAD_PInstance_ID() 
+{
+Integer ii = (Integer)get_Value("AD_PInstance_ID");
+if (ii == null) return 0;
+return ii.intValue();
+}
 /** Set Balance */
 public void setBalance (BigDecimal Balance)
 {
@@ -119,6 +119,7 @@ Integer ii = (Integer)get_Value("C_ElementValue_ID");
 if (ii == null) return 0;
 return ii.intValue();
 }
+public static final int C_ELEMENTVALUE_TO_ID_AD_Reference_ID = MReference.getReferenceID("C_ElementValue (all)");
 /** Set C_Elementvalue_To_ID */
 public void setC_Elementvalue_To_ID (int C_Elementvalue_To_ID)
 {
@@ -156,6 +157,28 @@ public BigDecimal getDebit()
 BigDecimal bd = (BigDecimal)get_Value("Debit");
 if (bd == null) return Env.ZERO;
 return bd;
+}
+public static final int FACTACCTTABLE_AD_Reference_ID = MReference.getReferenceID("Accounting data source");
+/** Fact Acct = Fact_Acct */
+public static final String FACTACCTTABLE_FactAcct = "Fact_Acct";
+/** Fact Acct Balance = Fact_Acct_Balance */
+public static final String FACTACCTTABLE_FactAcctBalance = "Fact_Acct_Balance";
+/** Set Accounting Data Source */
+public void setFactAcctTable (String FactAcctTable)
+{
+if (FactAcctTable == null || FactAcctTable.equals("Fact_Acct") || FactAcctTable.equals("Fact_Acct_Balance") || ( refContainsValue("TACC-AD_Reference-1010416", FactAcctTable) ) );
+ else throw new IllegalArgumentException ("FactAcctTable Invalid value: " + FactAcctTable + ".  Valid: " +  refValidOptions("TACC-AD_Reference-1010416") );
+if (FactAcctTable != null && FactAcctTable.length() > 20)
+{
+log.warning("Length > 20 - truncated");
+FactAcctTable = FactAcctTable.substring(0,20);
+}
+set_Value ("FactAcctTable", FactAcctTable);
+}
+/** Get Accounting Data Source */
+public String getFactAcctTable() 
+{
+return (String)get_Value("FactAcctTable");
 }
 /** Set Hierarchical Code */
 public void setHierarchicalCode (String HierarchicalCode)

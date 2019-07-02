@@ -18,12 +18,18 @@ public class AccountsGeneralBalance extends AccountsHierarchicalReport {
 	protected Timestamp  p_DateAcct_To;
 	/** Booleano que determina si actualizar el balance o no */
 	protected boolean updateBalance = true;
+	/** Tabla origen de los datos */
+	protected String p_factAcctTable = "Fact_Acct";
 	
 	@Override
 	protected boolean loadParameter(String name, ProcessInfoParameter param) {
 		if( name.equalsIgnoreCase( "DateAcct" )) {
 			p_DateAcct_From = ( Timestamp )param.getParameter();
 			p_DateAcct_To = ( Timestamp )param.getParameter_To();
+			return true;
+		}
+		if( name.equalsIgnoreCase( "FactAcctTable" )) {
+			p_factAcctTable = (String)param.getParameter();
 			return true;
 		}
 		return false;
@@ -38,7 +44,7 @@ public class AccountsGeneralBalance extends AccountsHierarchicalReport {
 		sqlView.append(" SELECT ev.C_ElementValue_ID, tb.C_ElementValue_To_ID, tb.HierarchicalCode, COALESCE(SUM(fa.AmtAcctDr),0) as AmtAcctDr, COALESCE(SUM(fa.AmtAcctCr),0) as AmtAcctCr "); 
 		
 		sqlView.append(" FROM C_ElementValue ev ");
-		sqlView.append(" LEFT JOIN Fact_Acct fa ON (fa.Account_ID = ev.C_ElementValue_ID) ");
+		sqlView.append(" LEFT JOIN "+p_factAcctTable+" fa ON (fa.Account_ID = ev.C_ElementValue_ID) ");
 		sqlView.append(" INNER JOIN " + getReportTableName() + " tb ON (tb.C_ElementValue_ID = ev.C_ElementValue_ID AND tb.AD_PInstance_ID = ?) ");
 		sqlView.append(" WHERE ev.IsActive = 'Y' ");
 		sqlView.append("   AND fa.AD_Client_ID = ").append(getAD_Client_ID());
@@ -204,6 +210,7 @@ public class AccountsGeneralBalance extends AccountsHierarchicalReport {
 		//line.setAD_Org_ID(accountElement.orgID);
 		line.setAD_Org_ID(p_AD_Org_ID);
 		line.setHierarchicalCode(accountElement.hierarchicalCode);
+		line.setFactAcctTable(p_factAcctTable);
 		
 		// El Debe y Haber se calculan masivamente en el doIt. 
 		line.setDebit(null);
