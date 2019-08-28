@@ -10,10 +10,15 @@ import java.util.Properties;
 
 import org.libertya.ws.bean.parameter.DocumentParameterBean;
 import org.libertya.ws.bean.result.DocumentResultBean;
+import org.openXpertya.model.MPreference;
 import org.openXpertya.model.MReplicationHost;
+import org.openXpertya.model.X_C_Invoice;
+import org.openXpertya.model.X_C_Order;
+import org.openXpertya.model.X_M_InOut;
 import org.openXpertya.replication.ReplicationConstants;
 import org.openXpertya.util.DB;
 import org.openXpertya.util.Msg;
+import org.openXpertya.util.Util;
 
 import ws.libertya.org.LibertyaWSServiceLocator;
 import ws.libertya.org.LibertyaWSSoapBindingStub;
@@ -22,6 +27,29 @@ import ws.libertya.org.LibertyaWSSoapBindingStub;
 
 public class RemoteOrderLineIntegrityCheck {
 
+	/** Tiempo de timeout por defecto */
+	public static final int DEFAULT_TIMEOUT_MS = 30 * 1000;
+	/** Preferencia Timeout de invocacion a la operación */
+	public static final String REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_PROCESS_PROPERTY 			= "REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_PROCESS";
+	/** Preferencia Timeout de invocacion a la operación */
+	public static final String REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_PROCESS_TIMEOUT_PROPERTY 	= "REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_PROCESS_TIMEOUT";
+	/** Preferencia Timeout de invocacion a la operación para el createFrom */
+	public static final String REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_CREATEFROM_PROPERTY 			= "REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_CREATEFROM";
+	/** Preferencia Timeout de invocacion a la operación para el createFrom */
+	public static final String REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_CREATEFROM_TIMEOUT_PROPERTY 	= "REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_CREATEFROM_TIMEOUT"; 
+	
+	/** Tipo de Error: Error en la conexion remota */
+	public static final int ERROR_TYPE_CONNECTION 	= 1;
+	/** Tipo de Error: Error en el proceso de determinacion de valores */
+	public static final int ERROR_TYPE_INTERACTION 	= 2;
+	/** Tipo de Error: Discrepancia en la validacion de cantidades */
+	public static final int ERROR_TYPE_INTEGRITY 	= 3;
+
+	/** Posibles etapas de validacion: durante el crearDesde o bien al procesar */
+	public static enum ValidationStage {AT_CREATEFROM, AT_PROCESS};
+	
+	// Etapa actual de validacion
+	public ValidationStage currentStage = null;
 	// Contexto
 	protected Properties ctx = null;
 	// Trx
@@ -39,10 +67,11 @@ public class RemoteOrderLineIntegrityCheck {
 
 	
 	/** Constructor */
-	public RemoteOrderLineIntegrityCheck(Properties ctx, String trx, Integer orderID) {
+	public RemoteOrderLineIntegrityCheck(Properties ctx, String trx, Integer orderID, ValidationStage stage) {
 		this.ctx = ctx;
 		this.trx = trx;
 		this.orderID = orderID;
+		this.currentStage = stage;
 		shouldCheckUpdate();
 	}
 	
@@ -102,16 +131,23 @@ public class RemoteOrderLineIntegrityCheck {
 		setValuesToOrderLine(orderLineID, qtyOrdered, qtyReserved, qtyDelivered, qtyTransferred, qtyInvoiced, qtyReturned, false);		
 	}
 	
-	/** Incorpora todas las lineas de pedido a partir de las lineas de un remito dado */
-	public void setAllValuesFromInOut(int inOutID, boolean setQtyOrdered, boolean setQtyReserved, boolean setQtyDelivered, boolean setQtyTransferred, boolean setQtyInvoiced, boolean setQtyReturned, boolean current) {
+	/** Incorpora todas las lineas de pedido a partir de las lineas de un documento dado (remito / factura) */
+	public void setAllValuesFromDocument(String docTableName, int documentID, boolean setQtyOrdered, boolean setQtyReserved, boolean setQtyDelivered, boolean setQtyTransferred, boolean setQtyInvoiced, boolean setQtyReturned, boolean current) {
 		PreparedStatement pstmt = null;
 		ResultSet rs = null;
 		try {
-			pstmt = DB.prepareStatement(" SELECT ol.C_OrderLine_ID, ol.retrieveUID, ol.qtyOrdered, ol.qtyReserved, ol.qtyDelivered, ol.qtyTransferred, ol.qtyInvoiced, ol.qtyReturned " +
-										" FROM C_OrderLine ol " +
-										" INNER JOIN M_InOutLine iol ON ol.C_OrderLine_ID = iol.C_OrderLine_ID " +
-										" INNER JOIN M_InOut io ON iol.M_InOut_ID = io.M_InOut_ID " +
-										" WHERE io.M_InOut_ID = " + inOutID, trx);
+			// Columnas a recuperar
+			String sqlCols =	" SELECT ol.C_OrderLine_ID, ol.retrieveUID, ol.qtyOrdered, ol.qtyReserved, ol.qtyDelivered, ol.qtyTransferred, ol.qtyInvoiced, ol.qtyReturned ";
+			// From generico si es desde las lineas de remito o factura 			
+			String sqlFrom = 	" FROM C_OrderLine ol " +
+								" INNER JOIN " + docTableName + "Line docl ON ol.C_OrderLine_ID = docl.C_OrderLine_ID " +
+								" INNER JOIN " + docTableName + " doc ON docl." + docTableName + "_ID = doc." + docTableName + "_ID " + 
+								" WHERE doc." + docTableName + "_ID = " + documentID;
+			// From especifico si son las lineas de un pedido (todas las lineas)
+			if (X_C_Order.Table_Name.equals(docTableName)) 
+				sqlFrom =		" FROM C_OrderLine ol WHERE C_Order_ID = " + documentID;
+			
+			pstmt = DB.prepareStatement(sqlCols + sqlFrom, trx);
 			rs = pstmt.executeQuery();
 			while (rs.next()) {
 				setValuesToOrderLine(	rs.getInt("c_orderline_id"), 
@@ -132,19 +168,39 @@ public class RemoteOrderLineIntegrityCheck {
 				if (pstmt!=null)
 					pstmt.close();
 			} catch (Exception e) {
-				
+				e.printStackTrace();
 			}
 		}
 	}
 	
 	/** Incorpora todos los valores actuales de las lineas de pedido a partir de las lineas de un remito dado */
 	public void setAllCurrentValuesFromInOut(int inOutID, boolean setQtyOrdered, boolean setQtyReserved, boolean setQtyDelivered, boolean setQtyTransferred, boolean setQtyInvoiced, boolean setQtyReturned) {
-		setAllValuesFromInOut(inOutID, setQtyOrdered, setQtyReserved, setQtyDelivered, setQtyTransferred, setQtyInvoiced, setQtyReturned, true);		
+		setAllValuesFromDocument(X_M_InOut.Table_Name, inOutID, setQtyOrdered, setQtyReserved, setQtyDelivered, setQtyTransferred, setQtyInvoiced, setQtyReturned, true);		
 	}
 	
 	/** Incorpora todos los valores nuevos de las lineas pedido a partir de las lineas de un remito dado */
 	public void setAllNewValuesFromInOut(int inOutID, boolean setQtyOrdered, boolean setQtyReserved, boolean setQtyDelivered, boolean setQtyTransferred, boolean setQtyInvoiced, boolean setQtyReturned) {
-		setAllValuesFromInOut(inOutID, setQtyOrdered, setQtyReserved, setQtyDelivered, setQtyTransferred, setQtyInvoiced, setQtyReturned, false);
+		setAllValuesFromDocument(X_M_InOut.Table_Name, inOutID, setQtyOrdered, setQtyReserved, setQtyDelivered, setQtyTransferred, setQtyInvoiced, setQtyReturned, false);
+	}
+	
+	/** Incorpora todos los valores actuales de las lineas de pedido a partir de las lineas de una factura dada */
+	public void setAllCurrentValuesFromInvoice(int invoiceID, boolean setQtyOrdered, boolean setQtyReserved, boolean setQtyDelivered, boolean setQtyTransferred, boolean setQtyInvoiced, boolean setQtyReturned) {
+		setAllValuesFromDocument(X_C_Invoice.Table_Name, invoiceID, setQtyOrdered, setQtyReserved, setQtyDelivered, setQtyTransferred, setQtyInvoiced, setQtyReturned, true);		
+	}
+	
+	/** Incorpora todos los valores nuevos de las lineas pedido a partir de las lineas de una factura dada */
+	public void setAllNewValuesFromInvoice(int invoiceID, boolean setQtyOrdered, boolean setQtyReserved, boolean setQtyDelivered, boolean setQtyTransferred, boolean setQtyInvoiced, boolean setQtyReturned) {
+		setAllValuesFromDocument(X_C_Invoice.Table_Name, invoiceID, setQtyOrdered, setQtyReserved, setQtyDelivered, setQtyTransferred, setQtyInvoiced, setQtyReturned, false);
+	}
+	
+	/** Incorpora todos los valores actuales de las lineas de un pedido en particular */
+	public void setAllCurrentValuesFromOrder(int orderID, boolean setQtyOrdered, boolean setQtyReserved, boolean setQtyDelivered, boolean setQtyTransferred, boolean setQtyInvoiced, boolean setQtyReturned) {
+		setAllValuesFromDocument(X_C_Order.Table_Name, orderID, setQtyOrdered, setQtyReserved, setQtyDelivered, setQtyTransferred, setQtyInvoiced, setQtyReturned, true);
+	}
+	
+	/** Incorpora todos los valores nuevos de las lineas de un pedido en particular */
+	public void setAllNewValuesFromOrder(int orderID, boolean setQtyOrdered, boolean setQtyReserved, boolean setQtyDelivered, boolean setQtyTransferred, boolean setQtyInvoiced, boolean setQtyReturned) {
+		setAllValuesFromDocument(X_C_Order.Table_Name, orderID, setQtyOrdered, setQtyReserved, setQtyDelivered, setQtyTransferred, setQtyInvoiced, setQtyReturned, false);
 	}
 	
 	/** Incorpora a la map unicamente si el value no es un valor nulo */
@@ -170,7 +226,7 @@ public class RemoteOrderLineIntegrityCheck {
 													rh.getHostPort() + 			// Ejemplo:  "8080"
 													rh.getHostAccessKey());
 			ws.libertya.org.LibertyaWS lyws = locator.getLibertyaWS();
-			((LibertyaWSSoapBindingStub)lyws).setTimeout(20 * 1000); // milisegundos TODO: DESHARDCODE
+			((LibertyaWSSoapBindingStub)lyws).setTimeout(getTimeOutMS()); 
 
 			// Rellenar argumentos e invocar
 			DocumentResultBean response = lyws.orderLinesCheckUpdate(loadBean(rh.getUserName(), rh.getPassword(), 0, 0));
@@ -178,6 +234,7 @@ public class RemoteOrderLineIntegrityCheck {
 		} catch (Exception e) {
 			result.error = true;
 			result.errorMsg = e.getMessage();
+			result.errorType = ERROR_TYPE_CONNECTION;
 		}
 		return result;
 	}
@@ -210,6 +267,7 @@ public class RemoteOrderLineIntegrityCheck {
 	protected Result loadResponse(DocumentResultBean response) {
 		result.error = response.isError();
 		result.errorMsg = response.getErrorMsg();
+		result.errorType = (response.getDocumentLines().size() == 0 ? ERROR_TYPE_INTERACTION : ERROR_TYPE_INTEGRITY);
 		// Iterar por las lineas de la respuesta
 		for (HashMap<String, String> lines : response.getDocumentLines()) {
 			Data correction = new Data(getIDFromUID(lines.get(ReplicationConstants.COLUMN_RETRIEVEUID)));
@@ -322,10 +380,10 @@ public class RemoteOrderLineIntegrityCheck {
 		return null;
 	}
 	
-	/** Las lineas de pedido a modificar son de un host remoto? */
+	/** Deben realizarse validaciones remotas? */
 	public boolean shouldCheckUpdate() {
-		// Unicamente si estamos bajo replicacion, considerar el chequeo de consistencias
-		return (getThisHostOrg() != -1) && (getRemoteHostOrg() != getThisHostOrg());
+		// Unicamente si estamos bajo replicacion y las organizaciones del pedido y local no coinciden, considerar el chequeo de consistencias
+		return shouldValidateStage() && (getThisHostOrg() != -1) && (getRemoteHostOrg() != getThisHostOrg());
 	}
 
 	/** Retorna la organizacion de este host. Si ya fue invocado, reutiliza el valor de la primera invocacion */
@@ -343,7 +401,31 @@ public class RemoteOrderLineIntegrityCheck {
 		return remoteHostOrg;
 	}
 	
+	/** Retorna el time out previo a cancelar la operacion, paar la etapa actual */
+	protected int getTimeOutMS() {
+		int retValue = DEFAULT_TIMEOUT_MS;
+		try {
+			String property = (currentStage == ValidationStage.AT_CREATEFROM ? REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_CREATEFROM_TIMEOUT_PROPERTY : REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_PROCESS_TIMEOUT_PROPERTY);
+			String timeOut = MPreference.GetCustomPreferenceValue(property); 
+			retValue = Integer.parseInt(timeOut);
+		} catch (Exception e) { /* Si no existe o no es parseable, ignorar */}		
+		return retValue;
+	}
 	
+	/** Retorna si en la etapa actual hay que validar/recuperar info remota  */
+	protected boolean shouldValidateStage() {
+		boolean retValue = true;
+		try {
+			String property = (currentStage == ValidationStage.AT_CREATEFROM ? REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_CREATEFROM_PROPERTY : REMOTE_ORDERLINE_INTEGRITY_CHECK_AT_PROCESS_PROPERTY);
+			String value = MPreference.GetCustomPreferenceValue(property);
+			if (!Util.isEmpty(value)) {
+				retValue = "Y".equalsIgnoreCase(value);
+			}
+		} catch (Exception e) { /* Si no existe o no es parseable, ignorar */}		
+		return retValue;
+	}
+	
+		
 	/**
 	 * 	Informacion de entrada
 	 */
@@ -370,6 +452,8 @@ public class RemoteOrderLineIntegrityCheck {
 	public class Result {
 		// Se recibio un error?
 		public boolean error = false;
+		// Tipo de error, si es que hay
+		public Integer errorType = null;
 		// Mensaje de error, si es que hay
 		public String errorMsg = null;
 		// Valores actuales reales recibidos que deberan corregirse localmente
