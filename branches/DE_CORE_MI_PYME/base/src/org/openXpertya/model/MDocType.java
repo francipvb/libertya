@@ -869,6 +869,13 @@ public class MDocType extends X_C_DocType {
 		return (seqReference.toString().compareTo(documentNo) == 0);
 	}
 	
+	/** Retorna true si el tipo de documento es de tipo MiPyME o false en caso contrario */
+	public boolean isMiPyME() {
+		return 	getDocTypeKey().startsWith(DOCTYPE_CustomerInvoice_MiPyME) ||
+				getDocTypeKey().startsWith(DOCTYPE_CustomerDebitNote_MiPyME) ||
+				getDocTypeKey().startsWith(DOCTYPE_CustomerCreditNote_MiPyME);
+	}
+	
 }	// MDocType
 
 
