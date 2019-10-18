@@ -415,3 +415,6 @@ update ad_system set dummy = (SELECT addcolumnifnotexists('c_orderline','qtydiff
 update ad_system set dummy = (SELECT addcolumnifnotexists('c_orderline','diffamt','numeric(22,4)'));
 update ad_system set dummy = (SELECT addcolumnifnotexists('c_invoice','c_order_orig_id','integer'));
 update ad_system set dummy = (SELECT addcolumnifnotexists('t_cuentacorriente','IncludeCreditNotesRequest','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+
+--20191018-1303 Los codigos MiPyME requieren al menos una longitud de 3. Se amplia a un valor mayor para soportar eventuales nuevos codigos de mayor longitud
+alter table c_doctype alter column docsubtypecae type varchar(10);
