@@ -554,24 +554,7 @@ public class LaunchInvoice extends SvrProcess {
 
 	private Timestamp getFechaVto(MInvoice invoice)
 	{
-		try 
-		{
-			int invoicePayScheduleID = 0;
-			PreparedStatement stmt = DB.prepareStatement("SELECT c_invoicepayschedule_id FROM c_invoice_v WHERE c_invoice_id = ? ORDER BY c_invoicepayschedule_id DESC");
-			stmt.setInt(1, invoice.getC_Invoice_ID());
-			ResultSet rs = stmt.executeQuery();
-			if (!rs.next() || rs.getInt(1) == 0)
-				return null;
-			
-			invoicePayScheduleID = rs.getInt(1);
-			MInvoicePaySchedule invoicePaySchedule = new MInvoicePaySchedule(getCtx(), invoicePayScheduleID, null);
-			return invoicePaySchedule.getDueDate();	
-		}
-		catch (Exception e)
-		{
-			e.printStackTrace();
-			return null;
-		}
+		return invoice.getFechaVto();
 	}	
 	
 	protected void initializeAmts(MInvoice invoice){

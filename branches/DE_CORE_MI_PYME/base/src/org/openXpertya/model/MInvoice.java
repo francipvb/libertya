@@ -6916,6 +6916,40 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 		}
 	}
 	
+	// Retorna la fecha de vencimiento de la factura basado en el payschedule. 
+	public Timestamp getFechaVto()
+	{
+		ResultSet rs = null;
+		PreparedStatement stmt = null;
+		try 
+		{
+			int invoicePayScheduleID = 0;
+			stmt = DB.prepareStatement("SELECT c_invoicepayschedule_id FROM c_invoice_v WHERE c_invoice_id = ? ORDER BY c_invoicepayschedule_id DESC");
+			stmt.setInt(1, getC_Invoice_ID());
+			rs = stmt.executeQuery();
+			if (!rs.next() || rs.getInt(1) == 0)
+				return null;
+			
+			invoicePayScheduleID = rs.getInt(1);
+			MInvoicePaySchedule invoicePaySchedule = new MInvoicePaySchedule(getCtx(), invoicePayScheduleID, get_TrxName());
+			return invoicePaySchedule.getDueDate();	
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+			return null;
+		} finally { 
+			try {
+				rs.close();
+				stmt.close();
+				rs = null;
+				stmt = null;
+			} catch (Exception e) {
+				
+			}
+		}
+	}	
+	
 } // MInvoice
 
 /*
