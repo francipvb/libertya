@@ -257,10 +257,9 @@ public class LaunchInvoice extends SvrProcess {
 		try{
 			Set<String> inouts = JasperReportsUtil.getInOutsDocumentsNo(
 				getCtx(), invoice, get_TrxName());
-			Iterator<String> inoutsIt = inouts.iterator();
 			int i = 1;
-			while (inoutsIt.hasNext()) {
-				jasperwrapper.addParameter("NROREMITO_"+(i++), inoutsIt.next());
+			for (String idocumentNo : inouts) {
+				jasperwrapper.addParameter("NROREMITO_"+(i++), idocumentNo);
 			}
 		} catch(Exception e){
 			log.severe("Error loading invoice in outs");
