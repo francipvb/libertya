@@ -1,0 +1,101 @@
+<!-- ===================================================================== -->
+<!-- Cambios en la estructura de archivos Libertya a reflejar en un deploy -->
+<!-- ===================================================================== -->
+
+<!-- 
+
+Ejemplos de cambios
+"""""""""""""""""""
+
+20140401-1330. Eliminar archivo. 
+	<delete file="${TARGET_DIR}/OXPXLib.jar" failonerror="no" /> 
+
+20140401-1331. Crear un nuevo directorio:
+	<mkdir dir="${TARGET_DIR}/nuevoDir" />
+
+20140402-1400. Nueva version de mail.jar
+	<copy file="${SOURCE_DIR}/mail.jar" todir="${TARGET_DIR}/lib" overwrite="yes" />
+
+20140407-2230. Nueva versión de librería, cambiando su nombre:
+	<copy file="${SOURCE_DIR}/postgresql82.jar" tofile="${TARGET_DIR}/lib/postgresql.jar" overwrite="yes" />
+
+20140410-0925. Invocar un programa externo (inicialmente no habría necesidad de esta funcionalidad):
+	<exec dir="${TARGET_DIR}" executable="/ServidorOXP/ConfigurarAuto.sh"
+	
+ -->
+
+
+<project name="deployer" default="deploy" basedir=".">
+    
+    <!-- =============================================== -->
+    <!-- CONSTANTES A UTILIZAR A LO LARGO DEL DESCRIPTOR -->
+    <!-- =============================================== -->
+    
+    <!-- Directorio destino se hereda de la configuración de unattendedUpgrade -->
+    <property name="TARGET_DIR" value="${oxpDir}${upgradeSuffix}"/>
+    
+    <!-- Directorio origen donde se encuentran los archivos -->
+    <property name="SOURCE_DIR" value="changeset"/>
+    	
+    <!-- ==================== -->
+    <!-- TARGET DE INVOCACION -->
+    <!-- ==================== -->
+    <target name="deploy" description="Actualización de archivos a instalar">
+        
+        <!-- Esta seteada TARGET_DIR? De no estarlo es un problema grave -->
+		<fail message="No se ha seteado TARGET_DIR">
+			<condition><not><isset property="TARGET_DIR"/></not></condition>
+		</fail>
+	        
+		<!-- ================================ -->
+		<!-- Nomina de cambios a continuación -->
+		<!-- ================================ -->
+		<!-- 20150427-1153 URL Completa para invocacion a script -->
+		<copy file="${SOURCE_DIR}/restartPostgres.sh" todir="${TARGET_DIR}/utils" overwrite="yes" />
+		
+		<!-- 20150504-1326 Ampliar valores de gestion de memoria para JBoss -->
+		<!-- 20150622-1106 Forzar encoding a UTF8 -->
+		<copy file="${SOURCE_DIR}/LibertyaEnvTemplate.properties" todir="${TARGET_DIR}" overwrite="yes" />
+			
+		<!-- Faltaban comentarios en el script --> 
+		<copy file="${SOURCE_DIR}/libertyad_centos.sh" todir="${TARGET_DIR}/utils/unix" overwrite="yes" />
+		<copy file="${SOURCE_DIR}/libertyad_fedora.sh" todir="${TARGET_DIR}/utils/unix" overwrite="yes" />
+		<copy file="${SOURCE_DIR}/libertyad_ubuntu-debian.sh" todir="${TARGET_DIR}/utils/unix" overwrite="yes" />
+		
+		<!-- 20150622-1106 Forzar encoding a UTF8 del cliente de replicacion -->
+		<copy file="${SOURCE_DIR}/repClient.sh" todir="${TARGET_DIR}/utils/replicacion" overwrite="yes" />
+		
+		<!-- 20150715-0758 Script de reinicio de JBoss -->
+		<copy file="${SOURCE_DIR}/restartJBoss.sh" todir="${TARGET_DIR}/utils" overwrite="yes" />
+		
+		<!-- 20150909-1304 Soporte para pisado de clases de CORE en LYWeb al ejecutar Configurar.sh -->
+		<copy file="${SOURCE_DIR}/build.xml" todir="${TARGET_DIR}" overwrite="yes" />
+		
+		<!-- 20151215-1318 Nueva version build.xml con soporte para configuracion LYSaaS -->
+		<copy file="${SOURCE_DIR}/build.xml" todir="${TARGET_DIR}" overwrite="yes" />
+		
+		<!-- 20150909-1304 Archivo de configuracion de instancia LYSaaS -->
+		<mkdir dir="${TARGET_DIR}/utils/saas"/>
+		<mkdir dir="${TARGET_DIR}/utils/saas/cfg"/>
+		<copy file="${SOURCE_DIR}/InstanceConfiguration.cfg" todir="${TARGET_DIR}/utils/saas/cfg" overwrite="yes" />
+		
+		<!-- 20151221-0934 Modificaciones a fin de unificar la utilizacion de variables y argumentos --> 
+		<copy file="${SOURCE_DIR}/libertyad_centos.sh" todir="${TARGET_DIR}/utils/unix" overwrite="yes" />
+		<copy file="${SOURCE_DIR}/libertyad_fedora.sh" todir="${TARGET_DIR}/utils/unix" overwrite="yes" />
+		<copy file="${SOURCE_DIR}/libertyad_ubuntu-debian.sh" todir="${TARGET_DIR}/utils/unix" overwrite="yes" />
+
+		<!-- 20151221-0936 Fix necesario para poder detener el servidor si el puerto JNP no era el tradicional (1099) -->
+		<copy file="${SOURCE_DIR}/DetenerServidor.sh" todir="${TARGET_DIR}/utils" overwrite="yes" />
+		
+		<!-- 20160104-0957 Reglas de filtrado para SkipColumnsFilter -->
+		<mkdir dir="${TARGET_DIR}/utils/replicacion/filters" />
+		<copy file="${SOURCE_DIR}/SkipColumnsFilterRulesTemplate.properties" todir="${TARGET_DIR}/utils/replicacion/filters" overwrite="yes" />
+		
+		<!--  20160506-1330 Cambios de versiones por nuevo release 16.04 -->
+		<copy file="${SOURCE_DIR}/build.xml" todir="${TARGET_DIR}/" overwrite="yes" />
+		<copy file="${SOURCE_DIR}/libertya.jnlp" todir="${TARGET_DIR}/lib" overwrite="yes" />
+		<copy file="${SOURCE_DIR}/Libertya.sh" todir="${TARGET_DIR}/utils" overwrite="yes" />
+    	
+    </target>
+    
+</project>
