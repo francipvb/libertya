@@ -4339,6 +4339,9 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			return STATUS_Invalid;
 		}
 
+		// Eliminar impuestos inválidos
+		deleteInvalidInvoiceTax();
+		
 		// Si es nota de crédito automática se asigna a la factura más vieja y
 		// si es por devolución a la relacionada con el pedido
 		if (!isSkipAutomaticCreditAllocCreation()
@@ -7045,6 +7048,17 @@ public class MInvoice extends X_C_Invoice implements DocAction,Authorization, Cu
 			}
 		}
 	}	
+	
+	/**
+	 * Elimina los impuestos de comprobante inválidos. Las condiciones de los mismos son:
+	 * 1) Tasa de impuesto mayor a 0
+	 * 3) Importe de impuesto = 0
+	 */
+	protected void deleteInvalidInvoiceTax() {
+		String sql = "delete from c_invoicetax it where c_invoice_id = " + getID()
+				+ " and taxamt = 0 and exists (select t.c_tax_id from c_tax t where t.rate <> 0 and it.c_tax_id = t.c_tax_id)";
+		DB.executeUpdate(sql, get_TrxName());
+	}
 	
 } // MInvoice
 
