@@ -540,3 +540,45 @@ WITH (
 );
 ALTER TABLE i_cabalpayments
   OWNER TO libertya;
+  
+--20191111-1800 Nueva columna con el tipo de documento
+CREATE OR REPLACE VIEW c_paymentcoupon_v AS 
+ SELECT p.c_payment_id,
+    p.ad_client_id,
+    p.ad_org_id,
+    p.created,
+    p.createdby,
+    p.updated,
+    p.updatedby,
+    'Y'::character(1) AS isactive,
+    efp.m_entidadfinanciera_id,
+    p.m_entidadfinancieraplan_id,
+    ccs.settlementno,
+    p.c_invoice_id,
+    p.creditcardnumber,
+    p.couponnumber,
+    p.c_bpartner_id,
+    COALESCE(p.a_name, bp.name) AS a_name,
+    p.datetrx,
+    p.couponbatchnumber,
+    p.payamt,
+    p.c_currency_id,
+    p.docstatus,
+    cs.isreconciled,
+    efp.cuotaspago AS totalallocations,
+    ccs.paymentdate AS settlementdate,
+    p.auditstatus,
+    ''::character(1) AS reject,
+    ''::character(1) AS unreject,
+    ef.c_bpartner_id AS m_entidadfinanciera_bp_id,
+    p.c_doctype_id
+   FROM c_payment p
+     JOIN c_bpartner bp ON p.c_bpartner_id = bp.c_bpartner_id
+     LEFT JOIN m_entidadfinancieraplan efp ON p.m_entidadfinancieraplan_id = efp.m_entidadfinancieraplan_id
+     JOIN m_entidadfinanciera ef ON efp.m_entidadfinanciera_id = ef.m_entidadfinanciera_id
+     LEFT JOIN c_couponssettlements cs ON p.c_payment_id = cs.c_payment_id
+     LEFT JOIN c_creditcardsettlement ccs ON cs.c_creditcardsettlement_id = ccs.c_creditcardsettlement_id
+  WHERE p.tendertype = 'C'::bpchar;
+
+ALTER TABLE c_paymentcoupon_v
+  OWNER TO libertya;
