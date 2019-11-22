@@ -120,6 +120,9 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 	/** Flag para ignorar validaciones sobre la caja diaria asignada */
 	private boolean ignorePOSJournalAssigned = false;
 	
+	/** Flag para ignoarar si se encuentra conciliado */
+	private boolean ignoreReconciled = false;
+	
     /**
      * Descripción de Método
      *
@@ -2712,7 +2715,7 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
          * No se permite anular si el payment se encuentra marcado como conciliado
          * @autor Horacio Alvarez
         */
-        if(isReconciled()){
+        if(!isIgnoreReconciled() && isReconciled()){
         	m_processMsg = "@PaymentReconciled@";
         	return false;        	
         }
@@ -3356,6 +3359,14 @@ public final class MPayment extends X_C_Payment implements DocAction,ProcessCall
 
 	public void setIgnorePOSJournalAssigned(boolean ignorePOSJournalAssigned) {
 		this.ignorePOSJournalAssigned = ignorePOSJournalAssigned;
+	}
+
+	public boolean isIgnoreReconciled() {
+		return ignoreReconciled;
+	}
+
+	public void setIgnoreReconciled(boolean ignoreReconciled) {
+		this.ignoreReconciled = ignoreReconciled;
 	}
 	
 }   // MPayment
