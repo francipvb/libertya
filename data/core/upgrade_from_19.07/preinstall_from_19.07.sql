@@ -582,3 +582,6 @@ CREATE OR REPLACE VIEW c_paymentcoupon_v AS
 
 ALTER TABLE c_paymentcoupon_v
   OWNER TO libertya;
+  
+--20191126-1740 Columna Procesado para los cierres fiscales
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_controlador_fiscal_closing_info','processed','character(1) NOT NULL DEFAULT ''N''::bpchar'));
