@@ -585,3 +585,35 @@ ALTER TABLE c_paymentcoupon_v
   
 --20191126-1740 Columna Procesado para los cierres fiscales
 update ad_system set dummy = (SELECT addcolumnifnotexists('c_controlador_fiscal_closing_info','processed','character(1) NOT NULL DEFAULT ''N''::bpchar'));
+
+--20191129-1030 Responsable de ventas por línea
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_invoiceline','salesrep_orig_id','integer'));
+update ad_system set dummy = (SELECT addcolumnifnotexists('c_orderline','salesrep_orig_id','integer'));
+
+--View para el informe de Ventas por Vendedor
+CREATE OR REPLACE VIEW c_invoice_sales_rep_orig_v AS 
+ SELECT i.ad_client_id,
+    i.ad_org_id,
+    i.c_invoice_id,
+    i.documentno,
+    i.dateacct::date AS dateacct,
+    i.dateinvoiced,
+    i.grandtotal,
+    il.salesrep_orig_id,
+    u.name AS salesrep_name,
+    sum(currencybase(il.linenetamt, i.c_currency_id, i.dateacct, i.ad_client_id, i.ad_org_id))::numeric(20,2) AS salesrep_invoice_amt
+   FROM c_invoiceline il
+     JOIN c_invoice i ON i.c_invoice_id = il.c_invoice_id
+     JOIN ad_user u ON u.ad_user_id = il.salesrep_orig_id
+     JOIN c_doctype dt ON dt.c_doctype_id = i.c_doctype_id
+  WHERE (i.docstatus = ANY (ARRAY['CO'::bpchar, 'CL'::bpchar])) AND dt.docbasetype = 'ARI'::bpchar AND dt.doctypekey::text !~~* 'CDN%'::text AND
+        CASE
+            WHEN 'Y'::text = ((( SELECT ad_preference.value
+               FROM ad_preference
+              WHERE ad_preference.attribute::text = 'LOCAL_AR'::text))::text) THEN dt.isfiscaldocument = 'Y'::bpchar AND (dt.isfiscal IS NULL OR dt.isfiscal = 'N'::bpchar OR dt.isfiscal = 'Y'::bpchar AND i.fiscalalreadyprinted = 'Y'::bpchar) AND (dt.iselectronic IS NULL OR dt.iselectronic::text = 'N'::text OR dt.iselectronic::text = 'Y'::text AND i.cae IS NOT NULL)
+            ELSE true
+        END
+  GROUP BY i.ad_client_id, i.ad_org_id, i.c_invoice_id, i.documentno, (i.dateacct::date), i.dateinvoiced, i.grandtotal, il.salesrep_orig_id, u.name;
+
+ALTER TABLE c_invoice_sales_rep_orig_v
+  OWNER TO libertya;
