@@ -277,6 +277,8 @@ public class MInvoiceLine extends X_C_InvoiceLine {
         setC_UOM_ID( oLine.getC_UOM_ID());
 
         setC_Tax_ID( oLine.getC_Tax_ID());
+        setSalesRep_Orig_ID(oLine.getSalesRep_Orig_ID());
+        
         //
         int invoiceCurrencyID = getInvoice().getC_Currency_ID();
         int orderCurrencyID = oLine.getC_Currency_ID();
