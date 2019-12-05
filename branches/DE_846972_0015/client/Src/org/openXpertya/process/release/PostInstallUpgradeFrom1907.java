@@ -38,6 +38,14 @@ public class PostInstallUpgradeFrom1907 extends PluginPostInstallProcess {
 	/** Reporte de Cierre de Tarjetas - Subreporte de Cupones Inválidos */
 	protected final static String CREDITCARD_CLOSE_SB_INVALIDCUPON_REPORT_FILENAME = "CreditCardReport-InvalidSubreport.jasper";
 	
+	/** Informe de Auditoría de Entidades Financieras */
+	protected final static String EntidadFinancieraAudit_FILENAME = "EntidadFinancieraAudit.jasper";
+	protected final static String EntidadFinancieraAudit_UID = "CORE-AD_Process-1010359";
+	
+	/** Listado de Cupones de Tarjeta */
+	protected final static String ListadoCuponesTarjeta_FILENAME = "ListadoCuponesTarjeta.jasper";
+	protected final static String ListadoCuponesTarjeta_UID = "CORE-AD_Process-1010405";
+	
 	@Override
 	protected String doIt() throws Exception {
 		super.doIt();
@@ -172,6 +180,28 @@ public class PostInstallUpgradeFrom1907 extends PluginPostInstallProcess {
 								jarFileURL,
 								getBinaryFileURL(CREDITCARD_CLOSE_SB_INVALIDCUPON_REPORT_FILENAME)), 
 				false);
+		
+		// Informe de Auditoría de Entidades Financieras
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				EntidadFinancieraAudit_UID,
+				EntidadFinancieraAudit_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(EntidadFinancieraAudit_FILENAME)));
+		
+		// Listado de Cupones de Tarjeta
+		MProcess.addAttachment(
+				get_TrxName(),
+				getCtx(),
+				ListadoCuponesTarjeta_UID,
+				ListadoCuponesTarjeta_FILENAME,
+				JarHelper
+						.readBinaryFromJar(
+								jarFileURL,
+								getBinaryFileURL(ListadoCuponesTarjeta_FILENAME)));
 		
 		return " ";
 	}
