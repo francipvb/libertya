@@ -211,6 +211,7 @@ public class Doc_Invoice extends Doc implements DocProjectSplitterInterface {
             ResultSet rs = pstmt.executeQuery();
 
             // Descuentos de documento por tasa
+            m_taxes_discount = new ArrayList<DocTax_Discount>();
             Map<Integer, DocTax_Discount> discountsByTax = new HashMap<Integer, DocTax_Discount>();
 
             while( rs.next()) {
@@ -271,7 +272,7 @@ public class Doc_Invoice extends Doc implements DocProjectSplitterInterface {
                     		MTax t = MTax.get(getCtx(), C_Tax_ID, m_trxName);
                     		dd = new DocTax_Discount(C_Tax_ID, t.getName(), t.getRate(), BigDecimal.ZERO, BigDecimal.ZERO);
                     	}
-                    	dd.setDiscountAmt(dd.getDiscountAmt().add(rs.getBigDecimal("documentdiscountamt").abs()));
+                    	dd.setDiscountAmt(dd.getDiscountAmt().add(rs.getBigDecimal("documentdiscountamt")));
                     	discountsByTax.put(C_Tax_ID, dd);
                     }
 
@@ -623,6 +624,8 @@ public class Doc_Invoice extends Doc implements DocProjectSplitterInterface {
         		chargeTotalAmount = chargeTotalAmount.add(netDiscount.add(taxAmt));
 			}
         	// Quedan con el signo inicial del cargo
+        	chargeNetTotalAmount = chargeNetTotalAmount.abs();
+        	chargeTotalAmount = chargeTotalAmount.abs();
         	chargeNetTotalAmount = chargeNetTotalAmount.multiply(new BigDecimal(chargeAmt.signum()));
         	chargeTotalAmount = chargeTotalAmount.multiply(new BigDecimal(chargeAmt.signum()));
         	// Por diferencias de redondeos
